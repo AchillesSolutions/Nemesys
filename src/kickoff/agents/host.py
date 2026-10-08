@@ -25,6 +25,7 @@ from ..match_reader import MatchReader
 from ..models import Match, World
 from .context import Describer
 from .glossary import RULES
+from .llm import options_for
 from .viewer import LANGUAGE_NAMES, ViewerProfile
 
 INSTRUCTIONS = """
@@ -71,7 +72,7 @@ class Host:
         self.get_profile, self.set_profile = get_profile, set_profile
         self.reader, self.played = reader, played
         self._turn: HostReply | None = None
-        self.agent = Agent(client, INSTRUCTIONS, name="host", tools=self.tools())
+        self.agent = Agent(client, INSTRUCTIONS, name="host", tools=self.tools(), default_options=options_for(client, {}))
 
     async def ask(self, question: str, spoken: str | None = None) -> HostReply:
         """Answer the viewer. ``spoken`` is the language the speech recogniser heard, if known."""

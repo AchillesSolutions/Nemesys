@@ -14,7 +14,7 @@ from agent_framework import Agent, Executor, Workflow, WorkflowBuilder, Workflow
 
 from ..models import World
 from .context import Describer
-from .llm import ClientFactory
+from .llm import ClientFactory, options_for
 from .messages import Moment, ProducerReply, SpecialistReply
 from .producer import Producer, producer_instructions
 from .specialists import SPECIALISTS, instructions
@@ -27,17 +27,17 @@ class Dispatcher(Executor):
 
 
 def build_workflow(world: World, describer: Describer, clients: ClientFactory) -> Workflow:
+    def agent(role: str, prompt: str, options: dict) -> Agent:
+        client = clients(role)  # each role can run on its own model (see llm.py)
+        return Agent(client, prompt, name=role, default_options=options_for(client, options))
+
     specialists = [
-        cls(Agent(clients(cls.name), instructions(cls.ROLE), name=cls.name,
-                  default_options={"response_format": SpecialistReply, "temperature": 0.6}),
+        cls(agent(cls.name, instructions(cls.ROLE), {"response_format": SpecialistReply, "temperature": 0.6}),
             world, describer)
         for cls in SPECIALISTS
     ]
-    producer = Producer(
-        Agent(clients("producer"), producer_instructions(), name="producer",
-              default_options={"response_format": ProducerReply, "temperature": 0.3}),
-        describer,
-    )
+    producer = Producer(agent("producer", producer_instructions(),
+                              {"response_format": ProducerReply, "temperature": 0.3}), describer)
     dispatcher = Dispatcher(id="dispatcher")
     return (
         WorkflowBuilder(start_executor=dispatcher, name="kickoff-commentary")

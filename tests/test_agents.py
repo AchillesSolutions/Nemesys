@@ -157,3 +157,17 @@ def test_supporters_hear_we_in_headlines(world, match):
     assert goals[1].startswith("Goal! We've scored!"), "our goal is ours"
     _, neutral, _ = run_match(world, match, ViewerProfile(), until_minute=60)
     assert all("We've" not in line.text for _, line in lines(neutral)), "neutral viewers hear team names"
+
+
+def test_reasoning_models_get_an_effort_instead_of_a_temperature(monkeypatch):
+    from kickoff.agents.llm import is_reasoning, options_for
+
+    class C:
+        kickoff_model = "gpt-5.5"
+
+    assert is_reasoning("gpt-5.5") and is_reasoning("o3") and not is_reasoning("gpt-4.1-mini")
+    monkeypatch.setenv("KICKOFF_REASONING_EFFORT", "low")
+    assert options_for(C(), {"temperature": 0.3, "response_format": dict}) == {"response_format": dict,
+                                                                               "reasoning_effort": "low"}
+    C.kickoff_model = "gpt-4.1-mini"
+    assert options_for(C(), {"temperature": 0.3}) == {"temperature": 0.3}

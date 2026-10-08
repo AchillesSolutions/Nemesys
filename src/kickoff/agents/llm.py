@@ -1,22 +1,38 @@
-"""Chat clients for each model provider, chosen by environment variables.
+"""Chat clients for each agent role, chosen by environment variables.
 
 KICKOFF_LLM selects the provider:
 
 * ``offline`` (default): no network. Template answers built from the brief,
   so the whole pipeline runs and tests pass without any keys.
-* ``azure``: an Azure OpenAI deployment in Microsoft Foundry
-  (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, KICKOFF_MODEL = deployment name).
+* ``azure``: model deployments in Microsoft Foundry
+  (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY).
+
+Different roles can use different models, matched to the job:
+
+* KICKOFF_MODEL: the default, used by the Teacher, Storyteller and League
+  guide. They run often and in parallel, so a fast, inexpensive model fits.
+* KICKOFF_MODEL_PRODUCER: the Producer weighs every proposal and writes the
+  final words, so a flagship model is worth it; it runs a few times a match.
+* KICKOFF_MODEL_HOST: the Host answers the viewer and calls tools, so it also
+  benefits from a stronger model.
+
+Reasoning models (the GPT-5 and o-series) take a reasoning effort instead of
+a temperature: KICKOFF_REASONING_EFFORT (default "low", to keep live latency down).
 """
 
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 
 from agent_framework import BaseChatClient
 
 ClientFactory = Callable[[str], BaseChatClient]
+
+ROLE_MODEL_VARS = {"producer": "KICKOFF_MODEL_PRODUCER", "host": "KICKOFF_MODEL_HOST"}
+REASONING_MODEL = re.compile(r"^(gpt-5|o\d)", re.IGNORECASE)
 
 
 def load_env(path: Path = Path(".env")) -> None:
@@ -30,6 +46,24 @@ def load_env(path: Path = Path(".env")) -> None:
             os.environ.setdefault(key.strip(), value.strip().strip('"'))
 
 
+def model_for(role: str) -> str:
+    return os.getenv(ROLE_MODEL_VARS.get(role, ""), "") or os.environ.get("KICKOFF_MODEL", "")
+
+
+def is_reasoning(model: str) -> bool:
+    return bool(REASONING_MODEL.match(model))
+
+
+def options_for(client: BaseChatClient, options: dict) -> dict:
+    """Adapt an agent's chat options to its model: reasoning models get an effort, not a temperature."""
+    model = getattr(client, "kickoff_model", "")
+    if not is_reasoning(model):
+        return options
+    adapted = {k: v for k, v in options.items() if k != "temperature"}
+    adapted["reasoning_effort"] = os.getenv("KICKOFF_REASONING_EFFORT", "low")
+    return adapted
+
+
 def client_factory(provider: str | None = None) -> ClientFactory:
     """Return a function giving the chat client for an agent role."""
     load_env()
@@ -39,21 +73,29 @@ def client_factory(provider: str | None = None) -> ClientFactory:
         from .offline import OfflineChatClient
         return lambda role: OfflineChatClient(role)
 
+    if provider != "azure":
+        raise ValueError(f"Unknown KICKOFF_LLM provider: {provider}")
+
     from agent_framework.openai import OpenAIChatCompletionClient
 
-    if provider == "azure":
-        endpoint, key, model = (os.environ[k] for k in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "KICKOFF_MODEL"))
-        v1_base = azure_v1_base_url(endpoint)
-        if v1_base:
-            # Foundry's OpenAI-compatible v1 API: plain OpenAI client, no api-version.
-            client = OpenAIChatCompletionClient(model=model, api_key=key, base_url=v1_base)
-        else:
-            client = OpenAIChatCompletionClient(
-                model=model, azure_endpoint=endpoint, api_key=key,
-                api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"))
-    else:
-        raise ValueError(f"Unknown KICKOFF_LLM provider: {provider}")
-    return lambda role: client
+    endpoint, key = os.environ["AZURE_OPENAI_ENDPOINT"], os.environ["AZURE_OPENAI_API_KEY"]
+    v1_base = azure_v1_base_url(endpoint)
+    clients: dict[str, BaseChatClient] = {}
+
+    def client(role: str) -> BaseChatClient:
+        model = model_for(role)
+        if model not in clients:
+            if v1_base:
+                # Foundry's OpenAI-compatible v1 API: plain OpenAI client, no api-version.
+                c = OpenAIChatCompletionClient(model=model, api_key=key, base_url=v1_base)
+            else:
+                c = OpenAIChatCompletionClient(model=model, azure_endpoint=endpoint, api_key=key,
+                                               api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"))
+            c.kickoff_model = model  # remembered so options can be matched to the model
+            clients[model] = c
+        return clients[model]
+
+    return client
 
 
 def azure_v1_base_url(endpoint: str) -> str | None:
