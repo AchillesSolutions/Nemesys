@@ -1,0 +1,772 @@
+{
+  "league": "The Meridian League",
+  "season": "2026/27",
+  "matchweek": 9,
+  "clubs": [
+    {
+      "id": "kil",
+      "name": "Kilburn Athletic",
+      "short_name": "Kilburn",
+      "nickname": "The Otters",
+      "city": "Kilburn, London",
+      "stadium": "Lockside Park",
+      "colours": [
+        "#0f8b8d",
+        "#ffffff"
+      ],
+      "style": {
+        "summary": "Patient passing side: keep the ball, move it side to side, wait for a gap.",
+        "pass_tempo_s": 4.0,
+        "pass_accuracy": 0.89,
+        "directness": 4.5,
+        "counter_threat": 0.08,
+        "shot_appetite": 0.045
+      },
+      "squad": [
+        {
+          "id": "kil-1",
+          "name": "Tomas Brennan",
+          "number": 1,
+          "position": "GK",
+          "age": 31,
+          "traits": [
+            "commanding in the air",
+            "calm with the ball at his feet"
+          ]
+        },
+        {
+          "id": "kil-2",
+          "name": "Kofi Mensah-Lane",
+          "number": 2,
+          "position": "DF",
+          "age": 24,
+          "traits": [
+            "quick recovery runs"
+          ]
+        },
+        {
+          "id": "kil-4",
+          "name": "Elias Varga",
+          "number": 4,
+          "position": "DF",
+          "age": 29,
+          "traits": [
+            "captain",
+            "dangerous at corners"
+          ]
+        },
+        {
+          "id": "kil-5",
+          "name": "Jun-ho Park",
+          "number": 5,
+          "position": "DF",
+          "age": 26,
+          "traits": [
+            "comfortable on the ball"
+          ]
+        },
+        {
+          "id": "kil-3",
+          "name": "Callum Reid",
+          "number": 3,
+          "position": "DF",
+          "age": 22,
+          "traits": [
+            "overlapping full-back",
+            "good crosser"
+          ]
+        },
+        {
+          "id": "kil-6",
+          "name": "Mateo Rios",
+          "number": 6,
+          "position": "MF",
+          "age": 27,
+          "traits": [
+            "metronome passer",
+            "rarely loses the ball"
+          ]
+        },
+        {
+          "id": "kil-8",
+          "name": "Sami Haddad",
+          "number": 8,
+          "position": "MF",
+          "age": 25,
+          "traits": [
+            "line-breaking passes"
+          ]
+        },
+        {
+          "id": "kil-10",
+          "name": "Felix Andersen",
+          "number": 10,
+          "position": "MF",
+          "age": 23,
+          "traits": [
+            "playmaker",
+            "set-piece specialist"
+          ]
+        },
+        {
+          "id": "kil-7",
+          "name": "Rafa Quintero",
+          "number": 7,
+          "position": "FW",
+          "age": 21,
+          "traits": [
+            "tricky dribbler",
+            "draws fouls"
+          ]
+        },
+        {
+          "id": "kil-9",
+          "name": "Ollie Whitcombe",
+          "number": 9,
+          "position": "FW",
+          "age": 28,
+          "traits": [
+            "penalty-box poacher",
+            "penalty taker"
+          ]
+        },
+        {
+          "id": "kil-11",
+          "name": "Dario Kessler",
+          "number": 11,
+          "position": "FW",
+          "age": 24,
+          "traits": [
+            "hard-working winger"
+          ]
+        },
+        {
+          "id": "kil-13",
+          "name": "Liam Fairweather",
+          "number": 13,
+          "position": "GK",
+          "age": 34,
+          "traits": [
+            "experienced back-up"
+          ]
+        },
+        {
+          "id": "kil-14",
+          "name": "Arno Visser",
+          "number": 14,
+          "position": "DF",
+          "age": 27,
+          "traits": [
+            "tall centre-back"
+          ]
+        },
+        {
+          "id": "kil-15",
+          "name": "Tariq Bello",
+          "number": 15,
+          "position": "MF",
+          "age": 22,
+          "traits": [
+            "energetic"
+          ]
+        },
+        {
+          "id": "kil-17",
+          "name": "Leo Castellanos",
+          "number": 17,
+          "position": "FW",
+          "age": 19,
+          "traits": [
+            "super-sub",
+            "frightening pace"
+          ]
+        },
+        {
+          "id": "kil-18",
+          "name": "Noah Pereira",
+          "number": 18,
+          "position": "MF",
+          "age": 30,
+          "traits": [
+            "experienced head"
+          ]
+        },
+        {
+          "id": "kil-19",
+          "name": "Hugo Lindqvist",
+          "number": 19,
+          "position": "DF",
+          "age": 21,
+          "traits": [
+            "academy graduate"
+          ]
+        },
+        {
+          "id": "kil-20",
+          "name": "Malik Osei",
+          "number": 20,
+          "position": "FW",
+          "age": 23,
+          "traits": [
+            "strong hold-up play"
+          ]
+        }
+      ],
+      "starting_xi": [
+        "kil-1",
+        "kil-2",
+        "kil-4",
+        "kil-5",
+        "kil-3",
+        "kil-6",
+        "kil-8",
+        "kil-10",
+        "kil-7",
+        "kil-9",
+        "kil-11"
+      ]
+    },
+    {
+      "id": "hbr",
+      "name": "Harbour City",
+      "short_name": "Harbour City",
+      "nickname": "The Gulls",
+      "city": "Harbour City",
+      "stadium": "The Quay",
+      "colours": [
+        "#1d2b53",
+        "#ff8c1a"
+      ],
+      "style": {
+        "summary": "Counter-attacking side: defend deep, win the ball, then break forward fast.",
+        "pass_tempo_s": 3.0,
+        "pass_accuracy": 0.78,
+        "directness": 9.0,
+        "counter_threat": 0.45,
+        "shot_appetite": 0.08
+      },
+      "squad": [
+        {
+          "id": "hbr-1",
+          "name": "Viktor Halloran",
+          "number": 1,
+          "position": "GK",
+          "age": 33,
+          "traits": [
+            "shot-stopper"
+          ]
+        },
+        {
+          "id": "hbr-2",
+          "name": "Ade Ogunleye",
+          "number": 2,
+          "position": "DF",
+          "age": 25,
+          "traits": [
+            "fast full-back"
+          ]
+        },
+        {
+          "id": "hbr-5",
+          "name": "Marco Bellandi",
+          "number": 5,
+          "position": "DF",
+          "age": 30,
+          "traits": [
+            "captain",
+            "aggressive tackler"
+          ]
+        },
+        {
+          "id": "hbr-6",
+          "name": "Sven Ekdahl",
+          "number": 6,
+          "position": "DF",
+          "age": 27,
+          "traits": [
+            "strong header of the ball"
+          ]
+        },
+        {
+          "id": "hbr-3",
+          "name": "Jordan Pike",
+          "number": 3,
+          "position": "DF",
+          "age": 23,
+          "traits": [
+            "eager, sometimes rash"
+          ]
+        },
+        {
+          "id": "hbr-4",
+          "name": "Ruben Aalders",
+          "number": 4,
+          "position": "MF",
+          "age": 26,
+          "traits": [
+            "ball-winner",
+            "picks up bookings"
+          ]
+        },
+        {
+          "id": "hbr-8",
+          "name": "Kenji Mori",
+          "number": 8,
+          "position": "MF",
+          "age": 24,
+          "traits": [
+            "reads passes early",
+            "quick distributor"
+          ]
+        },
+        {
+          "id": "hbr-10",
+          "name": "Danny Shaw",
+          "number": 10,
+          "position": "MF",
+          "age": 29,
+          "traits": [
+            "counter-attack conductor"
+          ]
+        },
+        {
+          "id": "hbr-7",
+          "name": "Theo Marsh",
+          "number": 7,
+          "position": "FW",
+          "age": 22,
+          "traits": [
+            "rapid winger"
+          ]
+        },
+        {
+          "id": "hbr-9",
+          "name": "Isaac Mwangi",
+          "number": 9,
+          "position": "FW",
+          "age": 27,
+          "traits": [
+            "runs in behind",
+            "clinical finisher"
+          ]
+        },
+        {
+          "id": "hbr-11",
+          "name": "Luka Petrovic",
+          "number": 11,
+          "position": "FW",
+          "age": 25,
+          "traits": [
+            "direct runner"
+          ]
+        },
+        {
+          "id": "hbr-13",
+          "name": "Pavel Novak",
+          "number": 13,
+          "position": "GK",
+          "age": 28,
+          "traits": [
+            "reliable back-up"
+          ]
+        },
+        {
+          "id": "hbr-14",
+          "name": "Ryan Doyle",
+          "number": 14,
+          "position": "DF",
+          "age": 26,
+          "traits": [
+            "no-nonsense defender"
+          ]
+        },
+        {
+          "id": "hbr-15",
+          "name": "Sam Kowalczyk",
+          "number": 15,
+          "position": "MF",
+          "age": 28,
+          "traits": [
+            "defensive midfielder",
+            "tidy tackler"
+          ]
+        },
+        {
+          "id": "hbr-16",
+          "name": "Nico Ferraro",
+          "number": 16,
+          "position": "FW",
+          "age": 20,
+          "traits": [
+            "exciting prospect"
+          ]
+        },
+        {
+          "id": "hbr-17",
+          "name": "Elijah Grant",
+          "number": 17,
+          "position": "MF",
+          "age": 24,
+          "traits": [
+            "box-to-box runner"
+          ]
+        },
+        {
+          "id": "hbr-18",
+          "name": "Owen Pritchard",
+          "number": 18,
+          "position": "FW",
+          "age": 31,
+          "traits": [
+            "veteran striker"
+          ]
+        },
+        {
+          "id": "hbr-19",
+          "name": "Felipe Moreau",
+          "number": 19,
+          "position": "DF",
+          "age": 22,
+          "traits": [
+            "versatile defender"
+          ]
+        }
+      ],
+      "starting_xi": [
+        "hbr-1",
+        "hbr-2",
+        "hbr-5",
+        "hbr-6",
+        "hbr-3",
+        "hbr-4",
+        "hbr-8",
+        "hbr-10",
+        "hbr-7",
+        "hbr-9",
+        "hbr-11"
+      ]
+    }
+  ],
+  "table": [
+    {
+      "club": "Kestrel Bay",
+      "played": 8,
+      "won": 5,
+      "drawn": 3,
+      "lost": 0,
+      "goals_for": 16,
+      "goals_against": 4,
+      "form": [
+        "D",
+        "W",
+        "D",
+        "W",
+        "W"
+      ]
+    },
+    {
+      "club": "Millbrook Athletic",
+      "played": 8,
+      "won": 5,
+      "drawn": 2,
+      "lost": 1,
+      "goals_for": 18,
+      "goals_against": 7,
+      "form": [
+        "W",
+        "W",
+        "W",
+        "D",
+        "D"
+      ]
+    },
+    {
+      "club": "Stonegate United",
+      "played": 8,
+      "won": 5,
+      "drawn": 2,
+      "lost": 1,
+      "goals_for": 14,
+      "goals_against": 8,
+      "form": [
+        "W",
+        "W",
+        "D",
+        "W",
+        "W"
+      ]
+    },
+    {
+      "club": "Larkhill Forest",
+      "played": 8,
+      "won": 5,
+      "drawn": 1,
+      "lost": 2,
+      "goals_for": 18,
+      "goals_against": 10,
+      "form": [
+        "W",
+        "W",
+        "D",
+        "L",
+        "W"
+      ]
+    },
+    {
+      "club": "Harbour City",
+      "played": 8,
+      "won": 4,
+      "drawn": 2,
+      "lost": 2,
+      "goals_for": 8,
+      "goals_against": 7,
+      "form": [
+        "W",
+        "D",
+        "L",
+        "W",
+        "W"
+      ]
+    },
+    {
+      "club": "Eastmoor",
+      "played": 8,
+      "won": 4,
+      "drawn": 1,
+      "lost": 3,
+      "goals_for": 15,
+      "goals_against": 7,
+      "form": [
+        "W",
+        "L",
+        "L",
+        "W",
+        "D"
+      ]
+    },
+    {
+      "club": "Saltmarsh Town",
+      "played": 8,
+      "won": 3,
+      "drawn": 4,
+      "lost": 1,
+      "goals_for": 4,
+      "goals_against": 2,
+      "form": [
+        "D",
+        "W",
+        "W",
+        "L",
+        "W"
+      ]
+    },
+    {
+      "club": "Kilburn Athletic",
+      "played": 8,
+      "won": 3,
+      "drawn": 3,
+      "lost": 2,
+      "goals_for": 8,
+      "goals_against": 6,
+      "form": [
+        "D",
+        "L",
+        "W",
+        "D",
+        "D"
+      ]
+    },
+    {
+      "club": "Copperfield",
+      "played": 8,
+      "won": 4,
+      "drawn": 0,
+      "lost": 4,
+      "goals_for": 6,
+      "goals_against": 6,
+      "form": [
+        "L",
+        "W",
+        "W",
+        "L",
+        "W"
+      ]
+    },
+    {
+      "club": "Thornwick Wanderers",
+      "played": 8,
+      "won": 3,
+      "drawn": 2,
+      "lost": 3,
+      "goals_for": 9,
+      "goals_against": 9,
+      "form": [
+        "L",
+        "L",
+        "W",
+        "D",
+        "L"
+      ]
+    },
+    {
+      "club": "Greywater",
+      "played": 8,
+      "won": 3,
+      "drawn": 2,
+      "lost": 3,
+      "goals_for": 9,
+      "goals_against": 10,
+      "form": [
+        "W",
+        "L",
+        "L",
+        "D",
+        "W"
+      ]
+    },
+    {
+      "club": "Highcliff",
+      "played": 8,
+      "won": 3,
+      "drawn": 1,
+      "lost": 4,
+      "goals_for": 11,
+      "goals_against": 16,
+      "form": [
+        "L",
+        "W",
+        "L",
+        "W",
+        "L"
+      ]
+    },
+    {
+      "club": "Ashgrove Rovers",
+      "played": 8,
+      "won": 2,
+      "drawn": 3,
+      "lost": 3,
+      "goals_for": 10,
+      "goals_against": 12,
+      "form": [
+        "W",
+        "L",
+        "D",
+        "L",
+        "W"
+      ]
+    },
+    {
+      "club": "Pennwick",
+      "played": 8,
+      "won": 2,
+      "drawn": 2,
+      "lost": 4,
+      "goals_for": 11,
+      "goals_against": 12,
+      "form": [
+        "W",
+        "W",
+        "L",
+        "L",
+        "L"
+      ]
+    },
+    {
+      "club": "Ravensholt",
+      "played": 8,
+      "won": 1,
+      "drawn": 5,
+      "lost": 2,
+      "goals_for": 6,
+      "goals_against": 11,
+      "form": [
+        "L",
+        "D",
+        "L",
+        "D",
+        "D"
+      ]
+    },
+    {
+      "club": "Brackenridge",
+      "played": 8,
+      "won": 2,
+      "drawn": 2,
+      "lost": 4,
+      "goals_for": 9,
+      "goals_against": 16,
+      "form": [
+        "L",
+        "D",
+        "W",
+        "D",
+        "L"
+      ]
+    },
+    {
+      "club": "Oakhaven",
+      "played": 8,
+      "won": 1,
+      "drawn": 4,
+      "lost": 3,
+      "goals_for": 7,
+      "goals_against": 9,
+      "form": [
+        "L",
+        "L",
+        "W",
+        "D",
+        "L"
+      ]
+    },
+    {
+      "club": "Wexmoor City",
+      "played": 8,
+      "won": 0,
+      "drawn": 5,
+      "lost": 3,
+      "goals_for": 5,
+      "goals_against": 13,
+      "form": [
+        "D",
+        "D",
+        "D",
+        "D",
+        "L"
+      ]
+    },
+    {
+      "club": "Fenwick Park",
+      "played": 8,
+      "won": 1,
+      "drawn": 2,
+      "lost": 5,
+      "goals_for": 7,
+      "goals_against": 17,
+      "form": [
+        "L",
+        "L",
+        "D",
+        "W",
+        "L"
+      ]
+    },
+    {
+      "club": "Silverton Vale",
+      "played": 8,
+      "won": 1,
+      "drawn": 0,
+      "lost": 7,
+      "goals_for": 7,
+      "goals_against": 16,
+      "form": [
+        "L",
+        "L",
+        "L",
+        "L",
+        "L"
+      ]
+    }
+  ]
+}
