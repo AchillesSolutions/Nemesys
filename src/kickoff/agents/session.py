@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ..match_reader import ReaderUpdate
 from ..models import Match, World
 from .context import Describer, concepts_for
-from .i18n import HEADLINE_TITLES, HEADLINES, concept_label
+from .i18n import FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, concept_label
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
@@ -81,6 +81,9 @@ class CommentarySession:
             return None
         snap, lang = update.snapshot, self.profile.language
         score = f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}"
+        if self.profile.team and ev.team:
+            side = "ours" if ev.team == self.profile.team else "theirs"
+            templates = FAN_HEADLINES.get((ev.type, side), templates)
         text = templates[lang].format(team=self.describer.club(ev.team), player=self.describer.player(ev.player),
                                       score=score)
         moment = self._moment(update)

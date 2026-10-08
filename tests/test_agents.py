@@ -148,3 +148,12 @@ def test_model_calls_stay_within_budget(world, match):
     """A full match must fit free-tier rate limits: most events cost no model calls."""
     _, _, factory = run_match(world, match, ViewerProfile())
     assert factory.calls < 120, factory.calls
+
+
+def test_supporters_hear_we_in_headlines(world, match):
+    _, out, _ = run_match(world, match, ViewerProfile(team=HOME_ID))
+    goals = [line.text for ev, line in lines(out) if line.headline and ev.type == EventType.GOAL]
+    assert goals[0].startswith("Harbour City have scored"), "the other side is named"
+    assert goals[1].startswith("Goal! We've scored!"), "our goal is ours"
+    _, neutral, _ = run_match(world, match, ViewerProfile(), until_minute=60)
+    assert all("We've" not in line.text for _, line in lines(neutral)), "neutral viewers hear team names"

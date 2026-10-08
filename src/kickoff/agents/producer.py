@@ -23,7 +23,7 @@ from ..models import EventType
 from .context import Describer
 from .i18n import concept_label, kind_label
 from .messages import Decision, Line, Moment, Proposal, ProducerReply, SpecialistResult, Tone
-from .specialists import instructions
+from .specialists import FAN_VOICE, instructions
 from .viewer import LANGUAGE_NAMES
 
 log = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ Rules:
 - Do not repeat anything in "recently_said".
 - Choose the tone for this viewer: if they support a team, sound hopeful or excited when things go well for it
   and tense or disappointed when they do not. Neutral viewers get neutral or excited.
+- If the brief has a "voice" instruction, the final lines must follow it (a supporter hears "we" for their team).
 - Put stakes or story proposals that are not urgent into defer_ids; they will be offered again in a quiet spell.
 - card_title is two to four words in the viewer's language.
 """
@@ -93,6 +94,7 @@ class Producer(Executor):
         brief = {
             "language": LANGUAGE_NAMES[m.profile.language],
             "supports": self.describer.club(m.profile.team) if m.profile.team else "neutral",
+            **({"voice": FAN_VOICE.format(team=self.describer.club(m.profile.team))} if m.profile.team else {}),
             "event": m.event_text,
             "importance": ["routine", "a chance", "a stoppage worth explaining", "a big moment"][m.salience],
             "recently_said": m.recent_lines[-4:],

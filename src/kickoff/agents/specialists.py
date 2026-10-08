@@ -29,10 +29,19 @@ _ids = itertools.count(1)
 STYLE_GUIDE = """
 You are part of Kick-Off, a live companion that helps people enjoy football matches.
 Write for the ear: short spoken sentences, plain words, no lists, no emoji, no markdown.
+Keep each proposal under 30 words (under 60 characters in Mandarin): it is spoken over a live match.
 Write in {language}. Keep player and club names exactly as given.
 Use only the facts in the brief. Never invent players, statistics or rules.
 Keep it family-friendly and never mention betting or odds.
 If you have nothing worth saying, return an empty list of proposals.
+""".strip()
+
+FAN_VOICE = """
+The viewer supports {team}. Speak like a fellow {team} fan sitting next to them: in lines about how the match
+is going (goals, chances, momentum, nerves) call {team} "we", "us" and "our" (in Mandarin 我们, in Spanish
+"nosotros", "nuestro equipo", "¡vamos!"). Still use the name {team} the first time you mention them in a line
+that teaches a rule, so a newcomer always knows which team is which. Call the other side by its name.
+Be on their side but fair: disappointment about a decision is fine, calling a correct decision unfair is not.
 """.strip()
 
 LEVEL_GUIDE = {
@@ -64,10 +73,12 @@ class Specialist(Executor):
 
     def base_brief(self, m: Moment) -> dict:
         p = m.profile
+        team = self.describer.club(p.team) if p.team else None
         return {
             "language": LANGUAGE_NAMES[p.language],
             "viewer": LEVEL_GUIDE[p.level],
-            "supports": self.describer.club(p.team) if p.team else "neutral",
+            "supports": team or "neutral",
+            **({"voice": FAN_VOICE.format(team=team)} if team else {}),
             "event": m.event_text,
             "situation": m.situation,
             "recently_said": m.recent_lines[-4:],
@@ -122,7 +133,7 @@ Priority: 8-9 for turning points (goals, red cards, comebacks), 5-6 for patterns
 A "bridge" signal means play skipped ahead between highlights: in one sentence, sum up how the skipped
 minutes went using possession_in_gap and shots_in_gap, but only if something stands out (priority 5).
 If nothing stands out, return no proposals.
-If the viewer supports a team, speak as a friend who supports it too, but stay fair. Leave "concept" empty
+If the brief has a "voice" instruction, follow it. Leave "concept" empty
 unless you are illustrating "possession" or "counter_attack".
 """
     TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead", "bridge"}

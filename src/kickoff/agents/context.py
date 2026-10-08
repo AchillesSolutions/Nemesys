@@ -134,7 +134,9 @@ class Describer:
             f"Possession overall {h.name} {h.possession_pct}% / {a.name} {a.possession_pct}%; "
             f"last 10 minutes {h.possession_last_10_pct}% / {a.possession_last_10_pct}%.",
             f"Shots (on target): {h.name} {h.shots} ({h.shots_on_target}), {a.name} {a.shots} ({a.shots_on_target}).",
-            f"Players on the pitch: {h.name} {len(h.players_on_pitch)}, {a.name} {len(a.players_on_pitch)}.",
+            f"Players on the pitch: {h.name} {len(h.players_on_pitch)}, {a.name} {len(a.players_on_pitch)}."
+            + "".join(f" {t.name} are down to {len(t.players_on_pitch)} players after a red card."
+                      for t in (h, a) if t.sent_off),
             f"Momentum over 10 minutes (-1 {a.name} on top, +1 {h.name} on top): {s.momentum}.",
         ]
         booked = [f"{self.player(p)} ({t.name})" for t in (h, a) for p in t.booked if p not in t.sent_off]

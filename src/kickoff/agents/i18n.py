@@ -49,6 +49,25 @@ HEADLINES: dict[EventType, dict[Language, str]] = {
     EventType.FULL_TIME: {EN: "Full-time: {score}.", ZH: "全场比赛结束：{score}。", ES: "Final del partido: {score}."},
 }
 
+# Headlines a supporter hears when the moment is their own team's ("ours") or the other side's ("theirs").
+FAN_HEADLINES: dict[tuple[EventType, str], dict[Language, str]] = {
+    (EventType.GOAL, "ours"): {EN: "Goal! We've scored! {score}.", ZH: "进球了！我们进球了！{score}。",
+                               ES: "¡Gol! ¡Hemos marcado! {score}."},
+    (EventType.GOAL, "theirs"): {EN: "{team} have scored. {score}.", ZH: "{team}进球了。{score}。",
+                                 ES: "Ha marcado {team}. {score}."},
+    (EventType.PENALTY, "ours"): {EN: "Penalty to us!", ZH: "我们获得点球！", ES: "¡Penal a favor nuestro!"},
+    (EventType.PENALTY, "theirs"): {EN: "Penalty to {team}.", ZH: "{team}获得点球。", ES: "Penal para {team}."},
+    (EventType.GOAL_DISALLOWED, "ours"): {EN: "Oh no, our goal is ruled out. {score}.", ZH: "可惜，我们的进球被判无效。{score}。",
+                                          ES: "¡No! Nos anulan el gol. {score}."},
+    (EventType.GOAL_DISALLOWED, "theirs"): {EN: "Their goal is ruled out! {score}.", ZH: "{team}的进球无效！{score}。",
+                                            ES: "¡Les anulan el gol! {score}."},
+    (EventType.RED_CARD, "ours"): {EN: "Red card for {player}. We're down to ten.", ZH: "{player}被红牌罚下，我们只剩十人。",
+                                   ES: "Roja para {player}. Nos quedamos con diez."},
+    (EventType.RED_CARD, "theirs"): {EN: "Red card! {player} is sent off. They're down to ten!",
+                                     ZH: "红牌！{player}被罚下，{team}只剩十人！",
+                                     ES: "¡Roja! {player} expulsado. ¡Se quedan con diez!"},
+}
+
 HEADLINE_TITLES: dict[EventType, dict[Language, str]] = {
     EventType.GOAL: {EN: "GOAL!", ZH: "进球！", ES: "¡GOL!"},
     EventType.GOAL_DISALLOWED: {EN: "Goal ruled out", ZH: "进球无效", ES: "Gol anulado"},
