@@ -47,6 +47,16 @@ const STRINGS = {
     sound: "Sound",
     offsideLine: "Offside line",
     voice: "Voice",
+    tapToTalk: "Ask Kick-Off",
+    listening: "Listening…",
+    askPlaceholder: "…or type a question",
+    ask: "Ask",
+    thinking: "Thinking…",
+    didntCatch: "Sorry, I didn't catch that.",
+    micUnavailable: "The microphone isn't available.",
+    youAsked: "You asked",
+    setupByVoice: "Or just tell me",
+    setupHint: "e.g. “It's my first match and I support Kilburn”",
   },
   zh: {
     tagline: "边看边懂的足球。",
@@ -93,6 +103,16 @@ const STRINGS = {
     sound: "声音",
     offsideLine: "越位线",
     voice: "语音",
+    tapToTalk: "问 Kick-Off",
+    listening: "正在听…",
+    askPlaceholder: "…或输入问题",
+    ask: "提问",
+    thinking: "思考中…",
+    didntCatch: "抱歉，没听清。",
+    micUnavailable: "麦克风不可用。",
+    youAsked: "你问",
+    setupByVoice: "或者直接告诉我",
+    setupHint: "例如：“这是我第一次看球，我支持 Kilburn”",
   },
   es: {
     tagline: "El fútbol, explicado mientras sucede.",
@@ -139,6 +159,16 @@ const STRINGS = {
     sound: "Sonido",
     offsideLine: "Línea de fuera de juego",
     voice: "Voz",
+    tapToTalk: "Pregunta a Kick-Off",
+    listening: "Escuchando…",
+    askPlaceholder: "…o escribe una pregunta",
+    ask: "Preguntar",
+    thinking: "Pensando…",
+    didntCatch: "Perdona, no te entendí.",
+    micUnavailable: "El micrófono no está disponible.",
+    youAsked: "Preguntaste",
+    setupByVoice: "O simplemente dímelo",
+    setupHint: "p. ej. “Es mi primer partido y apoyo a Kilburn”",
   },
 } as const;
 
@@ -177,6 +207,7 @@ export const AGENT_NAMES: Record<string, Record<Language, string>> = {
   teacher: { en: "Teacher", zh: "讲解员", es: "Profesor" },
   storyteller: { en: "Storyteller", zh: "故事员", es: "Narrador" },
   league_guide: { en: "League guide", zh: "联赛向导", es: "Guía de liga" },
+  host: { en: "Host", zh: "主持人", es: "Anfitrión" },
 };
 
 // Short labels for the event ticker under the pitch.

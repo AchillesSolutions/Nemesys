@@ -159,6 +159,7 @@ export type ServerMessage =
       snapshot: Snapshot }
   | ({ type: "commentary" } & Commentary)
   | { type: "profile"; profile: Profile; learned: string[] }
+  | { type: "host"; question: string; answer: string; changes: Partial<Profile>; tools: string[]; language: Language }
   | { type: "finished" }
   | { type: "error"; message: string };
 
@@ -168,4 +169,5 @@ export type Control =
   | { action: "mode"; mode: Mode }
   | { action: "seek_chapter"; chapter: number }
   | { action: "seek"; minute: number }
+  | { action: "ask"; text: string }
   | ({ action: "profile" } & Partial<Profile>);

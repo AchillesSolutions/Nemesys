@@ -6,7 +6,7 @@ so prompts are short and the models cannot invent squad details.
 
 from __future__ import annotations
 
-from ..match_reader import ReaderUpdate
+from ..match_reader import MatchSnapshot, ReaderUpdate
 from ..models import EventType, MatchEvent, World
 
 # Which teachable concepts each event touches. Ordered: the first is the main one.
@@ -125,7 +125,9 @@ class Describer:
 
     def situation(self, update: ReaderUpdate) -> str:
         """A compact summary of the live state for prompts."""
-        s = update.snapshot
+        return self.snapshot_summary(update.snapshot)
+
+    def snapshot_summary(self, s: MatchSnapshot) -> str:
         h, a = s.home, s.away
         lines = [
             f"Minute {s.minute}, period {s.period}. Score: {h.name} {h.score}-{a.score} {a.name}.",

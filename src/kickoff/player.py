@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from .agents import CommentarySession, ViewerProfile
+from .agents.host import Host, HostReply
 from .agents.llm import ClientFactory
 from .chapters import Chapter, build_chapters, chapter_at
 from .match_reader import MatchReader, ReaderUpdate
@@ -39,6 +40,8 @@ class MatchPlayer:
         self.chapters = build_chapters(match)
         self.session = CommentarySession(world, match, profile, clients)
         self.reader = MatchReader(world, match.home, match.away)
+        self.host = Host(clients("host"), world, match, get_profile=lambda: self.session.profile,
+                         set_profile=self.set_profile, reader=lambda: self.reader, played=lambda: self.index)
         self.index = 0          # next event to play
         self.position = 0       # match elapsed seconds reached
         self.paused = False
@@ -67,8 +70,12 @@ class MatchPlayer:
 
     def set_profile(self, **changes) -> ViewerProfile:
         """Change team, language or level. What the viewer has learned is kept."""
-        self.session.profile = self.session.profile.model_copy(update=changes)
+        self.session.profile = ViewerProfile.model_validate(self.session.profile.model_dump() | changes)
         return self.session.profile
+
+    async def ask(self, question: str) -> HostReply:
+        """The viewer spoke to Kick-Off. The Host answers and may change their settings."""
+        return await self.host.ask(question)
 
     def seek(self, elapsed: int) -> None:
         """Jump to a point in the match, replaying skipped events silently."""

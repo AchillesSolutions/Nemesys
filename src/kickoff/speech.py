@@ -15,6 +15,7 @@ changed with KICKOFF_VOICE_EN / _ZH / _ES.
 from __future__ import annotations
 
 import os
+import time
 from collections import OrderedDict
 from xml.sax.saxutils import escape
 
@@ -55,6 +56,7 @@ class Speech:
                        for lang, (locale, voice) in VOICES.items()}
         self._styles: dict[str, set[str]] | None = None
         self._cache: OrderedDict[tuple[str, str, str], bytes] = OrderedDict()
+        self._token: tuple[str, float] | None = None
 
     @property
     def available(self) -> bool:
@@ -72,6 +74,19 @@ class Speech:
             wanted = {voice for _, voice in self.voices.values()}
             self._styles = {v["ShortName"]: set(v.get("StyleList") or []) for v in r.json() if v["ShortName"] in wanted}
         return self._styles
+
+    async def token(self) -> str:
+        """A ten-minute authorisation token for the browser's speech recogniser."""
+        if not self.available:
+            raise SpeechUnavailable("Azure AI Speech is not configured")
+        if self._token and self._token[1] > time.monotonic():
+            return self._token[0]
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issueToken",
+                                  headers={"Ocp-Apim-Subscription-Key": self.key})
+            r.raise_for_status()
+        self._token = (r.text, time.monotonic() + 9 * 60)
+        return r.text
 
     async def synthesise(self, text: str, language: str, tone: str = "neutral") -> bytes:
         """MP3 audio for one line of commentary."""

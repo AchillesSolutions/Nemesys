@@ -13,6 +13,7 @@ Messages to the server, as {"action": ...}:
     seek_chapter {"chapter": 3}
     seek         {"minute": 52}
     profile      {"team": "kil" | null, "language": "zh", "level": "beginner"}  (any subset)
+    ask          {"text": "why was that goal ruled out?"}  -> a "host" message, plus "profile" if settings changed
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from .agents import HelpLevel, Language, ViewerProfile
+from .agents.host import Host
 from .agents.llm import ClientFactory, client_factory
 from .chapters import build_chapters
 from .data_store import load
@@ -37,6 +39,11 @@ from .speech import Speech, SpeechUnavailable
 log = logging.getLogger(__name__)
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+
+
+class SetupRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    profile: ViewerProfile = Field(default_factory=ViewerProfile)
 
 
 class SpeechRequest(BaseModel):
@@ -57,6 +64,27 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok", "speech": speech.available}
+
+    @app.get("/api/speech/token")
+    async def speech_token() -> dict:
+        """A short-lived token so the browser can recognise speech without ever seeing the key."""
+        try:
+            return {"token": await speech.token(), "region": speech.region}
+        except SpeechUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+
+    @app.post("/api/setup")
+    async def setup(req: SetupRequest) -> dict:
+        """Before kick-off, the viewer can set up by voice: "I'm new and I support Kilburn"."""
+        state = {"profile": req.profile}
+
+        def set_profile(**changes) -> ViewerProfile:
+            state["profile"] = ViewerProfile.model_validate(state["profile"].model_dump() | changes)
+            return state["profile"]
+
+        host = Host(clients("host"), world, match, get_profile=lambda: state["profile"], set_profile=set_profile)
+        reply = await host.ask(req.text)
+        return {"answer": reply.answer, "profile": state["profile"].model_dump(mode="json"), "changes": reply.changes}
 
     @app.post("/api/speech")
     async def speak(req: SpeechRequest) -> Response:
@@ -95,9 +123,29 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         player = MatchPlayer(world, match, profile, clients, send,
                              mode="full" if mode == "full" else "key_moments", speed=speed)
         runner = asyncio.create_task(player.run())
+        asks: set[asyncio.Task] = set()
+
+        async def answer(text: str) -> None:
+            try:
+                reply = await player.ask(text)
+            except Exception:
+                log.exception("host failed")
+                await send({"type": "error", "message": "Sorry, I couldn't answer that just now."})
+                return
+            if reply.changes:
+                await send({"type": "profile", "profile": player.session.profile.model_dump(mode="json"),
+                            "learned": player.session.learned_labels()})
+            await send({"type": "host", "question": text, "answer": reply.answer, "changes": reply.changes,
+                        "tools": reply.tools_used, "language": player.session.profile.language.value})
+
         try:
             while True:
                 message = await ws.receive_json()
+                if message.get("action") == "ask" and str(message.get("text", "")).strip():
+                    task = asyncio.create_task(answer(str(message["text"])[:500]))
+                    asks.add(task)
+                    task.add_done_callback(asks.discard)
+                    continue
                 try:
                     reply = apply_control(player, message)
                 except (KeyError, ValueError, StopIteration, ValidationError) as exc:
@@ -108,6 +156,8 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         except WebSocketDisconnect:
             pass
         finally:
+            for task in asks:
+                task.cancel()
             runner.cancel()
             with suppress(asyncio.CancelledError):
                 await runner

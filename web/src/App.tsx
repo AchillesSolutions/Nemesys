@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Directory, loadStatic } from "./api";
+import { AskBar } from "./components/AskBar";
 import { Chapters, DemoControls, JumpBanner, ViewerSettings } from "./components/Controls";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
@@ -104,6 +105,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             {soundOn ? "🔊" : "🔇"} {t(lang, "sound")}
           </button>
         </span>} />
+      <AskBar lang={lang} busy={state.asking > 0} onAsk={(text) => send({ action: "ask", text })} />
       {PRESET.demo && (
         <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
       )}

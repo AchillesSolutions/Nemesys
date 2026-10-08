@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "microsoft-cognitiveservices-speech-sdk": "^1.52.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

@@ -1,4 +1,6 @@
 import { useState, type CSSProperties } from "react";
+import { voice } from "../voice";
+import { AskBar } from "./AskBar";
 import type { Directory } from "../api";
 import { LANGUAGE_NAMES, LEVELS, t } from "../i18n";
 import type { HelpLevel, Language, MatchInfo, Profile } from "../types";
@@ -10,6 +12,31 @@ export function Setup({ dir, match, onStart }: { dir: Directory; match: MatchInf
   const [level, setLevel] = useState<HelpLevel>("beginner");
   const lang = language;
   const home = dir.club(match.home)!, away = dir.club(match.away)!;
+  const [reply, setReply] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // "I'm new and I support Kilburn": the Host turns it into settings, and says so.
+  const tellMe = async (text: string) => {
+    setBusy(true);
+    voice.enable(); // the tap or click that got us here allows audio
+    try {
+      const res = await fetch("/api/setup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, profile: { team, language, level } }),
+      });
+      const body = await res.json() as { answer: string; profile: Profile };
+      setTeam(body.profile.team);
+      setLanguage(body.profile.language);
+      setLevel(body.profile.level);
+      setReply(body.answer);
+      voice.say([{ text: body.answer, tone: "hopeful", card_title: "", sources: ["host"], proposal_ids: [],
+                   concepts: [], headline: false }], body.profile.language);
+    } catch {
+      setReply(null);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <main className="setup">
@@ -20,6 +47,12 @@ export function Setup({ dir, match, onStart }: { dir: Directory; match: MatchInf
           {home.name} v {away.name} · {match.venue} · {dir.world.league}, matchweek {match.matchweek}
         </p>
       </header>
+
+      <section className="setup-voice">
+        <p className="setup-voice-label">{t(lang, "setupByVoice")}</p>
+        <AskBar lang={lang} busy={busy} onAsk={tellMe} placeholder={t(lang, "setupHint")} />
+        {reply && <p className="setup-reply">{reply}</p>}
+      </section>
 
       <fieldset>
         <legend>{t(lang, "whoSupport")}</legend>

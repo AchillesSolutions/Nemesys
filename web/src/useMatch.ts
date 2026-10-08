@@ -23,6 +23,7 @@ export interface MatchState {
   paused: boolean;
   finished: boolean;
   error: string | null;
+  asking: number; // questions waiting for the Host's answer
 }
 
 const TRAIL = 6;
@@ -41,7 +42,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
     connected: false, chapters: [], chapter: null, event: null, recent: [], snapshot: null, feed: [],
     arrivedAt: 0, nextGap: null, jumpedTo: null,
     learned: [], profile: initial ?? { team: null, language: "en", level: "beginner" },
-    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null,
+    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0,
   }));
   const ws = useRef<WebSocket | null>(null);
 
@@ -70,6 +71,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
         case "seek_chapter":
         case "next_chapter": return { ...s, mode: "key_moments", finished: false };
         case "seek": return { ...s, finished: false };
+        case "ask": return { ...s, asking: s.asking + 1 };
         default: return s;
       }
     });
@@ -99,9 +101,17 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
     }
     case "profile":
       return { ...s, profile: msg.profile, learned: msg.learned };
+    case "host": {
+      const entry: Commentary = {
+        event_id: -Date.now(), minute: s.event?.minute ?? "0", reasoning: "", proposals: [], learned: s.learned,
+        lines: [{ text: msg.answer, tone: "neutral", card_title: `“${msg.question}”`, sources: ["host"],
+                  proposal_ids: [], concepts: [], headline: false }],
+      };
+      return { ...s, feed: [entry, ...s.feed].slice(0, FEED_MAX), asking: Math.max(0, s.asking - 1) };
+    }
     case "finished":
       return { ...s, finished: true };
     case "error":
-      return { ...s, error: msg.message };
+      return { ...s, error: msg.message, asking: Math.max(0, s.asking - 1) };
   }
 }
