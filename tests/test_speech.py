@@ -18,7 +18,8 @@ class FakeSpeech(Speech):
 
 
 def test_tone_picks_the_best_style_the_voice_supports():
-    assert pick_style("excited", {"sports_commentary", "sports_commentary_excited"}) == "sports_commentary_excited"
+    assert pick_style("excited", {"sports-commentary", "sports-commentary-excited"}) == "sports-commentary-excited"
+    assert pick_style("disappointed", {"regretful", "sad"}) == "regretful"
     assert pick_style("excited", {"cheerful", "sad"}) == "cheerful"
     assert pick_style("disappointed", {"cheerful"}) is None
 
