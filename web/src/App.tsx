@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Directory, loadStatic } from "./api";
-import { AskBar } from "./components/AskBar";
-import { Chapters, DemoControls, JumpBanner, ViewerSettings } from "./components/Controls";
+import { Chapters, DemoControls, JumpBanner, ProfileChips, ViewerSettings } from "./components/Controls";
+import { VoiceStatus } from "./components/VoiceStatus";
+import { listener, type ListenState } from "./listen";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
 import { Pitch, Ticker } from "./components/Pitch";
@@ -47,8 +48,7 @@ export default function App() {
   if (!data || !dir) return <p className="boot">Kick-Off…</p>;
   if (!profile) {
     // The Kick off click is the user gesture browsers require before playing audio.
-    const start = (p: Profile) => { void sound.enable(); voice.enable(); setProfile(p); };
-    return <Setup dir={dir} match={data.match} onStart={start} />;
+    return <Setup dir={dir} match={data.match} demo={PRESET.demo} onStart={setProfile} />;
   }
   return <Live dir={dir} match={data.match} profile={profile} />;
 }
@@ -58,6 +58,29 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   const lang = state.profile.language;
   const [soundOn, setSoundOn] = useState(sound.enabled);
   const [voiceOn, setVoiceOn] = useState(voice.enabled);
+  const [listen, setListen] = useState<{ state: ListenState; caption?: string }>({ state: listener.state });
+
+  // Achilles listens for its name all match long; Space is push-to-talk.
+  useEffect(() => {
+    listener.mode = "wake";
+    listener.on({
+      state: (state, caption) => setListen({ state, caption }),
+      command: (text, language) => send({ action: "ask", text, language }),
+    });
+    void listener.start(profile.language);
+    const isField = (e: KeyboardEvent) => (e.target as HTMLElement).closest?.("select, input, textarea");
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat && !isField(e)) { e.preventDefault(); listener.push(true); }
+    };
+    const up = (e: KeyboardEvent) => { if (e.code === "Space" && !isField(e)) listener.push(false); };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, [profile.language, send]);
+
+  // Once the Host has answered, go back to listening for the name.
+  useEffect(() => { if (state.asking === 0) listener.done(); }, [state.asking]);
+  useEffect(() => listener.setHint(state.profile.language), [state.profile.language]);
   const spoken = useRef<Commentary | null>(null);
 
   // Speak each new piece of commentary once, as it arrives.
@@ -85,6 +108,18 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     setSoundOn(!soundOn);
   };
 
+  const toggles = (
+    <span className="toggles">
+      <button className="btn" onClick={toggleVoice} aria-pressed={voiceOn}
+              title={voice.engine === "azure" ? "Azure AI Speech" : "Browser voice"}>
+        {voiceOn ? "🗣" : "🤐"} {t(lang, "voice")}
+      </button>
+      <button className="btn" onClick={toggleSound} aria-pressed={soundOn}>
+        {soundOn ? "🔊" : "🔇"} {t(lang, "sound")}
+      </button>
+    </span>
+  );
+
   return (
     <div className="live" lang={lang === "zh" ? "zh-CN" : lang}>
       <header className="topbar">
@@ -95,17 +130,9 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         {!state.connected && <span className="status">{t(lang, "connecting")}</span>}
         {state.finished && <span className="status">{t(lang, "finished")}</span>}
       </header>
-      <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={
-        <span className="toggles">
-          <button className="btn" onClick={toggleVoice} aria-pressed={voiceOn}
-                  title={voice.engine === "azure" ? "Azure AI Speech" : "Browser voice"}>
-            {voiceOn ? "🗣" : "🤐"} {t(lang, "voice")}
-          </button>
-          <button className="btn" onClick={toggleSound} aria-pressed={soundOn}>
-            {soundOn ? "🔊" : "🔇"} {t(lang, "sound")}
-          </button>
-        </span>} />
-      <AskBar lang={lang} busy={state.asking > 0} onAsk={(text) => send({ action: "ask", text })} />
+      {PRESET.demo
+        ? <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={toggles} />
+        : <ProfileChips dir={dir} profile={state.profile} extra={toggles} />}
       {PRESET.demo && (
         <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
       )}
@@ -115,6 +142,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed} lang={lang} />
             {state.mode === "key_moments" && <JumpBanner chapter={state.jumpedTo} lang={lang} />}
+            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} />
           </div>
           <Ticker dir={dir} event={state.event} lang={lang} />
           <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
@@ -127,7 +155,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         <aside className="col-side">
           <Feed feed={state.feed} lang={lang} />
           <Learned learned={state.learned} lang={lang} />
-          <UnderTheHood feed={state.feed} lang={lang} />
+          {PRESET.demo && <UnderTheHood feed={state.feed} lang={lang} />}
         </aside>
       </main>
       {state.error && <div className="toast" role="alert">{state.error}</div>}

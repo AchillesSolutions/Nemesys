@@ -169,5 +169,5 @@ export type Control =
   | { action: "mode"; mode: Mode }
   | { action: "seek_chapter"; chapter: number }
   | { action: "seek"; minute: number }
-  | { action: "ask"; text: string }
+  | { action: "ask"; text: string; language?: Language }
   | ({ action: "profile" } & Partial<Profile>);

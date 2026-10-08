@@ -73,9 +73,9 @@ class MatchPlayer:
         self.session.profile = ViewerProfile.model_validate(self.session.profile.model_dump() | changes)
         return self.session.profile
 
-    async def ask(self, question: str) -> HostReply:
+    async def ask(self, question: str, spoken: str | None = None) -> HostReply:
         """The viewer spoke to Kick-Off. The Host answers and may change their settings."""
-        return await self.host.ask(question)
+        return await self.host.ask(question, spoken)
 
     def seek(self, elapsed: int) -> None:
         """Jump to a point in the match, replaying skipped events silently."""

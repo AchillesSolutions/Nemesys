@@ -24,7 +24,10 @@ interface Item {
 
 class Voice {
   enabled = false;
+  /** The line most recently spoken, so the listener can ignore Kick-Off hearing itself. */
+  lastSpoken = "";
   private azure = false;
+  private idle: (() => void)[] = [];
   private queue: Item[] = [];
   private playing: { stop: () => void } | null = null;
 
@@ -72,6 +75,18 @@ class Voice {
     this.playing?.stop();
   }
 
+  get speaking(): boolean {
+    return this.playing !== null;
+  }
+
+  /** Speak and resolve once everything queued has been said (or straight away if voice is off). */
+  sayAndWait(lines: Line[], lang: Language): Promise<void> {
+    if (!this.enabled) return Promise.resolve();
+    const done = new Promise<void>((resolve) => this.idle.push(resolve));
+    this.say(lines, lang);
+    return done;
+  }
+
   private async next(): Promise<void> {
     const now = performance.now();
     this.queue = this.queue.filter((q) => q.line.headline || now - q.queuedAt < STALE_MS);
@@ -79,9 +94,11 @@ class Voice {
     if (!item) {
       this.playing = null;
       sound.duck(false);
+      this.idle.splice(0).forEach((resolve) => resolve());
       return;
     }
     sound.duck(true);
+    this.lastSpoken = item.line.text;
     const done = () => {
       if (this.playing === handle) void this.next();
     };

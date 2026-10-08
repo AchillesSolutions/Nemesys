@@ -225,20 +225,30 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .offside-ghost { fill: none; stroke: #ffe066; stroke-width: .35; stroke-dasharray: .8 .6; }
 .player.offside-player circle { stroke: #ffe066; stroke-width: .6; }
 
-/* ---------- Talking to Kick-Off ---------- */
-.ask-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.ask-bar input {
-  flex: 1 1 220px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: .5rem .9rem; color: var(--text);
+/* ---------- Voice-first ---------- */
+.splash {
+  min-height: 100vh; display: grid; place-content: center; text-align: center; gap: .6rem; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, #13603a 0, var(--bg) 60%);
 }
-.mic {
-  display: inline-flex; align-items: center; gap: .45rem; padding: .55rem 1.1rem; border-radius: 999px; cursor: pointer;
-  border: 0; background: var(--accent); color: #062417; font-weight: 700;
+.splash h1 { font-size: clamp(3rem, 10vw, 6rem); letter-spacing: -0.04em; }
+.splash h1::after { content: "."; color: var(--accent); }
+.splash .tagline { color: var(--muted); font-size: 1.3rem; }
+.splash .fixture { color: var(--muted); }
+.splash .press { margin-top: 2.5rem; font-size: 1.2rem; animation: pulse 2s infinite; }
+.setup-voice { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.2rem; display: grid; gap: .8rem; }
+.achilles { font-size: 1.25rem; line-height: 1.5; }
+.setup.voice-only .choice { pointer-events: none; }
+.voice-status {
+  display: inline-flex; align-items: center; gap: .55rem; padding: .45rem 1rem; border-radius: 999px;
+  background: rgba(11, 20, 34, .88); border: 1px solid var(--line); font-size: .95rem; max-width: 100%;
 }
-.ask-bar.listening .mic { background: var(--danger); color: #fff; animation: pulse 1.2s infinite; }
-.heard { color: var(--muted); font-style: italic; }
-.thinking { color: var(--muted); }
+.pitch-stack .voice-status { position: absolute; left: 50%; bottom: 2.4rem; transform: translateX(-50%); }
+.setup-voice .voice-status { justify-self: start; }
+.vs-awake, .vs-push { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.vs-awake .vs-mic, .vs-push .vs-mic { animation: pulse 1s infinite; }
+.vs-thinking { border-color: var(--teacher); }
+.vs-off { color: var(--muted); }
+.vs-dots { color: var(--muted); animation: pulse 1s infinite; }
 .chip-host { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.setup-voice { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; display: grid; gap: .6rem; }
-.setup-voice-label { font-weight: 600; }
-.setup-reply { color: var(--accent); }
+.chip.big { font-size: .9rem; padding: .3rem .8rem; }
+.toggles { margin-left: auto; display: inline-flex; gap: .4rem; }

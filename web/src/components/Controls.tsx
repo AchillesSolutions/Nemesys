@@ -33,7 +33,20 @@ export function DemoControls({ lang, mode, speed, paused, send }: {
   );
 }
 
-/** The viewer's own settings, changeable mid-match. What they have learned is kept. */
+/** What the viewer has chosen, shown (not edited) on the TV screen: changes are made by voice. */
+export function ProfileChips({ dir, profile, extra }: { dir: Directory; profile: Profile; extra?: ReactNode }) {
+  const lang = profile.language;
+  return (
+    <div className="controls profile-chips">
+      <span className="chip big">{t(lang, "supporting")}: {dir.club(profile.team)?.short_name ?? t(lang, "neutral")}</span>
+      <span className="chip big">{LANGUAGE_NAMES[lang]}</span>
+      <span className="chip big">{LEVELS[profile.level][lang].name}</span>
+      {extra}
+    </div>
+  );
+}
+
+/** Demo fallback: the viewer's settings as pickers, for testing without a microphone. */
 export function ViewerSettings({ dir, match, profile, send, extra }: {
   dir: Directory; match: MatchInfo; profile: Profile; send: (c: Control) => void; extra?: ReactNode;
 }) {

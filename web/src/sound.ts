@@ -96,6 +96,27 @@ export class MatchSound {
     lfo.start();
   }
 
+  /** Two soft rising notes: "I'm listening". Works even when the atmosphere is muted. */
+  chime(): void {
+    if (!this.ctx) this.build();
+    const ctx = this.ctx!;
+    void ctx.resume();
+    let t = ctx.currentTime + 0.02;
+    for (const freq of [880, 1320]) {
+      const tone = ctx.createOscillator();
+      const env = ctx.createGain();
+      tone.type = "sine";
+      tone.frequency.value = freq;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.12, t + 0.015);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      tone.connect(env).connect(ctx.destination);
+      tone.start(t);
+      tone.stop(t + 0.25);
+      t += 0.12;
+    }
+  }
+
   /** Lower the crowd while commentary is speaking, and bring it back afterwards. */
   duck(on: boolean): void {
     if (!this.ctx || !this.ducker) return;

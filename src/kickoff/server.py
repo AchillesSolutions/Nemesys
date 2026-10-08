@@ -13,7 +13,8 @@ Messages to the server, as {"action": ...}:
     seek_chapter {"chapter": 3}
     seek         {"minute": 52}
     profile      {"team": "kil" | null, "language": "zh", "level": "beginner"}  (any subset)
-    ask          {"text": "why was that goal ruled out?"}  -> a "host" message, plus "profile" if settings changed
+    ask          {"text": "why was that goal ruled out?", "language": "en"}  -> a "host" message, plus
+                 "profile" if settings changed; "language" is what the speech recogniser heard (optional)
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 class SetupRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     profile: ViewerProfile = Field(default_factory=ViewerProfile)
+    spoken: Language | None = Field(None, description="The language the speech recogniser heard")
 
 
 class SpeechRequest(BaseModel):
@@ -83,7 +85,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             return state["profile"]
 
         host = Host(clients("host"), world, match, get_profile=lambda: state["profile"], set_profile=set_profile)
-        reply = await host.ask(req.text)
+        reply = await host.ask(req.text, req.spoken.value if req.spoken else None)
         return {"answer": reply.answer, "profile": state["profile"].model_dump(mode="json"), "changes": reply.changes}
 
     @app.post("/api/speech")
@@ -125,9 +127,9 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         runner = asyncio.create_task(player.run())
         asks: set[asyncio.Task] = set()
 
-        async def answer(text: str) -> None:
+        async def answer(text: str, spoken: str | None) -> None:
             try:
-                reply = await player.ask(text)
+                reply = await player.ask(text, spoken)
             except Exception:
                 log.exception("host failed")
                 await send({"type": "error", "message": "Sorry, I couldn't answer that just now."})
@@ -142,7 +144,8 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             while True:
                 message = await ws.receive_json()
                 if message.get("action") == "ask" and str(message.get("text", "")).strip():
-                    task = asyncio.create_task(answer(str(message["text"])[:500]))
+                    spoken = message.get("language") if message.get("language") in ("en", "zh", "es") else None
+                    task = asyncio.create_task(answer(str(message["text"])[:500], spoken))
                     asks.add(task)
                     task.add_done_callback(asks.discard)
                     continue

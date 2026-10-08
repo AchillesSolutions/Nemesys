@@ -40,6 +40,7 @@ Look facts up before answering; never invent scores, names, statistics or rules:
   then explain_rule if a rule is involved, and answer from those facts, not with guesses.
 - About the score, possession or cards: match_state. About a player: player_info. About the table: league_table.
 
+If the viewer speaks to you in a different language from their setting, switch the language to the one they spoke.
 Always reply in the viewer's language after any change you made (if they asked for Mandarin, reply in Mandarin).
 Keep it family-friendly and never mention betting or odds.
 """.strip()
@@ -68,11 +69,13 @@ class Host:
         self._turn: HostReply | None = None
         self.agent = Agent(client, INSTRUCTIONS, name="host", tools=self.tools())
 
-    async def ask(self, question: str) -> HostReply:
+    async def ask(self, question: str, spoken: str | None = None) -> HostReply:
+        """Answer the viewer. ``spoken`` is the language the speech recogniser heard, if known."""
         self._turn = HostReply(answer="")
         profile = self.get_profile()
+        heard = f" They are speaking {LANGUAGE_NAMES[spoken]}." if spoken in LANGUAGE_NAMES else ""
         context = (f"Viewer settings: supports {self.describer.club(profile.team) or 'nobody (neutral)'}, "
-                   f"language {LANGUAGE_NAMES[profile.language]}, level {profile.level}.\n"
+                   f"language {LANGUAGE_NAMES[profile.language]}, level {profile.level}.{heard}\n"
                    f"The viewer says: {question}")
         response = await self.agent.run(context)
         self._turn.answer = (response.text or "").strip()
