@@ -20,11 +20,11 @@ import { useMatch } from "./useMatch";
  */
 function presetFromUrl(): { profile: Profile | null; speed: number; mode: Mode; demo: boolean } {
   const q = new URLSearchParams(location.search);
-  // ?demo=1 is for judges and recording: Key moments at 1.5x with playback controls.
-  // Without it, Kick-Off behaves like a live broadcast: the full match, in real time, no controls.
+  // Everyone watches the highlights flow (key moments, quiet play compressed, bridges between).
+  // ?demo=1 is for judges and recording: a little faster, with playback controls and the agent panel.
   const demo = q.get("demo") === "1";
   const speed = Number(q.get("speed")) || (demo ? 1.5 : 1);
-  const mode: Mode = (q.get("mode") ?? (demo ? "key_moments" : "full")) === "full" ? "full" : "key_moments";
+  const mode: Mode = q.get("mode") === "full" ? "full" : "key_moments";
   if (!q.has("language") && !q.has("team") && !q.has("level")) return { profile: null, speed, mode, demo };
   const language = (["en", "zh", "es"].includes(q.get("language") ?? "") ? q.get("language") : "en") as Language;
   const level = (Object.keys(LEVELS).includes(q.get("level") ?? "") ? q.get("level") : "beginner") as HelpLevel;
