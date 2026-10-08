@@ -13,8 +13,10 @@ export interface MatchState {
   /** When the latest event arrived (performance.now()) and match seconds until the next one, for smooth motion. */
   arrivedAt: number;
   nextGap: number | null;
-  /** Set when Key moments jumps ahead, so the UI can say so. */
-  jumpedTo: Chapter | null;
+  /** How fast the current stretch plays (quiet play inside a highlight is compressed). */
+  pace: number;
+  /** Set while play skips ahead between highlights, so the UI can say so. */
+  bridge: { from: string; to: string } | null;
   feed: Commentary[]; // newest first
   learned: string[];
   profile: Profile;
@@ -40,7 +42,7 @@ function socketUrl(profile: Profile, mode: Mode, speed: number): string {
 export function useMatch(initial: Profile | null, initialMode: Mode = "key_moments", initialSpeed = 1.5) {
   const [state, setState] = useState<MatchState>(() => ({
     connected: false, chapters: [], chapter: null, event: null, recent: [], snapshot: null, feed: [],
-    arrivedAt: 0, nextGap: null, jumpedTo: null,
+    arrivedAt: 0, nextGap: null, pace: 1, bridge: null,
     learned: [], profile: initial ?? { team: null, language: "en", level: "beginner" },
     mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0,
   }));
@@ -85,12 +87,14 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
     case "ready":
       return { ...s, chapters: msg.chapters, profile: msg.profile, mode: msg.mode, speed: msg.speed };
     case "chapter":
-      // A new chapter after the first one means play has jumped ahead.
-      return { ...s, chapter: msg.chapter, jumpedTo: s.event ? msg.chapter : null };
+      return { ...s, chapter: msg.chapter };
+    case "bridge":
+      return { ...s, bridge: { from: msg.from_minute, to: msg.to_minute } };
     case "event": {
       const jumped = s.event != null && msg.event.elapsed - s.event.elapsed > 120;
       return {
         ...s, event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
+        pace: msg.pace, bridge: null,
         // Trails make no sense across a jump: start them afresh.
         recent: jumped ? [msg.event] : [...s.recent, msg.event].slice(-TRAIL),
       };

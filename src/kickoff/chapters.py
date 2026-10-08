@@ -14,9 +14,9 @@ from .agents.i18n import HEADLINE_TITLES, concept_label
 from .agents.viewer import Language
 from .models import EventType, Match
 
-LEAD_IN_S = 45   # play this much before the moment, so it builds up
-LEAD_OUT_S = 30  # and this much after, so commentary has time to land
-MERGE_GAP_S = 60  # chapters closer than this play as one (VAR check -> penalty -> goal)
+LEAD_IN_S = 15    # play this much before the moment, so it builds up
+LEAD_OUT_S = 15   # and this much after, so commentary has time to land
+MERGE_GAP_S = 150  # moments closer than this play as one (a whole VAR review: check, penalty, goal)
 
 # The first time each of these happens is worth a chapter, for the teaching moment.
 FIRST_OCCURRENCE = {

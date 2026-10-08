@@ -51,7 +51,11 @@ def _teacher(b: dict) -> dict:
 
 def _storyteller(b: dict) -> dict:
     kinds = {s["kind"]: s for s in b.get("signals", [])}
-    if "takes_the_lead" in kinds or "equaliser" in kinds:
+    if "bridge" in kinds:
+        gap = kinds["bridge"]["possession_in_gap"]
+        leader = max(gap, key=gap.get)
+        text, priority = f"Since then, {leader.upper()} have had {round(gap[leader])}% of the ball.", 5
+    elif "takes_the_lead" in kinds or "equaliser" in kinds:
         text, priority = "That goal changes the whole feel of this match.", 8
     elif "numerical_advantage" in kinds:
         text, priority = "With a player more, the other side now has a spare player to attack with.", 8

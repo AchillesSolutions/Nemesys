@@ -203,11 +203,12 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
   background: rgba(11, 20, 34, .85); border: 1px solid rgba(255,255,255,.25); border-radius: 999px;
   padding: .3rem .9rem; font-size: .9rem; font-weight: 600; animation: slide .3s ease-out;
 }
-.jump-banner {
-  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-  font-size: 1.4rem; font-weight: 700; background: rgba(11, 20, 34, .55); border-radius: var(--radius);
-  animation: fadeout 2.6s ease-out forwards;
+.bridge-banner {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: .3rem;
+  pointer-events: none; background: rgba(11, 20, 34, .62); border-radius: var(--radius); animation: slide .3s ease-out;
 }
+.bridge-label { color: var(--muted); font-size: .95rem; text-transform: uppercase; letter-spacing: .1em; }
+.bridge-minutes { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 @keyframes fadeout { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .clock { min-width: 7.5rem; }
 .chapters button:disabled { cursor: default; }

@@ -14,21 +14,29 @@ always exactly right, while what the viewer has learned is kept.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from .agents import CommentarySession, ViewerProfile
+from .agents.session import speech_seconds
 from .agents.host import Host, HostReply
 from .agents.llm import ClientFactory
 from .chapters import Chapter, build_chapters, chapter_at
-from .match_reader import MatchReader, ReaderUpdate
+from .match_reader import SALIENCE, MatchReader, ReaderUpdate
 from .models import Match, World
 
 log = logging.getLogger(__name__)
 
 Send = Callable[[dict], Awaitable[None]]
 Mode = Literal["full", "key_moments"]
+
+QUIET_PACE = 4.0         # quiet play inside a key moment runs this much faster...
+QUIET_AHEAD_S = 15       # ...when nothing notable is coming within this many match seconds
+QUIET_BEHIND_S = 8       # ...and nothing notable has just happened
+BRIDGE_MIN_GAP_S = 240   # jumps of at least four minutes get a bridging line between moments
+BRIDGE_MAX_PAUSE_S = 10
 
 
 class MatchPlayer:
@@ -49,6 +57,8 @@ class MatchPlayer:
         self._wake = asyncio.Event()
         self._tasks: set[asyncio.Task] = set()
         self._chapter: Chapter | None = None
+        self._last_update: ReaderUpdate | None = None
+        self._notable = sorted(e.elapsed for e in match.events if SALIENCE.get(e.type, 0) >= 2)
 
     # -- controls --------------------------------------------------------------
 
@@ -83,7 +93,7 @@ class MatchPlayer:
             self.reader = MatchReader(self.world, self.match.home, self.match.away)
             self.index = 0
         while self.index < len(self.match.events) and self.match.events[self.index].elapsed < elapsed:
-            self.reader.apply(self.match.events[self.index])
+            self._last_update = self.reader.apply(self.match.events[self.index])
             self.index += 1
         self.position = elapsed
         self.finished = False
@@ -119,10 +129,10 @@ class MatchPlayer:
 
             ev = self.match.events[self.index]
             if self.mode == "key_moments" and not chapter_at(self.chapters, ev.elapsed):
-                self._skip_to_next_chapter(ev.elapsed)
+                await self._bridge_to_next_chapter(ev.elapsed)
                 continue
 
-            delay = (ev.elapsed - self.position) / self.speed
+            delay = (ev.elapsed - self.position) / (self.speed * self.pace_at(self.position))
             if delay > 0 and not await self._wait(delay):
                 continue  # woken by a control change: re-evaluate
             await self._play(ev)
@@ -131,11 +141,12 @@ class MatchPlayer:
         self.index += 1
         self.position = ev.elapsed
         update = self.reader.apply(ev)
+        self._last_update = update
         chapter = chapter_at(self.chapters, ev.elapsed) if self.mode == "key_moments" else None
         if chapter and chapter is not self._chapter:
             self._chapter = chapter
             await self.send({"type": "chapter", "chapter": chapter.model_dump()})
-        await self.send(event_message(update, self._gap_to_next(ev, chapter)))
+        await self.send(event_message(update, self._gap_to_next(ev, chapter), self.pace_at(ev.elapsed)))
         if self.session.should_wake(update):
             task = asyncio.create_task(self._commentate(update))
             self._tasks.add(task)
@@ -157,9 +168,42 @@ class MatchPlayer:
             return None
         return nxt.elapsed - ev.elapsed
 
-    def _skip_to_next_chapter(self, elapsed: int) -> None:
+    def pace_at(self, elapsed: int) -> float:
+        """How fast play runs from here: quiet stretches inside a key moment are compressed."""
+        if self.mode != "key_moments":
+            return 1.0
+        i = bisect.bisect_right(self._notable, elapsed)
+        ahead = self._notable[i] - elapsed if i < len(self._notable) else 10 ** 6
+        behind = elapsed - self._notable[i - 1] if i > 0 else 10 ** 6
+        return QUIET_PACE if ahead > QUIET_AHEAD_S and behind > QUIET_BEHIND_S else 1.0
+
+    async def _bridge_to_next_chapter(self, elapsed: int) -> None:
+        """Skip to the next key moment. After a long gap, the agents may sum up what was skipped."""
         upcoming = next((c for c in self.chapters if c.start > elapsed), None)
+        before = self._last_update
         self.seek(upcoming.start if upcoming else self.match.events[-1].elapsed + 1)
+        if upcoming and before and self._last_update and upcoming.start - before.event.elapsed >= BRIDGE_MIN_GAP_S:
+            await self._bridge(before, self._last_update)
+
+    async def _bridge(self, before: ReaderUpdate, after: ReaderUpdate) -> None:
+        gap_s = after.event.elapsed - before.event.elapsed
+        b, a = before.snapshot, after.snapshot
+        signal = {
+            "kind": "bridge", "from_minute": before.event.minute, "to_minute": after.event.minute,
+            "possession_in_gap": self.reader.possession_share(gap_s),
+            "shots_in_gap": {a.home.id: a.home.shots - b.home.shots, a.away.id: a.away.shots - b.away.shots},
+            "corners_in_gap": {a.home.id: a.home.corners - b.home.corners, a.away.id: a.away.corners - b.away.corners},
+        }
+        await self.send({"type": "bridge", "from_minute": signal["from_minute"], "to_minute": signal["to_minute"]})
+        spoken = 0.0
+        try:
+            async for commentary in self.session.respond_now(after.model_copy(update={"signals": [signal], "salience": 0})):
+                await self.send({"type": "commentary", **commentary.model_dump(mode="json")})
+                spoken += sum(speech_seconds(line.text, self.session.profile.language) for line in commentary.lines)
+        except Exception:
+            log.exception("bridge commentary failed")
+        # Let the line land before play resumes; when fast-forwarding (sound muted), just a beat.
+        await self._wait(min(1.2 + spoken, BRIDGE_MAX_PAUSE_S) if self.speed <= 4 else 0.2)
 
     async def _wait(self, seconds: float | None) -> bool:
         """Sleep, but wake early on any control change. True if the full time passed."""
@@ -175,13 +219,14 @@ class MatchPlayer:
             task.cancel()
 
 
-def event_message(update: ReaderUpdate, next_gap: int | None = None) -> dict:
-    """What the browser needs to draw one event: the event, the live state after it, and how
-    many match seconds until the next one (so the ball and clock can move smoothly in between)."""
+def event_message(update: ReaderUpdate, next_gap: int | None = None, pace: float = 1.0) -> dict:
+    """What the browser needs to draw one event: the event, the live state after it, how many match
+    seconds until the next one, and how fast that stretch plays (so ball and clock move smoothly)."""
     return {
         "type": "event",
         "event": update.event.model_dump(mode="json", exclude_none=True),
         "next_gap": next_gap,
+        "pace": pace,
         "salience": update.salience,
         "signals": update.signals,
         "snapshot": update.snapshot.model_dump(mode="json"),

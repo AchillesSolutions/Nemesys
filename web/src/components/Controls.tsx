@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Directory } from "../api";
 import { LANGUAGE_NAMES, LEVELS, t } from "../i18n";
 import type { Chapter, Control, HelpLevel, Language, MatchInfo, Mode, Profile } from "../types";
@@ -103,15 +103,13 @@ export function Chapters({ chapters, current, elapsed, lang, send }: {
   );
 }
 
-/** A short banner when Key moments skips ahead, so the jump in the clock makes sense. */
-export function JumpBanner({ chapter, lang }: { chapter: Chapter | null; lang: Language }) {
-  const [shown, setShown] = useState<number | null>(null);
-  useEffect(() => {
-    if (!chapter) return;
-    setShown(chapter.id);
-    const id = setTimeout(() => setShown(null), 2600);
-    return () => clearTimeout(id);
-  }, [chapter]);
-  if (!chapter || shown !== chapter.id) return null;
-  return <div className="jump-banner" role="status">⏩ {t(lang, "jumpingTo")} {chapter.minute}'</div>;
+/** While play skips ahead between highlights: where we were, where we're going. */
+export function BridgeBanner({ bridge, lang }: { bridge: { from: string; to: string } | null; lang: Language }) {
+  if (!bridge) return null;
+  return (
+    <div className="bridge-banner" role="status">
+      <span className="bridge-label">{t(lang, "jumpingTo")}</span>
+      <span className="bridge-minutes">{bridge.from}' <span aria-hidden>⏩</span> {bridge.to}'</span>
+    </div>
+  );
 }

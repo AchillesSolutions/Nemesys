@@ -125,10 +125,13 @@ class CommentarySession:
     # -- bookkeeping ---------------------------------------------------------
 
     def _moment(self, update: ReaderUpdate) -> Moment:
+        bridge = next((s for s in update.signals if s["kind"] == "bridge"), None)
+        event_text = (f"Play has moved on from minute {bridge['from_minute']} to minute {bridge['to_minute']}."
+                      if bridge else self.describer.event(update.event))
         return Moment(
             update=update, profile=self.profile, knowledge=self.knowledge.model_copy(deep=True),
-            event_text=self.describer.event(update.event), situation=self.describer.situation(update),
-            concepts=concepts_for(update.event), recent_lines=[line.text for line in self.spoken[-6:]],
+            event_text=event_text, situation=self.describer.situation(update),
+            concepts=[] if bridge else concepts_for(update.event), recent_lines=[line.text for line in self.spoken[-6:]],
             backlog=list(self.backlog), signals=list(update.signals),
         )
 

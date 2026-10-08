@@ -155,8 +155,9 @@ export interface Commentary {
 export type ServerMessage =
   | { type: "ready"; chapters: Chapter[]; profile: Profile; mode: Mode; speed: number }
   | { type: "chapter"; chapter: Chapter }
-  | { type: "event"; event: MatchEvent; next_gap: number | null; salience: number; signals: Record<string, unknown>[];
-      snapshot: Snapshot }
+  | { type: "event"; event: MatchEvent; next_gap: number | null; pace: number; salience: number;
+      signals: Record<string, unknown>[]; snapshot: Snapshot }
+  | { type: "bridge"; from_minute: string; to_minute: string }
   | ({ type: "commentary" } & Commentary)
   | { type: "profile"; profile: Profile; learned: string[] }
   | { type: "host"; question: string; answer: string; changes: Partial<Profile>; tools: string[]; language: Language }

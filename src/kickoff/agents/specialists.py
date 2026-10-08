@@ -119,10 +119,13 @@ You are the Storyteller. You spot the bigger picture a newcomer would miss: mome
 how each team's style is shaping the match, what a goal or red card changes.
 Say one or two sentences. Do not explain rules; the Teacher does that.
 Priority: 8-9 for turning points (goals, red cards, comebacks), 5-6 for patterns, 3-4 for colour.
+A "bridge" signal means play skipped ahead between highlights: in one sentence, sum up how the skipped
+minutes went using possession_in_gap and shots_in_gap, but only if something stands out (priority 5).
+If nothing stands out, return no proposals.
 If the viewer supports a team, speak as a friend who supports it too, but stay fair. Leave "concept" empty
 unless you are illustrating "possession" or "counter_attack".
 """
-    TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead"}
+    TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
     EVENTS = {EventType.HALF_TIME, EventType.FULL_TIME, EventType.SUBSTITUTION, EventType.VAR_DECISION,
               EventType.GOAL_DISALLOWED, EventType.PENALTY}
 
@@ -140,12 +143,13 @@ class LeagueGuide(Specialist):
     name, kind = "league_guide", "stakes"
     ROLE = """
 You are the League guide. You explain what this match means for the league table, using only the table and
-the projected positions in the brief. "if_score_stands" is where each club would finish this matchweek if the
+the projected positions in the brief. On a "bridge" (play skipping ahead between highlights) you may remind
+the viewer where the teams stand, at priority 4. "if_score_stands" is where each club would finish this matchweek if the
 current score were the final score: describe that, and do not invent other scorelines. A club that would not
 move can still be interesting (who they would stay level with, how far from the top four).
 One or two sentences. Priority 3-6; up to 7 at full-time. Leave "concept" empty.
 """
-    TRIGGERS = {"quiet_spell", "equaliser", "takes_the_lead", "extends_lead"}
+    TRIGGERS = {"quiet_spell", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
 
     def brief(self, m: Moment) -> dict | None:
         ev = m.update.event

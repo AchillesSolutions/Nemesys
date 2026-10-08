@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Directory, loadStatic } from "./api";
-import { Chapters, DemoControls, JumpBanner, ProfileChips, ViewerSettings } from "./components/Controls";
+import { BridgeBanner, Chapters, DemoControls, ProfileChips, ViewerSettings } from "./components/Controls";
 import { VoiceStatus } from "./components/VoiceStatus";
 import { listener, type ListenState } from "./listen";
 import { Feed } from "./components/Feed";
@@ -126,7 +126,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         <span className="brand">Kick-Off</span>
         <Scoreboard dir={dir} match={match} snapshot={state.snapshot} lang={lang}
                     clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
-                             speed: state.speed, paused: state.paused }} />
+                             speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
         {!state.connected && <span className="status">{t(lang, "connecting")}</span>}
         {state.finished && <span className="status">{t(lang, "finished")}</span>}
       </header>
@@ -140,8 +140,8 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         <div className="col-main">
           <div className="pitch-stack">
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
-                   nextGap={state.nextGap} speed={state.speed} lang={lang} />
-            {state.mode === "key_moments" && <JumpBanner chapter={state.jumpedTo} lang={lang} />}
+                   nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
+            <BridgeBanner bridge={state.bridge} lang={lang} />
             <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} />
           </div>
           <Ticker dir={dir} event={state.event} lang={lang} />

@@ -112,3 +112,28 @@ def test_full_mode_plays_every_event(client, match):
     events = [m for m in messages if m["type"] == "event"]
     assert len(events) == len(match.events)
     assert events[-1]["event"]["type"] == EventType.FULL_TIME
+
+
+def test_highlights_compress_quiet_play_and_bridge_long_gaps(client, match):
+    with client.websocket_connect("/ws?mode=key_moments&speed=600") as ws:
+        ws.receive_json()
+        messages = receive_until(ws, "finished")
+    events = [m for m in messages if m["type"] == "event"]
+    paces = {m["pace"] for m in events}
+    assert paces == {1.0, 4.0}, "quiet stretches inside a moment run faster, notable ones at normal speed"
+    notable = [m for m in events if m["salience"] >= 2]
+    assert all(m["pace"] == 1.0 for m in notable[1:]), "the build-up to and aftermath of moments play at normal speed"
+    bridges = [m for m in messages if m["type"] == "bridge"]
+    assert bridges, "long jumps between moments get a bridge"
+    assert all(b["from_minute"] != b["to_minute"] for b in bridges)
+    # The offline Storyteller sums up the skipped minutes on a bridge.
+    texts = [line["text"] for m in messages if m["type"] == "commentary" for line in m["lines"]]
+    assert any(t.startswith("Since then") for t in texts)
+
+
+def test_full_match_plays_at_real_pace(client):
+    with client.websocket_connect("/ws?mode=full&speed=100000") as ws:
+        ws.receive_json()
+        messages = receive_until(ws, "finished", limit=20000)
+    assert {m["pace"] for m in messages if m["type"] == "event"} == {1.0}
+    assert not [m for m in messages if m["type"] == "bridge"]
