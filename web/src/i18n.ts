@@ -46,6 +46,7 @@ const STRINGS = {
     howItWorks: "How Kick-Off decided",
     sound: "Sound",
     offsideLine: "Offside line",
+    voice: "Voice",
   },
   zh: {
     tagline: "边看边懂的足球。",
@@ -91,6 +92,7 @@ const STRINGS = {
     howItWorks: "Kick-Off 如何决定",
     sound: "声音",
     offsideLine: "越位线",
+    voice: "语音",
   },
   es: {
     tagline: "El fútbol, explicado mientras sucede.",
@@ -136,6 +138,7 @@ const STRINGS = {
     howItWorks: "Cómo decidió Kick-Off",
     sound: "Sonido",
     offsideLine: "Línea de fuera de juego",
+    voice: "Voz",
   },
 } as const;
 

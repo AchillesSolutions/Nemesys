@@ -22,9 +22,9 @@ import logging
 from contextlib import suppress
 from pathlib import Path
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from .agents import HelpLevel, Language, ViewerProfile
 from .agents.llm import ClientFactory, client_factory
@@ -32,22 +32,40 @@ from .chapters import build_chapters
 from .data_store import load
 from .models import Match, World
 from .player import MatchPlayer
+from .speech import Speech, SpeechUnavailable
 
 log = logging.getLogger(__name__)
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
-def create_app(world: World | None = None, match: Match | None = None, clients: ClientFactory | None = None) -> FastAPI:
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+    language: Language = Language.EN
+    tone: str = "neutral"
+
+
+def create_app(world: World | None = None, match: Match | None = None, clients: ClientFactory | None = None,
+               speech: Speech | None = None) -> FastAPI:
     if world is None or match is None:
         world, match = load()
     clients = clients or client_factory()
+    speech = speech or Speech()
     chapters = build_chapters(match)
     app = FastAPI(title="Kick-Off", description="Live football explained for first-time viewers.")
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok"}
+        return {"status": "ok", "speech": speech.available}
+
+    @app.post("/api/speech")
+    async def speak(req: SpeechRequest) -> Response:
+        """One line of commentary as MP3, in the viewer's language and the Producer's tone."""
+        try:
+            audio = await speech.synthesise(req.text, req.language.value, req.tone)
+        except SpeechUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=86400"})
 
     @app.get("/api/world")
     def get_world() -> dict:

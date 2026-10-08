@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Directory, loadStatic } from "./api";
 import { Chapters, DemoControls, JumpBanner, ViewerSettings } from "./components/Controls";
 import { Feed } from "./components/Feed";
@@ -7,8 +7,9 @@ import { Pitch, Ticker } from "./components/Pitch";
 import { Scoreboard } from "./components/Scoreboard";
 import { Setup } from "./components/Setup";
 import { LEVELS, t } from "./i18n";
-import type { HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
+import type { Commentary, HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
 import { sound } from "./sound";
+import { voice } from "./voice";
 import { useMatch } from "./useMatch";
 
 /**
@@ -37,6 +38,7 @@ export default function App() {
 
   useEffect(() => {
     loadStatic().then(setData).catch(() => setFailed(true));
+    void voice.init();
   }, []);
   const dir = useMemo(() => (data ? new Directory(data.world) : null), [data]);
 
@@ -44,7 +46,7 @@ export default function App() {
   if (!data || !dir) return <p className="boot">Kick-Off…</p>;
   if (!profile) {
     // The Kick off click is the user gesture browsers require before playing audio.
-    const start = (p: Profile) => { void sound.enable(); setProfile(p); };
+    const start = (p: Profile) => { void sound.enable(); voice.enable(); setProfile(p); };
     return <Setup dir={dir} match={data.match} onStart={start} />;
   }
   return <Live dir={dir} match={data.match} profile={profile} />;
@@ -54,6 +56,24 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   const { state, send } = useMatch(profile, PRESET.mode, PRESET.speed);
   const lang = state.profile.language;
   const [soundOn, setSoundOn] = useState(sound.enabled);
+  const [voiceOn, setVoiceOn] = useState(voice.enabled);
+  const spoken = useRef<Commentary | null>(null);
+
+  // Speak each new piece of commentary once, as it arrives.
+  useEffect(() => {
+    const latest = state.feed[0];
+    if (!latest || latest === spoken.current) return;
+    spoken.current = latest;
+    voice.say(latest.lines, state.profile.language);
+  }, [state.feed, state.profile.language]);
+
+  // A new language means the queued lines are in the wrong one.
+  useEffect(() => voice.stop(), [state.profile.language]);
+
+  const toggleVoice = () => {
+    if (voiceOn) voice.disable(); else voice.enable();
+    setVoiceOn(!voiceOn);
+  };
 
   useEffect(() => {
     if (state.event) sound.onEvent(state.event, state.speed);
@@ -75,9 +95,15 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         {state.finished && <span className="status">{t(lang, "finished")}</span>}
       </header>
       <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={
-        <button className="btn sound-toggle" onClick={toggleSound} aria-pressed={soundOn}>
-          {soundOn ? "🔊" : "🔇"} {t(lang, "sound")}
-        </button>} />
+        <span className="toggles">
+          <button className="btn" onClick={toggleVoice} aria-pressed={voiceOn}
+                  title={voice.engine === "azure" ? "Azure AI Speech" : "Browser voice"}>
+            {voiceOn ? "🗣" : "🤐"} {t(lang, "voice")}
+          </button>
+          <button className="btn" onClick={toggleSound} aria-pressed={soundOn}>
+            {soundOn ? "🔊" : "🔇"} {t(lang, "sound")}
+          </button>
+        </span>} />
       {PRESET.demo && (
         <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
       )}

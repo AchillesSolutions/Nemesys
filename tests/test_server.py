@@ -37,7 +37,7 @@ def receive_until(ws, kind: str, limit: int = 5000) -> list[dict]:
 
 
 def test_rest_endpoints(client):
-    assert client.get("/api/health").json() == {"status": "ok"}
+    assert client.get("/api/health").json()["status"] == "ok"
     world = client.get("/api/world").json()
     assert {c["id"] for c in world["clubs"]} == {"kil", "hbr"}
     assert world["table"][0]["points"] >= world["table"][-1]["points"]

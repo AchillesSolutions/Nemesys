@@ -21,6 +21,7 @@ export class MatchSound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private crowd: GainNode | null = null;
+  private ducker: GainNode | null = null;
   private crowdTone: BiquadFilterNode | null = null;
   private running = false;
   enabled = false;
@@ -89,9 +90,16 @@ export class MatchSound {
     lfo.frequency.value = 0.13;
     lfoDepth.gain.value = 0.012;
     lfo.connect(lfoDepth).connect(this.crowd.gain);
-    noise.connect(this.crowdTone).connect(this.crowd).connect(this.master);
+    this.ducker = ctx.createGain();
+    noise.connect(this.crowdTone).connect(this.crowd).connect(this.ducker).connect(this.master);
     noise.start();
     lfo.start();
+  }
+
+  /** Lower the crowd while commentary is speaking, and bring it back afterwards. */
+  duck(on: boolean): void {
+    if (!this.ctx || !this.ducker) return;
+    this.ducker.gain.setTargetAtTime(on ? 0.35 : 1, this.ctx.currentTime, on ? 0.08 : 0.4);
   }
 
   private startCrowd(): void {

@@ -217,7 +217,7 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .viewer-settings label span { color: var(--muted); font-size: .85rem; }
 .demo-controls { border: 1px dashed var(--line); border-radius: var(--radius); padding: .35rem .5rem; }
 .demo-tag { font-size: .7rem; font-weight: 700; letter-spacing: .1em; color: var(--warn); padding: 0 .3rem; }
-.sound-toggle { margin-left: auto; }
+.toggles { margin-left: auto; display: inline-flex; gap: .4rem; }
 
 /* ---------- Offside line ---------- */
 .offside-line line { stroke: #ffe066; stroke-width: .4; stroke-dasharray: 1.4 1; animation: slide .3s ease-out; }
