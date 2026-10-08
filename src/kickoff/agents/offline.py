@@ -22,6 +22,8 @@ _HOST_RULES = [
     (r"\benglish\b", "set_language", {"language": "en"}),
     (r"support(?:ing)?\s+(\w+)", "set_team", None),
     (r"\bneutral\b", "set_team", {"team": "neutral"}),
+    (r"just me|watching alone|on my own|by myself", "set_hands_free", {"on": True}),
+    (r"friends are here|not alone anymore|people are here", "set_hands_free", {"on": False}),
     (r"\bnew\b|first (?:ever )?(?:football )?match|beginner", "set_help_level", {"level": "beginner"}),
     (r"analyst|tactic", "set_help_level", {"level": "analyst"}),
     (r"\bwhy\b|what happened|what was that", "recent_events", {"count": 5}),

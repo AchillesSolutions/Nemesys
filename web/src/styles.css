@@ -239,17 +239,26 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .setup-voice { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.2rem; display: grid; gap: .8rem; }
 .achilles { font-size: 1.25rem; line-height: 1.5; }
 .setup.voice-only .choice { pointer-events: none; }
-.voice-status {
-  display: inline-flex; align-items: center; gap: .55rem; padding: .45rem 1rem; border-radius: 999px;
-  background: rgba(11, 20, 34, .88); border: 1px solid var(--line); font-size: .95rem; max-width: 100%;
-}
-.pitch-stack .voice-status { position: absolute; left: 50%; bottom: 2.4rem; transform: translateX(-50%); }
-.setup-voice .voice-status { justify-self: start; }
-.vs-awake, .vs-push { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.vs-awake .vs-mic, .vs-push .vs-mic { animation: pulse 1s infinite; }
-.vs-thinking { border-color: var(--teacher); }
-.vs-off { color: var(--muted); }
-.vs-dots { color: var(--muted); animation: pulse 1s infinite; }
 .chip-host { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .chip.big { font-size: .9rem; padding: .3rem .8rem; }
 .toggles { margin-left: auto; display: inline-flex; gap: .4rem; }
+
+/* ---------- Voice indicator: a mic light and fading subtitles ---------- */
+.pitch-stack .voice-ui { position: absolute; inset: 0; pointer-events: none; }
+.voice-ui .subtitle {
+  position: absolute; left: 50%; bottom: 2.6rem; transform: translateX(-50%); max-width: 80%;
+  background: rgba(0, 0, 0, .72); color: #fff; padding: .35rem .9rem; border-radius: 8px;
+  font-size: 1.15rem; text-align: center; animation: slide .2s ease-out;
+}
+.voice-ui .voice-row { position: absolute; right: 1rem; top: .85rem; display: flex; align-items: center; gap: .6rem; }
+.voice-ui.inline { position: relative; display: grid; gap: .5rem; min-height: 1.4rem; }
+.voice-ui.inline .subtitle { position: static; transform: none; justify-self: start; max-width: 100%; }
+.voice-ui.inline .voice-row { position: static; justify-self: start; flex-direction: row-reverse; }
+.voice-hint { background: rgba(11, 20, 34, .82); color: var(--muted); padding: .25rem .7rem; border-radius: 999px; font-size: .85rem; }
+.mic-dot { width: 14px; height: 14px; border-radius: 50%; background: #4b5a75; box-shadow: 0 0 0 2px rgba(255,255,255,.15); transition: background .2s, box-shadow .2s; }
+.mic-dot.live { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 14px var(--accent); animation: pulse 1.4s infinite; }
+.mic-dot.md-thinking { background: var(--teacher); animation: pulse .8s infinite; }
+.mic-dot.md-off { background: transparent; box-shadow: 0 0 0 2px var(--danger); }
+.hands-free { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.hands-free-explain { color: var(--muted); font-size: .92rem; }
+.hands-free-toggle { display: inline-flex; gap: .5rem; align-items: center; }

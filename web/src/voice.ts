@@ -3,11 +3,14 @@
 //
 // Live commentary must never fall behind the match, so the player keeps a short queue: a headline
 // interrupts whatever is playing, and lines that have waited too long are dropped unspoken.
+// The viewer always wins: the listener can lower this voice the instant they start talking,
+// and silence it as soon as it is clear they are talking to Kick-Off.
 
 import { sound } from "./sound";
 import type { Language, Line } from "./types";
 
 const STALE_MS = 12000;
+const DUCKED_VOLUME = 0.25;
 const LOCALES: Record<Language, string[]> = { en: ["en-GB", "en"], zh: ["zh-CN", "zh"], es: ["es-MX", "es-US", "es"] };
 // Browser voices have no speaking styles; rate and pitch carry a little of the tone instead.
 const BROWSER_TONE: Record<string, { rate: number; pitch: number }> = {
@@ -22,14 +25,22 @@ interface Item {
   audio?: Promise<Blob | null>; // fetched ahead of time, so the next line starts without delay
 }
 
+interface Playing {
+  text: string;
+  stop: () => void;
+  duck: (on: boolean) => void;
+}
+
 class Voice {
   enabled = false;
   /** The line most recently spoken, so the listener can ignore Kick-Off hearing itself. */
   lastSpoken = "";
   private azure = false;
-  private idle: (() => void)[] = [];
+  private waiting: (() => void)[] = [];
+  private idleListeners = new Set<() => void>();
   private queue: Item[] = [];
-  private playing: { stop: () => void } | null = null;
+  private playing: Playing | null = null;
+  private ducked = false;
 
   /** Ask the server whether Azure AI Speech is available. */
   async init(): Promise<void> {
@@ -54,6 +65,15 @@ class Voice {
     this.stop();
   }
 
+  get speaking(): boolean {
+    return this.playing !== null;
+  }
+
+  /** What is being said right now ("" when silent). */
+  get current(): string {
+    return this.playing?.text ?? "";
+  }
+
   /** Queue lines for speaking; a headline cuts in ahead of everything else. */
   say(lines: Line[], lang: Language): void {
     if (!this.enabled) return;
@@ -70,21 +90,30 @@ class Voice {
     if (!this.playing) void this.next();
   }
 
+  /** Speak and resolve once everything queued has been said (or straight away if voice is off). */
+  sayAndWait(lines: Line[], lang: Language): Promise<void> {
+    if (!this.enabled) return Promise.resolve();
+    const done = new Promise<void>((resolve) => this.waiting.push(resolve));
+    this.say(lines, lang);
+    return done;
+  }
+
+  /** Silence everything, now. */
   stop(): void {
     this.queue = [];
     this.playing?.stop();
   }
 
-  get speaking(): boolean {
-    return this.playing !== null;
+  /** Lower (or restore) the voice while someone in the room is talking. */
+  duck(on: boolean): void {
+    this.ducked = on;
+    this.playing?.duck(on);
   }
 
-  /** Speak and resolve once everything queued has been said (or straight away if voice is off). */
-  sayAndWait(lines: Line[], lang: Language): Promise<void> {
-    if (!this.enabled) return Promise.resolve();
-    const done = new Promise<void>((resolve) => this.idle.push(resolve));
-    this.say(lines, lang);
-    return done;
+  /** Called every time Kick-Off falls silent. Returns an unsubscribe function. */
+  onIdle(listener: () => void): () => void {
+    this.idleListeners.add(listener);
+    return () => this.idleListeners.delete(listener);
   }
 
   private async next(): Promise<void> {
@@ -94,16 +123,19 @@ class Voice {
     if (!item) {
       this.playing = null;
       sound.duck(false);
-      this.idle.splice(0).forEach((resolve) => resolve());
+      this.waiting.splice(0).forEach((resolve) => resolve());
+      this.idleListeners.forEach((listener) => listener());
       return;
     }
     sound.duck(true);
     this.lastSpoken = item.line.text;
+    let handle: Playing | null = null;
     const done = () => {
       if (this.playing === handle) void this.next();
     };
-    const handle = this.azure ? await this.playAzure(item, done) : this.playBrowser(item, done);
+    handle = this.azure ? await this.playAzure(item, done) : this.playBrowser(item, done);
     this.playing = handle;
+    if (this.ducked) handle.duck(true);
   }
 
   private fetchAudio(line: Line, lang: Language): Promise<Blob | null> {
@@ -114,19 +146,29 @@ class Voice {
     }).then((r) => (r.ok ? r.blob() : null)).catch(() => null);
   }
 
-  private async playAzure(item: Item, done: () => void): Promise<{ stop: () => void }> {
+  private async playAzure(item: Item, done: () => void): Promise<Playing> {
     const blob = await item.audio;
     if (!blob) return this.playBrowser(item, done); // Azure hiccup: fall back rather than go silent
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    const finish = () => { URL.revokeObjectURL(url); done(); };
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      URL.revokeObjectURL(url);
+      done();
+    };
     audio.onended = finish;
     audio.onerror = finish;
     audio.play().catch(finish);
-    return { stop: () => { audio.pause(); finish(); } };
+    return {
+      text: item.line.text,
+      stop: () => { audio.pause(); finish(); },
+      duck: (on) => { audio.volume = on ? DUCKED_VOLUME : 1; },
+    };
   }
 
-  private playBrowser(item: Item, done: () => void): { stop: () => void } {
+  private playBrowser(item: Item, done: () => void): Playing {
     const u = new SpeechSynthesisUtterance(item.line.text);
     const voice = pickBrowserVoice(item.lang);
     if (voice) u.voice = voice;
@@ -137,7 +179,12 @@ class Voice {
     u.onend = done;
     u.onerror = done;
     speechSynthesis.speak(u);
-    return { stop: () => { u.onend = null; speechSynthesis.cancel(); done(); } };
+    return {
+      text: item.line.text,
+      stop: () => { u.onend = null; u.onerror = null; speechSynthesis.cancel(); done(); },
+      // Browser speech cannot change volume mid-sentence; pausing is the closest thing.
+      duck: (on) => { if (on) speechSynthesis.pause(); else speechSynthesis.resume(); },
+    };
   }
 }
 

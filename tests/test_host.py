@@ -65,6 +65,14 @@ def test_setting_the_same_value_is_not_a_change(world, match):
     assert reply.tools_used == ["set_language"] and reply.changes == {}
 
 
+def test_watching_alone_turns_on_hands_free(world, match):
+    host, state = make_host(world, match)
+    reply = ask(host, "It's just me watching tonight")
+    assert state["profile"].hands_free is True and reply.changes == {"hands_free": True}
+    reply = ask(host, "My friends are here now")
+    assert state["profile"].hands_free is False and reply.changes == {"hands_free": False}
+
+
 def test_switching_language(world, match):
     host, state = make_host(world, match)
     reply = ask(host, "Can you switch to Mandarin?")
@@ -101,7 +109,8 @@ def test_setup_endpoint(client):
     r = client.post("/api/setup", json={"text": "I'm new and I'm supporting Harbour, in Spanish please"})
     body = r.json()
     assert r.status_code == 200
-    assert body["profile"] == {"id": "viewer", "team": "hbr", "language": "es", "level": "beginner"}
+    assert body["profile"] == {"id": "viewer", "team": "hbr", "language": "es", "level": "beginner",
+                               "hands_free": False}
 
 
 def test_ask_over_the_live_connection_changes_profile(client):

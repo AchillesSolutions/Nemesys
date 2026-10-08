@@ -35,6 +35,7 @@ function socketUrl(profile: Profile, mode: Mode, speed: number): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const q = new URLSearchParams({ language: profile.language, level: profile.level, mode, speed: String(speed) });
   if (profile.team) q.set("team", profile.team);
+  if (profile.hands_free) q.set("hands_free", "true");
   return `${proto}://${location.host}/ws?${q}`;
 }
 
@@ -43,7 +44,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
   const [state, setState] = useState<MatchState>(() => ({
     connected: false, chapters: [], chapter: null, event: null, recent: [], snapshot: null, feed: [],
     arrivedAt: 0, nextGap: null, pace: 1, bridge: null,
-    learned: [], profile: initial ?? { team: null, language: "en", level: "beginner" },
+    learned: [], profile: initial ?? { team: null, language: "en", level: "beginner", hands_free: false },
     mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0,
   }));
   const ws = useRef<WebSocket | null>(null);

@@ -41,6 +41,7 @@ export function ProfileChips({ dir, profile, extra }: { dir: Directory; profile:
       <span className="chip big">{t(lang, "supporting")}: {dir.club(profile.team)?.short_name ?? t(lang, "neutral")}</span>
       <span className="chip big">{LANGUAGE_NAMES[lang]}</span>
       <span className="chip big">{LEVELS[profile.level][lang].name}</span>
+      {profile.hands_free && <span className="chip big hands-free">🎙 {t(lang, "handsFree")}</span>}
       {extra}
     </div>
   );
@@ -71,6 +72,11 @@ export function ViewerSettings({ dir, match, profile, send, extra }: {
         <select value={profile.level} onChange={(e) => send({ action: "profile", level: e.target.value as HelpLevel })}>
           {(Object.keys(LEVELS) as HelpLevel[]).map((l) => <option key={l} value={l}>{LEVELS[l][lang].name}</option>)}
         </select>
+      </label>
+      <label>
+        <input type="checkbox" checked={profile.hands_free}
+               onChange={(e) => send({ action: "profile", hands_free: e.target.checked })} />
+        <span>{t(lang, "handsFree")}</span>
       </label>
       {extra}
     </div>

@@ -9,6 +9,7 @@ export interface Profile {
   team: string | null;
   language: Language;
   level: HelpLevel;
+  hands_free: boolean;
 }
 
 export interface Player {

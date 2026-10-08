@@ -28,7 +28,7 @@ function presetFromUrl(): { profile: Profile | null; speed: number; mode: Mode; 
   if (!q.has("language") && !q.has("team") && !q.has("level")) return { profile: null, speed, mode, demo };
   const language = (["en", "zh", "es"].includes(q.get("language") ?? "") ? q.get("language") : "en") as Language;
   const level = (Object.keys(LEVELS).includes(q.get("level") ?? "") ? q.get("level") : "beginner") as HelpLevel;
-  return { profile: { team: q.get("team") || null, language, level }, speed, mode, demo };
+  return { profile: { team: q.get("team") || null, language, level, hands_free: q.get("hands_free") === "1" }, speed, mode, demo };
 }
 
 const PRESET = presetFromUrl();
@@ -78,9 +78,18 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [profile.language, send]);
 
-  // Once the Host has answered, go back to listening for the name.
+  // Once the Host has answered, follow-ups need no name for a few seconds.
   useEffect(() => { if (state.asking === 0) listener.done(); }, [state.asking]);
   useEffect(() => listener.setHint(state.profile.language), [state.profile.language]);
+  useEffect(() => { listener.handsFree = state.profile.hands_free; }, [state.profile.hands_free]);
+
+  // A short hint on how to talk to Achilles: at kick-off, and when hands-free changes.
+  const [hintUntil, setHintUntil] = useState(() => performance.now() + 15000);
+  useEffect(() => setHintUntil(performance.now() + 15000), [state.profile.hands_free]);
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setTimeout(() => tick((n) => n + 1), Math.max(0, hintUntil - performance.now()) + 50); return () => clearTimeout(id); }, [hintUntil]);
+  const hint = performance.now() < hintUntil
+    ? (state.profile.hands_free ? t(lang, "justTalk") : t(lang, "sayWake").replace("{name}", "Achilles")) : null;
   const spoken = useRef<Commentary | null>(null);
 
   // Speak each new piece of commentary once, as it arrives.
@@ -142,7 +151,8 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
-            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} />
+            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
+                         handsFree={state.profile.hands_free} />
           </div>
           <Ticker dir={dir} event={state.event} lang={lang} />
           <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}

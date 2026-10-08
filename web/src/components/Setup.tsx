@@ -23,7 +23,7 @@ export function Setup({ dir, match, demo, onStart }: {
   dir: Directory; match: MatchInfo; demo: boolean; onStart: (p: Profile) => void;
 }) {
   const [stage, setStage] = useState<Stage>("splash");
-  const [profile, setProfile] = useState<Profile>({ team: null, language: "en", level: "beginner" });
+  const [profile, setProfile] = useState<Profile>({ team: null, language: "en", level: "beginner", hands_free: false });
   const [listen, setListen] = useState<{ state: ListenState; caption?: string }>({ state: "off" });
   const [reply, setReply] = useState<string | null>(null);
   const profileRef = useRef(profile);
@@ -124,7 +124,9 @@ export function Setup({ dir, match, demo, onStart }: {
 
       <section className="setup-voice">
         <p className="achilles">{reply ?? t(lang, "greeting")}</p>
-        <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} open />
+        <p className="hands-free-explain">{t(lang, "handsFreeExplain")}</p>
+        <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline
+                     handsFree={stage === "listening"} />
       </section>
 
       <fieldset>
@@ -171,6 +173,13 @@ export function Setup({ dir, match, demo, onStart }: {
         </div>
       </fieldset>
 
+      {demo && (
+        <label className="hands-free-toggle">
+          <input type="checkbox" checked={profile.hands_free} onChange={(e) => set({ hands_free: e.target.checked })} />
+          <span>{t(lang, "handsFree")}</span>
+        </label>
+      )}
+      {profile.hands_free && !demo && <p className="chip big hands-free">🎙 {t(lang, "handsFree")}</p>}
       {demo && <button className="btn primary start" onClick={() => start(profile)}>{t(lang, "start")} →</button>}
     </main>
   );

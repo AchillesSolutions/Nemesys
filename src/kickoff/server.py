@@ -12,7 +12,7 @@ Messages to the server, as {"action": ...}:
     next_chapter
     seek_chapter {"chapter": 3}
     seek         {"minute": 52}
-    profile      {"team": "kil" | null, "language": "zh", "level": "beginner"}  (any subset)
+    profile      {"team": "kil" | null, "language": "zh", "level": "beginner", "hands_free": false}  (any subset)
     ask          {"text": "why was that goal ruled out?", "language": "en"}  -> a "host" message, plus
                  "profile" if settings changed; "language" is what the speech recogniser heard (optional)
 """
@@ -112,7 +112,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.websocket("/ws")
     async def live(ws: WebSocket, team: str | None = None, language: Language = Language.EN,
                    level: HelpLevel = HelpLevel.BEGINNER, mode: str = Query("key_moments"),
-                   speed: float = 1.0) -> None:
+                   speed: float = 1.0, hands_free: bool = False) -> None:
         await ws.accept()
         send_lock = asyncio.Lock()
 
@@ -121,7 +121,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
                 await ws.send_json(message)
 
         team = team if team in (match.home, match.away) else None
-        profile = ViewerProfile(team=team, language=language, level=level)
+        profile = ViewerProfile(team=team, language=language, level=level, hands_free=hands_free)
         player = MatchPlayer(world, match, profile, clients, send,
                              mode="full" if mode == "full" else "key_moments", speed=speed)
         runner = asyncio.create_task(player.run())
@@ -189,7 +189,7 @@ def apply_control(player: MatchPlayer, message: dict) -> dict | None:
         case "seek":
             player.seek(int(float(message["minute"]) * 60))
         case "profile":
-            changes = {k: message[k] for k in ("team", "language", "level") if k in message}
+            changes = {k: message[k] for k in ("team", "language", "level", "hands_free") if k in message}
             profile = ViewerProfile.model_validate(player.session.profile.model_dump() | changes)
             player.set_profile(**profile.model_dump(exclude={"id"}))
             return {"type": "profile", "profile": profile.model_dump(mode="json"),

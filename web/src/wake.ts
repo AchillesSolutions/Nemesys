@@ -19,10 +19,14 @@ export function splitWake(text: string): { woke: boolean; command: string } {
   return { woke: false, command: "" };
 }
 
+/** Words, with each Chinese character counted as one (Chinese is written without spaces). */
+export function tokens(text: string): string[] {
+  return text.toLowerCase().match(/[㐀-鿿]|(?:(?![㐀-鿿])[\p{L}\p{N}'])+/gu) ?? [];
+}
+
 /** Rough overlap between two utterances, to recognise Kick-Off hearing its own voice. */
 export function overlap(a: string, b: string): number {
-  const words = (s: string) => new Set(s.toLowerCase().replace(PUNCTUATION, " ").split(/\s+/).filter(Boolean));
-  const wa = words(a), wb = words(b);
+  const wa = new Set(tokens(a)), wb = new Set(tokens(b));
   if (wa.size === 0 || wb.size === 0) return 0;
   let shared = 0;
   wa.forEach((w) => { if (wb.has(w)) shared++; });

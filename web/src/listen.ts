@@ -1,22 +1,28 @@
-// Always-on listening, TV style. Kick-Off hears the room continuously but only acts when addressed:
+// Always-on listening, TV style. Kick-Off hears the room but only acts when it is being talked to:
 //   "Achilles, why was that offside?"   - the name, then the request, in one breath
 //   "Achilles." ... "What's the score?" - the name, a chime, then the request
+//   follow-ups                          - for a few seconds after each answer, no name is needed
 //   holding Space                       - push-to-talk, like the mic button on a remote
-// Azure AI Speech transcribes with continuous language identification, so the viewer can switch
-// between English, Mandarin and Spanish mid-sentence-stream. A short-lived token from our server
-// is used, never the key. Without Azure, the browser's own recogniser is used where it exists.
+//   hands-free (watching alone)         - everything said is for Kick-Off; the mic is always on
+// The viewer is always in control: the moment they start talking Kick-Off lowers its voice, and it
+// falls silent as soon as it is clear they are talking to it.
+//
+// Azure AI Speech transcribes with continuous language identification (English, Mandarin, Spanish),
+// using a short-lived token from our server, never the key. Without Azure, the browser's own
+// recogniser is used where it exists.
 
 import { sound } from "./sound";
 import type { Language } from "./types";
 import { voice } from "./voice";
-import { overlap, splitWake } from "./wake";
+import { overlap, splitWake, tokens } from "./wake";
 
-export type ListenState = "off" | "idle" | "awake" | "push" | "thinking";
+export type ListenState = "off" | "idle" | "awake" | "push" | "thinking" | "conversation";
 
 const LOCALES: Record<Language, string> = { en: "en-US", zh: "zh-CN", es: "es-MX" };
 const FROM_LOCALE: Record<string, Language> = { "en-US": "en", "zh-CN": "zh", "es-MX": "es" };
-const AWAKE_MS = 7000;       // after "Achilles." alone, how long the next words count as the request
-const PUSH_GRACE_MS = 1500;  // words recognised just after Space is released still count
+const AWAKE_MS = 7000;          // after "Achilles." alone, how long the next words count as the request
+const FOLLOW_UP_MS = 10000;     // after an answer, how long follow-ups need no name
+const PUSH_GRACE_MS = 1500;     // words recognised just after Space is released still count
 const TOKEN_REFRESH_MS = 9 * 60 * 1000;
 
 type Handlers = {
@@ -24,15 +30,25 @@ type Handlers = {
   state: (state: ListenState, caption?: string) => void;
 };
 
+const wordCount = (text: string) => tokens(text).length;
+
 class Listener {
   state: ListenState = "off";
   /** In "open" mode every utterance is a request (used while setting up); in "wake" mode only addressed ones. */
   mode: "wake" | "open" = "wake";
+  /** Watching alone: the microphone is always on and everything said is a request. */
+  handsFree = false;
   private handlers: Handlers = { command: () => {}, state: () => {} };
-  private awakeUntil = 0;
+  private windowUntil = 0;
   private pushReleasedAt = 0;
+  private followUpPending = false;
   private stopFn: (() => void) | null = null;
   private hint: Language = "en";
+
+  constructor() {
+    // An answer has finished being spoken: open the follow-up window.
+    voice.onIdle(() => { if (this.followUpPending) this.openWindow(FOLLOW_UP_MS, "conversation"); });
+  }
 
   on(handlers: Partial<Handlers>): void {
     this.handlers = { ...this.handlers, ...handlers };
@@ -70,54 +86,80 @@ class Listener {
     }
   }
 
-  /** The request has been answered (or failed): go back to waiting for the name. */
+  /** The request has been answered (or failed). Follow-ups need no name once the answer has been said. */
   done(): void {
-    if (this.state === "thinking") this.setState("idle");
+    if (this.state !== "thinking") return;
+    this.setState("idle");
+    this.followUpPending = true;
+    setTimeout(() => { if (this.followUpPending && !voice.speaking) this.openWindow(FOLLOW_UP_MS, "conversation"); }, 400);
   }
 
-  // -- recognition results -------------------------------------------------------
+  // -- deciding what was meant for us -------------------------------------------
 
+  /** Is whatever the viewer says next meant for Kick-Off, without needing its name? */
+  private addressed(): boolean {
+    const now = performance.now();
+    return this.mode === "open" || this.handsFree || this.state === "push" || now - this.pushReleasedAt < PUSH_GRACE_MS
+      || ((this.state === "awake" || this.state === "conversation") && now < this.windowUntil);
+  }
+
+  private isEcho(text: string): boolean {
+    return (voice.speaking && wordCount(text) >= 2 && overlap(text, voice.current) > 0.5)
+      || (voice.lastSpoken !== "" && wordCount(text) >= 3 && overlap(text, voice.lastSpoken) > 0.6);
+  }
+
+  /** Words are arriving. React at once: lower Kick-Off's voice, or stop it if we're being talked to. */
   private partial(text: string): void {
-    if (this.state === "push" || this.state === "awake" || this.mode === "open") {
+    if (this.isEcho(text)) return;
+    const woke = splitWake(text).woke;
+    if (this.addressed() || woke) {
+      voice.stop();
+      sound.duck(true);
+      if (this.state === "conversation") this.windowUntil = performance.now() + FOLLOW_UP_MS;
       this.handlers.state(this.state, text);
-    } else if (splitWake(text).woke) {
-      voice.stop(); // the viewer is talking to us: stop talking over them
+    } else {
+      // Someone is talking, but maybe not to us: make room, and decide when they finish.
+      voice.duck(true);
       sound.duck(true);
     }
   }
 
   private final(text: string, language: Language): void {
     text = text.trim();
-    if (!text) return;
-    const now = performance.now();
-    if (voice.lastSpoken && overlap(text, voice.lastSpoken) > 0.6) return; // our own voice through the speakers
-
-    const pushing = this.state === "push" || now - this.pushReleasedAt < PUSH_GRACE_MS;
-    const awake = this.state === "awake" && now < this.awakeUntil;
-    if (pushing || awake || this.mode === "open") {
-      const { woke, command } = splitWake(text);
-      return this.request(woke ? command || text : text, language);
+    if (!text || this.isEcho(text)) {
+      voice.duck(false);
+      return;
     }
     const { woke, command } = splitWake(text);
+    if (this.addressed()) return this.request(woke ? command || text : text, language);
     if (!woke) {
+      voice.duck(false); // chatter in the room, not for us
       sound.duck(false);
-      return; // chatter in the room, not for us
+      return;
     }
     if (command.length > 1) return this.request(command, language);
     // Just the name: chime, and listen for the request.
+    voice.stop();
     sound.chime();
-    this.awakeUntil = now + AWAKE_MS;
-    this.setState("awake");
+    this.openWindow(AWAKE_MS, "awake");
+  }
+
+  private openWindow(ms: number, state: "awake" | "conversation"): void {
+    this.followUpPending = false;
+    this.windowUntil = performance.now() + ms;
+    this.setState(state);
     setTimeout(() => {
-      if (this.state === "awake" && performance.now() >= this.awakeUntil) {
+      if (this.state === state && performance.now() >= this.windowUntil) {
         sound.duck(false);
         this.setState("idle");
       }
-    }, AWAKE_MS + 50);
+    }, ms + 50);
   }
 
   private request(text: string, language: Language): void {
+    voice.duck(false);
     sound.duck(false);
+    this.followUpPending = false;
     this.setState("thinking", text);
     this.handlers.command(text, language);
   }
@@ -144,7 +186,8 @@ class Listener {
     const recognizer = sdk.SpeechRecognizer.FromConfig(
       config, sdk.AutoDetectSourceLanguageConfig.fromLanguages(languages), sdk.AudioConfig.fromDefaultMicrophoneInput());
     const phrases = sdk.PhraseListGrammar.fromRecognizer(recognizer);
-    ["Achilles", "Aquiles", "阿喀琉斯", "Kilburn", "Harbour City", "offside", "VAR"].forEach((p) => phrases.addPhrase(p));
+    ["Achilles", "Aquiles", "阿喀琉斯", "Kilburn", "Harbour City", "offside", "VAR", "it's just me"]
+      .forEach((p) => phrases.addPhrase(p));
 
     recognizer.recognizing = (_, e) => this.partial(e.result.text);
     recognizer.recognized = (_, e) => {

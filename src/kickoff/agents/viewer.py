@@ -34,6 +34,8 @@ class ViewerProfile(BaseModel):
     team: str | None = Field(None, description="Club id the viewer supports, or None for neutral")
     language: Language = Language.EN
     level: HelpLevel = HelpLevel.BEGINNER
+    hands_free: bool = Field(False, description="Watching alone: the microphone is always on and everything said "
+                                                "goes to Achilles, without saying its name")
 
 
 # Concepts every level is assumed to know already.

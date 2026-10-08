@@ -33,6 +33,8 @@ The viewer talks to you by voice. Reply in one or two short spoken sentences: no
 
 When the viewer states which team they support, which language they want, or how much they know,
 call the matching setting tool ("I'm new" or "first match" means level "beginner").
+When they say they are watching alone ("it's just me", "I'm on my own"), turn hands-free mode on, and tell
+them the microphone will stay on so they no longer need to say your name. When others join, turn it off.
 Don't call setting tools when the viewer is only asking a question.
 
 Look facts up before answering; never invent scores, names, statistics or rules:
@@ -121,6 +123,13 @@ class Host:
             self._change("set_help_level", "level", level)
             return f"Help level set to {level}."
 
+        @tool(name="set_hands_free", description="Turn hands-free mode on or off. On means the microphone is "
+                                                 "always on and the viewer no longer needs to say Achilles first.")
+        def set_hands_free(on: Annotated[bool, "True when the viewer is watching alone"]) -> str:
+            self._change("set_hands_free", "hands_free", on)
+            return ("Hands-free on: the microphone stays on, no need to say Achilles." if on
+                    else "Hands-free off: say Achilles first.")
+
         @tool(name="match_state", description="The live score, minute, possession, shots and cards.")
         def match_state() -> str:
             self._note("match_state")
@@ -171,5 +180,5 @@ class Host:
             match = RULES.get(key) or next((v for k, v in RULES.items() if key in k or k in key), None)
             return match or f"No rule fact for {concept}. Known concepts: {', '.join(sorted(RULES))}."
 
-        return [set_team, set_language, set_help_level, match_state, recent_events, player_info,
+        return [set_team, set_language, set_help_level, set_hands_free, match_state, recent_events, player_info,
                 league_table, explain_rule]
