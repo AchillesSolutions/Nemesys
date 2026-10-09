@@ -39,6 +39,8 @@ BRIDGE_MIN_GAP_S = 240   # jumps of at least four minutes get a bridging line be
 BRIDGE_MAX_PAUSE_S = 10
 LAND_MAX_S = 6           # how long to let a moment's explanation finish before skipping ahead
 MAX_STILL_S = 4.0        # in highlights, the longest the picture stands still unless Kick-Off is talking
+HOLD_MAX_S = 20          # the longest play waits for an explanation to finish before the next big moment
+SPEECH_SLACK_S = 1.0     # the voice starts a little after the line is sent (audio download)
 
 
 class MatchPlayer:
@@ -138,6 +140,8 @@ class MatchPlayer:
 
             if self._is_restart_after_half_time(ev):
                 await self._let_moment_land()  # the half-time break: the summary is said before play restarts
+            elif self.mode == "key_moments" and SALIENCE.get(ev.type, 0) >= 2 and self.speed <= 4:
+                await self._hold_for_explanation()  # never start a big moment over an explanation
             delay = self._delay_to(ev)
             if delay > 0 and not await self._wait(delay):
                 continue  # woken by a control change: re-evaluate
@@ -182,6 +186,15 @@ class MatchPlayer:
         if self.mode == "key_moments" and (chapter is None or nxt.elapsed > chapter.end):
             return None
         return nxt.elapsed - ev.elapsed
+
+    async def _hold_for_explanation(self) -> None:
+        """Wait until what is being explained has been written and said, so the viewer can take it in."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + HOLD_MAX_S
+        if self._tasks:
+            await asyncio.wait(list(self._tasks), timeout=HOLD_MAX_S)
+        while (self.session.busy_until + SPEECH_SLACK_S > self.session.clock()) and loop.time() < deadline:
+            await self._wait(0.25)
 
     def _is_restart_after_half_time(self, ev) -> bool:
         last = self._last_update.event if self._last_update else None

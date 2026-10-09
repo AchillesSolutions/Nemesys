@@ -62,7 +62,7 @@ export function Setup({ dir, match, demo, onStart }: {
   useEffect(() => {
     listener.on({
       command: async (text, spoken) => {
-        if (stage !== "listening") { listener.done(); return; } // heard during the greeting: not an answer yet
+        if (stage !== "listening") { listener.done(false); return; } // heard during the greeting: not an answer yet
         setStage("thinking");
         try {
           const res = await fetch("/api/setup", {
@@ -72,11 +72,11 @@ export function Setup({ dir, match, demo, onStart }: {
           const body = await res.json() as { answer: string; profile: Profile };
           setProfile(body.profile);
           setReply(body.answer);
-          listener.done();
+          listener.done(false); // no follow-up window: the match is about to start
           await voice.sayAndWait([say(body.answer)], body.profile.language);
           start(body.profile);
         } catch {
-          listener.done();
+          listener.done(false);
           setStage("listening");
         }
       },

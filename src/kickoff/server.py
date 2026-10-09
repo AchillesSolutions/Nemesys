@@ -137,6 +137,9 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             if reply.changes:
                 await send({"type": "profile", "profile": player.session.profile.model_dump(mode="json"),
                             "learned": player.session.learned_labels()})
+            if not reply.answer:  # not meant for Kick-Off: say nothing
+                await send({"type": "ignored", "question": text})
+                return
             await send({"type": "host", "question": text, "answer": reply.answer, "changes": reply.changes,
                         "tools": reply.tools_used, "language": player.session.profile.language.value})
 

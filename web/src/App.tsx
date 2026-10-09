@@ -79,7 +79,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   }, [profile.language, send]);
 
   // Once the Host has answered, follow-ups need no name for a few seconds.
-  useEffect(() => { if (state.asking === 0) listener.done(); }, [state.asking]);
+  useEffect(() => { if (state.asking === 0) listener.done(state.lastReply === "answer"); }, [state.asking, state.lastReply]);
   useEffect(() => listener.setHint(state.profile.language), [state.profile.language]);
   useEffect(() => { listener.handsFree = state.profile.hands_free; }, [state.profile.hands_free]);
 

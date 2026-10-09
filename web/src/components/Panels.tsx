@@ -55,7 +55,7 @@ export function LeagueTable({ dir, match, snapshot, lang }: {
 
   return (
     <section className="panel table" aria-label={t(lang, "table")}>
-      <h2>{t(lang, "table")} <span className="sub">{t(lang, "ifScoreStands")}</span></h2>
+      <h2>{t(lang, "table")} <span className="sub">{t(lang, snapshot?.status === "full_time" ? "finalStandings" : "ifScoreStands")}</span></h2>
       <table>
         <tbody>
           {shown.map((r, i) => {

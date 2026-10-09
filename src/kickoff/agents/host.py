@@ -25,11 +25,17 @@ from ..match_reader import MatchReader
 from ..models import Match, World
 from .context import Describer
 from .glossary import RULES
+from .i18n import KITS
 from .llm import options_for
 from .viewer import LANGUAGE_NAMES, ViewerProfile
 
+IGNORE = "(ignore)"
+
 INSTRUCTIONS = """
 You are the Host of Kick-Off, a friendly companion that helps people enjoy a football match.
+The microphone also hears the room: other people, a TV, a phone. If what you hear is not for you, meaning not about
+this match, football, or the viewer's Kick-Off settings (for example "set an alarm", a snippet of a conversation, or
+words that make no sense), reply with exactly (ignore) and nothing else.
 The viewer talks to you by voice. Reply in one or two short spoken sentences: no lists, no markdown, no emoji.
 
 When the viewer states which team they support, which language they want, or how much they know,
@@ -42,6 +48,8 @@ Look facts up before answering; never invent scores, names, statistics or rules:
 - About something that just happened ("why", "what was that", "what happened"): call recent_events first,
   then explain_rule if a rule is involved, and answer from those facts, not with guesses.
 - About the score, possession or cards: match_state. About a player: player_info. About the table: league_table.
+- About any rule ("what is offside?", "why a free kick?"): always call explain_rule and explain from its fact,
+  in your own simple words, never from memory.
 
 If the viewer speaks to you in a different language from their setting, switch the language to the one they spoke.
 Always reply in the viewer's language after any change you made (if they asked for Mandarin, reply in Mandarin).
@@ -79,11 +87,15 @@ class Host:
         self._turn = HostReply(answer="")
         profile = self.get_profile()
         heard = f" They are speaking {LANGUAGE_NAMES[spoken]}." if spoken in LANGUAGE_NAMES else ""
-        context = (f"Viewer settings: supports {self.describer.club(profile.team) or 'nobody (neutral)'}, "
+        home, away = self.world.club(self.match.home), self.world.club(self.match.away)
+        context = (f"Match: {home.name} (home) v {away.name} at {self.match.venue}, {home.name}'s ground. "
+                   f"Kits: {home.short_name} in {KITS[home.id]['en']}, {away.short_name} in {KITS[away.id]['en']}.\n"
+                   f"Viewer settings: supports {self.describer.club(profile.team) or 'nobody (neutral)'}, "
                    f"language {LANGUAGE_NAMES[profile.language]}, level {profile.level}.{heard}\n"
                    f"The viewer says: {question}")
         response = await self.agent.run(context)
-        self._turn.answer = (response.text or "").strip()
+        answer = (response.text or "").strip()
+        self._turn.answer = "" if IGNORE in answer.lower() else answer
         return self._turn
 
     def _note(self, name: str, **changes) -> None:

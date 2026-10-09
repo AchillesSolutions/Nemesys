@@ -50,8 +50,13 @@ Rules:
 """
 
 
+TWO_LINE_MOMENTS = {EventType.GOAL, EventType.PENALTY, EventType.RED_CARD, EventType.GOAL_DISALLOWED,
+                    EventType.FULL_TIME}
+
+
 def max_lines_for(m: Moment) -> int:
-    return 2 if m.salience >= 3 else 1
+    """Goals, penalties and red cards can carry two lines; everything else gets one focused line."""
+    return 2 if m.update.event.type in TWO_LINE_MOMENTS else 1
 
 
 def team_tone(m: Moment) -> Tone:

@@ -124,7 +124,10 @@ def test_talk_budget_holds_back_minor_moments(world, match):
     session = CommentarySession(world, match, ViewerProfile(), CountingFactory(), clock=lambda: 0.0)
     updates = {ev.type: reader.apply(ev) for ev in match.events}
     session.busy_until = 10.0  # still speaking
-    assert not session.should_wake(updates[EventType.CORNER])
+    assert session.should_wake(updates[EventType.CORNER]), "a rule met for the first time is always explained"
+    for _ in range(3):
+        session.knowledge.record("corner", 0)  # now well known
+    assert not session.should_wake(updates[EventType.CORNER]), "a familiar moment waits its turn"
     assert session.should_wake(updates[EventType.RED_CARD])
     session.busy_until = 0.0
     assert session.should_wake(updates[EventType.CORNER])

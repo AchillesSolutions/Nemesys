@@ -21,7 +21,7 @@ from .i18n import CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, KI
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
-from .viewer import Knowledge, Language, ViewerProfile
+from .viewer import Knowledge, Language, ViewerProfile, depth_for
 from .workflow import build_workflow
 
 SIGNALS_WORTH_WAKING = {"quiet_spell", "possession_dominance", "numerical_advantage"}
@@ -65,9 +65,16 @@ class CommentarySession:
     def is_speaking(self) -> bool:
         return self.clock() < self.busy_until
 
+    def first_time(self, update: ReaderUpdate) -> bool:
+        """Does this moment involve a rule the viewer has not had explained yet?"""
+        return any(depth_for(self.profile, self.knowledge, c, update.event.elapsed) == "full"
+                   for c in concepts_for(update.event))
+
     def should_wake(self, update: ReaderUpdate) -> bool:
         if update.salience >= 3:
             return True
+        if update.salience >= 2 and self.first_time(update):
+            return True  # a new rule is always explained, queued after whatever is being said
         wants = update.salience >= 2 or bool({s["kind"] for s in update.signals} & SIGNALS_WORTH_WAKING)
         if any(s["kind"] == "quiet_spell" for s in update.signals):
             self._pending_quiet = True

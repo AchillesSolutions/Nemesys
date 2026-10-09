@@ -106,7 +106,7 @@ def _host(messages: list[Message]) -> Message:
         return Message("assistant", [" ".join(results)[:400] or "Done."])
     question = last.text.split("The viewer says:", 1)[-1]
     calls = _host_calls(question)
-    return Message("assistant", calls or ["(Offline mode) Ask me about the score, a player, the table or a rule."])
+    return Message("assistant", calls or ["(ignore)"])
 
 
 def _producer(b: dict, prompt: str) -> dict:

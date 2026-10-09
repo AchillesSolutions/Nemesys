@@ -166,6 +166,7 @@ export type ServerMessage =
   | ({ type: "commentary" } & Commentary)
   | { type: "profile"; profile: Profile; learned: string[] }
   | { type: "host"; question: string; answer: string; changes: Partial<Profile>; tools: string[]; language: Language }
+  | { type: "ignored"; question: string }
   | { type: "finished" }
   | { type: "error"; message: string };
 

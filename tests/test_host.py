@@ -129,3 +129,20 @@ def test_ask_over_the_live_connection_changes_profile(client):
 
 def test_speech_token_unavailable_without_speech(client):
     assert client.get("/api/speech/token").status_code == 503
+
+
+def test_speech_not_meant_for_kick_off_is_ignored(world, match):
+    host, state = make_host(world, match)
+    reply = ask(host, "Set alarm for 6:00")
+    assert reply.answer == "" and reply.changes == {}
+
+
+def test_ignored_speech_sends_no_answer(client):
+    with client.websocket_connect("/ws?speed=1") as ws:
+        ws.receive_json()
+        ws.send_json({"action": "pause"})
+        ws.send_json({"action": "ask", "text": "set alarm for six"})
+        seen = []
+        while not any(m["type"] in ("ignored", "host") for m in seen):
+            seen.append(ws.receive_json())
+    assert seen[-1]["type"] == "ignored"

@@ -86,10 +86,14 @@ class Listener {
     }
   }
 
-  /** The request has been answered (or failed). Follow-ups need no name once the answer has been said. */
-  done(): void {
+  /**
+   * The request has been answered (or failed). With `followUp`, the next few seconds after the answer
+   * need no name; without it (nothing was said back, or setup has just finished), it is the name again.
+   */
+  done(followUp = true): void {
     if (this.state !== "thinking") return;
     this.setState("idle");
+    if (!followUp) return;
     this.followUpPending = true;
     setTimeout(() => { if (this.followUpPending && !voice.speaking) this.openWindow(FOLLOW_UP_MS, "conversation"); }, 400);
   }

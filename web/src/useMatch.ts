@@ -26,6 +26,7 @@ export interface MatchState {
   finished: boolean;
   error: string | null;
   asking: number; // questions waiting for the Host's answer
+  lastReply: "answer" | "ignored" | null; // whether Kick-Off said something back to the last thing heard
 }
 
 const TRAIL = 6;
@@ -53,7 +54,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
     connected: false, chapters: [], chapter: null, event: null, recent: [], snapshot: null, feed: [],
     arrivedAt: 0, nextGap: null, pace: 1, bridge: null,
     learned: [], profile: initial ?? { team: null, language: "en", level: "beginner", hands_free: false },
-    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0,
+    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0, lastReply: null,
   }));
   const ws = useRef<WebSocket | null>(null);
 
@@ -120,7 +121,11 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
         lines: [{ text: msg.answer, tone: "neutral", card_title: `“${msg.question}”`, sources: ["host"],
                   proposal_ids: [], concepts: [], headline: false }],
       };
-      return { ...s, feed: addToFeed(s.feed, entry), asking: Math.max(0, s.asking - 1) };
+      return { ...s, feed: addToFeed(s.feed, entry), asking: Math.max(0, s.asking - 1), lastReply: "answer" };
+    }
+    case "ignored": {
+      // Heard something that wasn't for Kick-Off (another person, the TV): say nothing.
+      return { ...s, asking: Math.max(0, s.asking - 1), lastReply: "ignored" };
     }
     case "finished":
       return { ...s, finished: true };

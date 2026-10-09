@@ -27,7 +27,11 @@ RULES: dict[str, str] = {
     "corner": "When a defender is last to touch the ball before it goes over their own goal line, the attackers get a corner kick from the corner flag.",
     "throw_in": "When the ball goes over the side line, the team that did not touch it last throws it back in with both hands, from behind the head.",
     "goal_kick": "When an attacker is last to touch the ball before it goes over the goal line (and it is not a goal), the defending team restarts with a goal kick.",
-    "yellow_card": "A yellow card is a caution for a serious foul or bad behaviour. The player stays on but must be careful.",
+    "yellow_card": (
+        "The referee shows cards for serious fouls or bad behaviour. A yellow card is a warning: the player stays on, "
+        "but a second yellow in the same match becomes a red. A red card, straight away or after two yellows, sends "
+        "the player off, and the team plays on with one player fewer."
+    ),
     "second_yellow": "Two yellow cards in one match make a red card: the player is sent off.",
     "red_card": "A red card sends a player off for the rest of the match, and nobody can replace them. The team plays with one player fewer.",
     "ten_men": "With ten players against eleven, a team usually defends deeper and has less of the ball; the other team has a spare player to attack with.",
