@@ -3,7 +3,7 @@ import type { Commentary, Language } from "../types";
 
 /** The live feed of explanation cards, newest first. */
 export function Feed({ feed, lang }: { feed: Commentary[]; lang: Language }) {
-  const cards = feed.flatMap((c) => c.lines.map((line, i) => ({ key: `${c.event_id}-${i}-${line.headline}`, c, line })));
+  const cards = feed.flatMap((c) => c.lines.map((line, i) => ({ key: `${c.seq ?? c.event_id}-${i}`, c, line })));
   return (
     <section className="panel feed" aria-label={t(lang, "commentary")}>
       <h2>{t(lang, "commentary")}</h2>

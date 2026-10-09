@@ -137,3 +137,15 @@ def test_full_match_plays_at_real_pace(client):
         messages = receive_until(ws, "finished", limit=20000)
     assert {m["pace"] for m in messages if m["type"] == "event"} == {1.0}
     assert not [m for m in messages if m["type"] == "bridge"]
+
+
+def test_every_notable_moment_is_commentated_before_play_skips_ahead(client):
+    """A moment at the very end of a chapter (like the first offside) must still get its call and
+    explanation: play lets the moment land before jumping to the next one."""
+    with client.websocket_connect("/ws?mode=key_moments&speed=600") as ws:
+        ws.receive_json()
+        messages = receive_until(ws, "finished")
+    notable = {m["event"]["id"] for m in messages if m["type"] == "event"
+               and m["event"]["type"] in ("offside", "yellow_card", "var_check", "goal", "red_card")}
+    commentated = {m["event_id"] for m in messages if m["type"] == "commentary"}
+    assert notable and notable <= commentated, sorted(notable - commentated)

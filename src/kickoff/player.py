@@ -37,6 +37,7 @@ QUIET_AHEAD_S = 15       # ...when nothing notable is coming within this many ma
 QUIET_BEHIND_S = 8       # ...and nothing notable has just happened
 BRIDGE_MIN_GAP_S = 240   # jumps of at least four minutes get a bridging line between moments
 BRIDGE_MAX_PAUSE_S = 10
+LAND_MAX_S = 12          # how long to let a moment's explanation finish before skipping ahead
 
 
 class MatchPlayer:
@@ -58,6 +59,7 @@ class MatchPlayer:
         self._tasks: set[asyncio.Task] = set()
         self._chapter: Chapter | None = None
         self._last_update: ReaderUpdate | None = None
+        self._jumped_to = 0  # where play last jumped to: commentary about earlier moments is stale
         self._notable = sorted(e.elapsed for e in match.events if SALIENCE.get(e.type, 0) >= 2)
 
     # -- controls --------------------------------------------------------------
@@ -96,6 +98,7 @@ class MatchPlayer:
             self._last_update = self.reader.apply(self.match.events[self.index])
             self.index += 1
         self.position = elapsed
+        self._jumped_to = elapsed
         self.finished = False
         self._chapter = None
         self._wake.set()
@@ -157,6 +160,8 @@ class MatchPlayer:
     async def _commentate(self, update: ReaderUpdate) -> None:
         try:
             async for commentary in self.session.respond_now(update):
+                if update.event.elapsed < self._jumped_to:
+                    return  # play has moved on past this moment while the agents were thinking
                 await self.send({"type": "commentary", **commentary.model_dump(mode="json")})
         except Exception:
             log.exception("commentary failed for event %s", update.event.id)
@@ -182,10 +187,26 @@ class MatchPlayer:
     async def _bridge_to_next_chapter(self, elapsed: int) -> None:
         """Skip to the next key moment. After a long gap, the agents may sum up what was skipped."""
         upcoming = next((c for c in self.chapters if c.start > elapsed), None)
+        await self._let_moment_land()
         before = self._last_update
         self.seek(upcoming.start if upcoming else self.match.events[-1].elapsed + 1)
         if upcoming and before and self._last_update and upcoming.start - before.event.elapsed >= BRIDGE_MIN_GAP_S:
             await self._bridge(before, self._last_update)
+
+    async def _let_moment_land(self) -> None:
+        """Before skipping ahead, finish the moment: its lead-out time, any explanation still being
+        written, and what Kick-Off is still saying (within reason). Fast-forwarding skips the waiting."""
+        if self.speed > 4:
+            if self._tasks:
+                await asyncio.wait(list(self._tasks), timeout=0.5)
+            return
+        if self._chapter and self._chapter.end > self.position:
+            await self._wait((self._chapter.end - self.position) / (self.speed * self.pace_at(self.position)))
+        deadline = asyncio.get_running_loop().time() + LAND_MAX_S
+        if self._tasks:
+            await asyncio.wait(list(self._tasks), timeout=LAND_MAX_S)
+        while self.session.is_speaking() and asyncio.get_running_loop().time() < deadline:
+            await self._wait(0.25)
 
     async def _bridge(self, before: ReaderUpdate, after: ReaderUpdate) -> None:
         gap_s = after.event.elapsed - before.event.elapsed

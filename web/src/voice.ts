@@ -42,6 +42,7 @@ class Voice {
   private queue: Item[] = [];
   private playing: Playing | null = null;
   private ducked = false;
+  private turn: object | null = null; // identifies the line currently holding the speaker
 
   /** Ask the server whether Azure AI Speech is available. */
   async init(): Promise<void> {
@@ -117,26 +118,42 @@ class Voice {
     return () => this.idleListeners.delete(listener);
   }
 
+  /**
+   * Play the next line. The speaker is claimed *before* any waiting (the audio may still be
+   * downloading), so two lines can never play over each other; a line stopped or replaced while
+   * loading never plays at all.
+   */
   private async next(): Promise<void> {
     const now = performance.now();
     this.queue = this.queue.filter((q) => q.line.headline || now - q.queuedAt < STALE_MS);
     const item = this.queue.shift();
     if (!item) {
       this.playing = null;
+      this.turn = null;
       sound.duck(false);
       this.waiting.splice(0).forEach((resolve) => resolve());
       this.idleListeners.forEach((listener) => listener());
       return;
     }
+    const turn = {};
+    this.turn = turn;
+    const done = () => this.finish(turn);
+    this.playing = { text: item.line.text, stop: done, duck: () => {} }; // holds the speaker while loading
     sound.duck(true);
     this.lastSpoken = item.line.text;
-    let handle: Playing | null = null;
-    const done = () => {
-      if (this.playing === handle) void this.next();
-    };
-    handle = this.azure ? await this.playAzure(item, done) : this.playBrowser(item, done);
+
+    const blob = this.azure ? await item.audio : null;
+    if (this.turn !== turn) return; // stopped or interrupted while loading
+    const handle = blob ? this.playBlob(item, blob, done) : this.playBrowser(item, done);
     this.playing = handle;
     if (this.ducked) handle.duck(true);
+  }
+
+  /** A line has ended (or been stopped): move on, once. */
+  private finish(turn: object): void {
+    if (this.turn !== turn) return;
+    this.turn = null;
+    void this.next();
   }
 
   private fetchAudio(line: Line, lang: Language): Promise<Blob | null> {
@@ -147,18 +164,10 @@ class Voice {
     }).then((r) => (r.ok ? r.blob() : null)).catch(() => null);
   }
 
-  private async playAzure(item: Item, done: () => void): Promise<Playing> {
-    const blob = await item.audio;
-    if (!blob) return this.playBrowser(item, done); // Azure hiccup: fall back rather than go silent
+  private playBlob(item: Item, blob: Blob, done: () => void): Playing {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      URL.revokeObjectURL(url);
-      done();
-    };
+    const finish = () => { URL.revokeObjectURL(url); done(); };
     audio.onended = finish;
     audio.onerror = finish;
     audio.play().catch(finish);

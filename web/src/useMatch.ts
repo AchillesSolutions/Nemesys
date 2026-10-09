@@ -29,6 +29,14 @@ export interface MatchState {
 }
 
 const TRAIL = 6;
+let feedSeq = 0; // every feed entry gets its own identity, even when several share an event
+
+/** Add to the feed keeping match order, newest moment first, whenever each line happens to arrive. */
+function addToFeed(feed: Commentary[], entry: Commentary): Commentary[] {
+  const at = (c: Commentary) => c.elapsed ?? 0;
+  const next = [entry, ...feed].sort((a, b) => at(b) - at(a) || (b.seq ?? 0) - (a.seq ?? 0));
+  return next.slice(0, FEED_MAX);
+}
 const FEED_MAX = 40;
 
 function socketUrl(profile: Profile, mode: Mode, speed: number): string {
@@ -102,17 +110,17 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
     }
     case "commentary": {
       const { type: _type, ...commentary } = msg;
-      return { ...s, feed: [commentary, ...s.feed].slice(0, FEED_MAX), learned: commentary.learned };
+      return { ...s, feed: addToFeed(s.feed, { ...commentary, seq: ++feedSeq }), learned: commentary.learned };
     }
     case "profile":
       return { ...s, profile: msg.profile, learned: msg.learned };
     case "host": {
       const entry: Commentary = {
-        event_id: -Date.now(), minute: s.event?.minute ?? "0", reasoning: "", proposals: [], learned: s.learned,
+        seq: ++feedSeq, event_id: -Date.now(), elapsed: s.event?.elapsed ?? 0, minute: s.event?.minute ?? "0", reasoning: "", proposals: [], learned: s.learned,
         lines: [{ text: msg.answer, tone: "neutral", card_title: `“${msg.question}”`, sources: ["host"],
                   proposal_ids: [], concepts: [], headline: false }],
       };
-      return { ...s, feed: [entry, ...s.feed].slice(0, FEED_MAX), asking: Math.max(0, s.asking - 1) };
+      return { ...s, feed: addToFeed(s.feed, entry), asking: Math.max(0, s.asking - 1) };
     }
     case "finished":
       return { ...s, finished: true };

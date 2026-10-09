@@ -146,8 +146,11 @@ export interface ProposalView {
 }
 
 export interface Commentary {
+  /** Unique per feed entry (assigned in the browser): one event can have a call and an explanation. */
+  seq?: number;
   event_id: number;
   minute: string;
+  elapsed?: number; // match second of the moment it is about
   lines: Line[];
   reasoning: string;
   proposals: ProposalView[];
