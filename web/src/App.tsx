@@ -3,6 +3,7 @@ import { Directory, loadStatic } from "./api";
 import { BridgeBanner, Chapters, DemoControls, ProfileChips, ViewerSettings } from "./components/Controls";
 import { VoiceStatus } from "./components/VoiceStatus";
 import { listener, type ListenState } from "./listen";
+import { Captions } from "./components/Captions";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
 import { Pitch, Ticker } from "./components/Pitch";
@@ -105,15 +106,11 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     }
   }, [state.feed, state.profile.language]);
 
-  // Achilles' answers to the viewer: spoken in the language they were written in, shown as a subtitle.
-  const [replyShown, setReplyShown] = useState<string | null>(null);
+  // Achilles' answers to the viewer: spoken (and so subtitled) in the language they were written in.
   useEffect(() => {
     if (!state.reply) return;
     voice.say([{ text: state.reply.text, tone: "neutral", card_title: "", sources: ["host"], proposal_ids: [],
                  concepts: [], headline: true }], state.reply.language);
-    setReplyShown(state.reply.text);
-    const id = setTimeout(() => setReplyShown(null), Math.min(14000, 2500 + state.reply.text.length * 60));
-    return () => clearTimeout(id);
   }, [state.reply]);
 
   // A new language means the queued lines are in the wrong one.
@@ -167,20 +164,21 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
+            <Captions voiceOn={voiceOn} feed={state.feed} />
             <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
-                         handsFree={state.profile.hands_free} reply={replyShown} />
+                         handsFree={state.profile.hands_free} />
           </div>
-          <Ticker dir={dir} event={state.event} lang={lang} />
-          <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
-                    elapsed={state.snapshot?.elapsed ?? 0} lang={lang} send={send} />
-          <div className="row">
-            <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
-            <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
-          </div>
+          {PRESET.demo && <Ticker dir={dir} event={state.event} lang={lang} />}
+          {PRESET.demo && (
+            <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
+                      elapsed={state.snapshot?.elapsed ?? 0} lang={lang} send={send} />
+          )}
         </div>
         <aside className="col-side">
-          <Feed feed={state.feed} lang={lang} />
+          <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
           <Learned learned={state.learned} lang={lang} />
+          <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
+          {PRESET.demo && <Feed feed={state.feed} lang={lang} />}
           {PRESET.demo && <UnderTheHood feed={state.feed} lang={lang} />}
         </aside>
       </main>

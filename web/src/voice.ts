@@ -39,6 +39,7 @@ class Voice {
   private azure = false;
   private waiting: (() => void)[] = [];
   private idleListeners = new Set<() => void>();
+  private lineListeners = new Set<(line: Line | null) => void>();
   private queue: Item[] = [];
   private playing: Playing | null = null;
   private ducked = false;
@@ -112,6 +113,12 @@ class Voice {
     this.playing?.duck(on);
   }
 
+  /** Called with each line as it starts being spoken, and with null when Kick-Off falls silent (for subtitles). */
+  onLine(listener: (line: Line | null) => void): () => void {
+    this.lineListeners.add(listener);
+    return () => this.lineListeners.delete(listener);
+  }
+
   /** Called every time Kick-Off falls silent. Returns an unsubscribe function. */
   onIdle(listener: () => void): () => void {
     this.idleListeners.add(listener);
@@ -133,6 +140,7 @@ class Voice {
       sound.duck(false);
       this.waiting.splice(0).forEach((resolve) => resolve());
       this.idleListeners.forEach((listener) => listener());
+      this.lineListeners.forEach((listener) => listener(null));
       return;
     }
     const turn = {};
@@ -146,6 +154,7 @@ class Voice {
     if (this.turn !== turn) return; // stopped or interrupted while loading
     const handle = blob ? this.playBlob(item, blob, done) : this.playBrowser(item, done);
     this.playing = handle;
+    this.lineListeners.forEach((listener) => listener(item.line));
     if (this.ducked) handle.duck(true);
   }
 

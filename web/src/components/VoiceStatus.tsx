@@ -7,12 +7,11 @@ const SUBTITLE_LINGER_MS = 2500;
 
 /**
  * The voice interface on screen, like a voice-controlled TV: a small mic light that glows while
- * Kick-Off is listening to you, and a subtitle of what it heard that fades away. An optional hint
- * (shown briefly) tells new viewers how to talk to it.
+ * Kick-Off is listening to you, with what it heard beside it, fading away. An optional hint (shown
+ * briefly) tells new viewers how to talk to it. What Achilles says is subtitled separately (Captions).
  */
-export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false, reply = null }: {
+export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false }: {
   state: ListenState; caption?: string; lang: Language; hint?: string | null; handsFree?: boolean; inline?: boolean;
-  reply?: string | null;
 }) {
   const [subtitle, setSubtitle] = useState<string | null>(null);
 
@@ -28,9 +27,9 @@ export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inl
     : live ? t(lang, "listening") : "";
   return (
     <div className={`voice-ui ${inline ? "inline" : ""}`} role="status" aria-live="polite" aria-label={label}>
-      {reply ? <div className="subtitle reply">{reply}</div> : subtitle && <div className="subtitle">{subtitle}</div>}
       <div className="voice-row">
-        {(hint || state === "off") && <span className="voice-hint">{state === "off" ? t(lang, "micOff") : hint}</span>}
+        {subtitle ? <span className="heard">“{subtitle}”</span>
+          : (hint || state === "off") && <span className="voice-hint">{state === "off" ? t(lang, "micOff") : hint}</span>}
         <span className={`mic-dot md-${state} ${live ? "live" : ""}`} title={label} />
       </div>
     </div>

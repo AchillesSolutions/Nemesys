@@ -188,9 +188,9 @@ export function Setup({ dir, match, demo, onStart }: {
     return (
       <main className="splash" onClick={() => void begin()}>
         <h1>Kick-Off</h1>
-        <p className="fixture">{home.name} v {away.name}</p>
-        <p className="venue">{match.venue}</p>
         <p className="press">{t("en", "pressToStart")}</p>
+        <p className="press-other">{t("zh", "pressToStart")} · {t("es", "pressToStart")}</p>
+        <p className="why">{t("en", "whyPress")}</p>
       </main>
     );
   }
