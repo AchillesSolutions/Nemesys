@@ -69,10 +69,17 @@ def test_unconfigured_speech_raises():
     raise AssertionError("expected SpeechUnavailable")
 
 
-def test_a_zero_in_a_score_is_said_nil_in_english():
+def test_scores_are_said_like_a_commentator_in_english():
     from kickoff.speech import aloud
-    assert aloud("Harbour City lead 1-0", "en") == "Harbour City lead 1-nil"
-    assert aloud("It's 0-0 at half-time.", "en") == "It's nil-nil at half-time."
+    assert aloud("Harbour City lead 1-0", "en") == "Harbour City lead one nil"
+    assert aloud("It's 1-1, and then 2–2 at half-time.", "en") == "It's one one, and then two two at half-time."
+    assert aloud("It's 0-0.", "en") == "It's nil nil."
     assert aloud("Kilburn 2, Harbour City 0.", "en") == "Kilburn 2, Harbour City nil."
     assert aloud("the 90th minute, 10 shots, 0.5 seconds", "en") == "the 90th minute, 10 shots, 0.5 seconds"
     assert aloud("Harbour City gana 1 a 0", "es") == "Harbour City gana 1 a 0"
+
+
+def test_var_is_spelt_out_letter_by_letter():
+    ssml = build_ssml("VAR is checking. Varga waits.", "en-US", "v", "neutral", set())
+    assert '<say-as interpret-as="characters">VAR</say-as> is checking. Varga waits.' in ssml
+    assert "El uve a erre revisa." in build_ssml("El VAR revisa.", "es-MX", "v", "neutral", set())

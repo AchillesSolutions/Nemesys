@@ -86,7 +86,6 @@ h1, h2, p { margin: 0; }
 .markings .line { fill: none; stroke: rgba(255,255,255,.75); stroke-width: .25; }
 .markings .spot { fill: rgba(255,255,255,.8); }
 .markings .goal { fill: rgba(255,255,255,.25); stroke: #fff; stroke-width: .2; }
-.trail { stroke-width: .55; stroke-linecap: round; }
 .ball-core { fill: #fff; stroke: #111; stroke-width: .15; }
 .ball-halo { fill: rgba(255,255,255,.18); }
 .marker { animation: pop 2.4s ease-out forwards; }

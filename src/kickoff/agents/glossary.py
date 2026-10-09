@@ -11,7 +11,8 @@ RULES: dict[str, str] = {
         "only inside their own penalty area, plus ten outfield players."
     ),
     "points": "In the league, a win earns 3 points, a draw 1 point each, and a defeat none. The table is ranked by points.",
-    "kick_off": "Each half starts with a kick-off from the centre spot. After a goal, the team that conceded kicks off.",
+    "kick_off": ("Each half starts with a kick-off from the centre spot: one team kicks off the first half, the other team"
+                 " the second half. After a goal, the team that conceded kicks off."),
     "goal": "A goal counts when the whole ball crosses the goal line between the posts and under the bar.",
     "offside": (
         "A player is offside if, when a teammate passes the ball, they are nearer the opponent's goal line than "

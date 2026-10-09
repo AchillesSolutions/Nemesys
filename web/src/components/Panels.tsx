@@ -30,6 +30,7 @@ export function Stats({ dir, snapshot, lang }: { dir: Directory; snapshot: Snaps
       <p className="possession-label">{t(lang, "possession")}</p>
       <table>
         <tbody>
+          {row(t(lang, "goals"), (s) => s.score)}
           {row(t(lang, "shots"), (s) => `${s.shots} (${s.shots_on_target})`)}
           {row(t(lang, "corners"), (s) => s.corners)}
           {row(t(lang, "fouls"), (s) => s.fouls)}

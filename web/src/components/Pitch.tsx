@@ -65,13 +65,6 @@ export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang }: Pr
       <svg className="pitch" viewBox={`-3 -3 ${W + 6} ${H + 6}`} role="img"
            aria-label={`${home.short_name} attacking right, ${away.short_name} attacking left`}>
         <Markings />
-        {recent.map((ev, i) =>
-          ev.x != null && ev.end_x != null ? (
-            <line key={ev.id} className="trail" x1={sx(ev.x)} y1={sy(ev.y!)} x2={sx(ev.end_x)} y2={sy(ev.end_y!)}
-                  stroke={dir.colour(ev.team)} strokeOpacity={((i + 1) / recent.length) * 0.7}
-                  strokeDasharray={ev.outcome === "complete" ? undefined : "1.2 1"} />
-          ) : null,
-        )}
         {dots.map((d) => {
           const club = dir.club(d.team)!;
           return (

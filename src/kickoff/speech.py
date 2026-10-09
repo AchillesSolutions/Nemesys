@@ -118,17 +118,31 @@ def pick_style(tone: str, supported: set[str]) -> str | None:
     return next((s for s in TONE_STYLES.get(tone, TONE_STYLES["neutral"]) if s in supported), None)
 
 
+NUMBERS = "nil one two three four five six seven eight nine ten eleven twelve".split()
+SCORE = re.compile(r"(?<![\w.])(\d{1,2})\s*[-–]\s*(\d{1,2})(?![\w%]|[.,]\d)")  # 2-1, 0–0
 NOUGHT = re.compile(r"(?<![\w.,])0(?![\w%]|[.,]\d)")  # a lone 0: not 10, 0.5, 0% or 0th
+VAR = re.compile(r"\bVAR\b")
+
+
+def _say_number(n: str) -> str:
+    return NUMBERS[int(n)] if int(n) < len(NUMBERS) else n
 
 
 def aloud(text: str, language: str) -> str:
-    """How a line is said rather than written: in English commentary a zero in a score is "nil"
-    ("1-0" is "one-nil", "0-0" is "nil-nil"); the text on screen keeps the digits."""
-    return NOUGHT.sub("nil", text) if language == "en" else text
+    """How a line is said rather than written. In English commentary a score is said "two one",
+    "one one", "one nil" (never "one to one" or "zero"); the text on screen keeps the digits."""
+    if language != "en":
+        return text
+    text = SCORE.sub(lambda m: f"{_say_number(m[1])} {_say_number(m[2])}", text)
+    return NOUGHT.sub("nil", text)
 
 
 def build_ssml(text: str, locale: str, voice: str, tone: str, supported: set[str]) -> str:
-    body = f'<prosody rate="{TONE_RATE.get(tone, "0%")}">{escape(text)}</prosody>'
+    # VAR is said letter by letter, never as a word. The Spanish voice repeats words around a say-as
+    # tag, so it gets the letters' names instead.
+    letters = "uve a erre" if locale.startswith("es") else '<say-as interpret-as="characters">VAR</say-as>'
+    spoken = VAR.sub(letters, escape(text))
+    body = f'<prosody rate="{TONE_RATE.get(tone, "0%")}">{spoken}</prosody>'
     style = pick_style(tone, supported)
     if style:
         body = f'<mstts:express-as style="{style}">{body}</mstts:express-as>'
