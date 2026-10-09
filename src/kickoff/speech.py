@@ -15,6 +15,7 @@ changed with KICKOFF_VOICE_EN / _ZH / _ES.
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections import OrderedDict
 from xml.sax.saxutils import escape
@@ -99,7 +100,7 @@ class Speech:
         async with httpx.AsyncClient(timeout=15) as client:
             styles = await self.styles(client)
             locale, voice = self.voices.get(language, self.voices["en"])
-            ssml = build_ssml(text, locale, voice, tone, styles.get(voice, set()))
+            ssml = build_ssml(aloud(text, language), locale, voice, tone, styles.get(voice, set()))
             r = await client.post(f"{self._base}/v1", content=ssml.encode("utf-8"), headers={
                 "Ocp-Apim-Subscription-Key": self.key,
                 "Content-Type": "application/ssml+xml",
@@ -115,6 +116,15 @@ class Speech:
 
 def pick_style(tone: str, supported: set[str]) -> str | None:
     return next((s for s in TONE_STYLES.get(tone, TONE_STYLES["neutral"]) if s in supported), None)
+
+
+NOUGHT = re.compile(r"(?<![\w.,])0(?![\w%]|[.,]\d)")  # a lone 0: not 10, 0.5, 0% or 0th
+
+
+def aloud(text: str, language: str) -> str:
+    """How a line is said rather than written: in English commentary a zero in a score is "nil"
+    ("1-0" is "one-nil", "0-0" is "nil-nil"); the text on screen keeps the digits."""
+    return NOUGHT.sub("nil", text) if language == "en" else text
 
 
 def build_ssml(text: str, locale: str, voice: str, tone: str, supported: set[str]) -> str:

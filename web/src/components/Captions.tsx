@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { Directory } from "../api";
 import { t } from "../i18n";
+import { withTeams } from "../teams";
 import type { Commentary, Language, Line } from "../types";
 import { voice } from "../voice";
 
@@ -20,7 +22,9 @@ function kindOf(line: Line): Kind {
  * next one. With the voice off, each new line of commentary is shown instead, so the words are never
  * lost (for viewers who can't hear, a noisy room, or a muted demo video).
  */
-export function Captions({ voiceOn, feed, lang }: { voiceOn: boolean; feed: Commentary[]; lang: Language }) {
+export function Captions({ voiceOn, feed, lang, dir, clubs }: {
+  voiceOn: boolean; feed: Commentary[]; lang: Language; dir: Directory; clubs: string[];
+}) {
   const [shown, setShown] = useState<{ line: Line; speaking: boolean } | null>(null);
 
   useEffect(() => voice.onLine((line) => {
@@ -38,7 +42,7 @@ export function Captions({ voiceOn, feed, lang }: { voiceOn: boolean; feed: Comm
       {shown ? (
         <>
           <span className={`caption-tag tag-${kindOf(shown.line)}`}>{t(lang, `tag_${kindOf(shown.line)}`)}</span>
-          <p className="caption-text">{shown.line.text}</p>
+          <p className="caption-text">{withTeams(shown.line.text, dir, clubs, lang)}</p>
         </>
       ) : (
         <p className="caption-text empty">{t(lang, "commentaryEmpty")}</p>

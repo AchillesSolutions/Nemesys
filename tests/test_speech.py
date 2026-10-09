@@ -67,3 +67,12 @@ def test_unconfigured_speech_raises():
     except SpeechUnavailable:
         return
     raise AssertionError("expected SpeechUnavailable")
+
+
+def test_a_zero_in_a_score_is_said_nil_in_english():
+    from kickoff.speech import aloud
+    assert aloud("Harbour City lead 1-0", "en") == "Harbour City lead 1-nil"
+    assert aloud("It's 0-0 at half-time.", "en") == "It's nil-nil at half-time."
+    assert aloud("Kilburn 2, Harbour City 0.", "en") == "Kilburn 2, Harbour City nil."
+    assert aloud("the 90th minute, 10 shots, 0.5 seconds", "en") == "the 90th minute, 10 shots, 0.5 seconds"
+    assert aloud("Harbour City gana 1 a 0", "es") == "Harbour City gana 1 a 0"

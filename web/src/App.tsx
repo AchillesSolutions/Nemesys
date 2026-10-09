@@ -173,7 +173,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
           </div>
-          <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} />
+          <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} dir={dir} clubs={[match.home, match.away]} />
           {PRESET.demo && <Ticker dir={dir} event={state.event} lang={lang} />}
           {PRESET.demo && (
             <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}

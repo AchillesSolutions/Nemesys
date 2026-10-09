@@ -148,6 +148,8 @@ def test_every_notable_moment_is_commentated_before_play_skips_ahead(client):
     notable = {m["event"]["id"] for m in messages if m["type"] == "event"
                and m["event"]["type"] in ("offside", "yellow_card", "var_check", "goal", "red_card")}
     commentated = {m["event_id"] for m in messages if m["type"] == "commentary"}
+    reds = {m["event"]["id"] for m in messages if m["type"] == "event" and m["event"]["type"] == "red_card"}
+    notable -= {r - 1 for r in reds}  # a second yellow is talked about with its red card
     assert notable and notable <= commentated, sorted(notable - commentated)
 
 
@@ -165,3 +167,25 @@ def test_big_moments_wait_for_the_browser_to_stop_speaking(world, match):
     assert player._still_talking()
     player.set_voice_speaking(False)
     assert not player._still_talking()
+
+
+def test_play_waits_before_the_build_up_not_between_shot_and_goal(world, match):
+    """The wait for quiet comes before a goal's attack, so the ball never goes in under another explanation;
+    a shot and its goal (or a second yellow and its red card) are one moment, talked about once."""
+    from kickoff.agents import ViewerProfile
+    from kickoff.player import BUILD_UP_S, MatchPlayer
+
+    async def send(_):
+        pass
+
+    player = MatchPlayer(world, match, ViewerProfile(), lambda role: OfflineChatClient(role), send)
+    events = match.events
+    i = next(n for n, e in enumerate(events) if e.type == EventType.GOAL)
+    shot, goal = events[i - 1], events[i]
+    held = [e for e in events[:i + 1] if goal.elapsed - e.elapsed <= BUILD_UP_S and player._big_moment_coming(e)]
+    assert held and held[0].id <= shot.id  # waits before the shot is played, not after it
+    assert not player._big_moment_coming(goal)  # ...and not again before the goal
+    assert player._outranked_by_next(shot, goal)
+    j = next(n for n, e in enumerate(events) if e.type == EventType.RED_CARD)
+    if events[j - 1].elapsed == events[j].elapsed:
+        assert player._outranked_by_next(events[j - 1], events[j])

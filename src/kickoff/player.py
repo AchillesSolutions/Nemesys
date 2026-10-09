@@ -40,6 +40,7 @@ BRIDGE_MAX_PAUSE_S = 10
 LAND_MAX_S = 6           # how long to let a moment's explanation finish before skipping ahead
 MAX_STILL_S = 4.0        # in highlights, the longest the picture stands still unless Kick-Off is talking
 HOLD_MAX_S = 20          # the longest play waits for an explanation to finish before the next big moment
+BUILD_UP_S = 6           # ...and it waits before the build-up, so the attack itself is seen while it is called
 SPEECH_SLACK_S = 1.0     # the voice starts a little after the line is sent (audio download)
 
 
@@ -65,6 +66,7 @@ class MatchPlayer:
         self._jumped_to = 0  # where play last jumped to: commentary about earlier moments is stale
         self.voice_speaking: bool | None = None  # reported by the viewer's browser; None = no voice reports
         self._notable = sorted(e.elapsed for e in match.events if SALIENCE.get(e.type, 0) >= 2)
+        self._held_for: set[int] = set()  # big moments whose build-up has already waited for quiet
 
     # -- controls --------------------------------------------------------------
 
@@ -103,6 +105,7 @@ class MatchPlayer:
             self.index += 1
         self.position = elapsed
         self._jumped_to = elapsed
+        self._held_for = {t for t in self._held_for if t < elapsed}  # rewatching waits for quiet again
         self.finished = False
         self._chapter = None
         self._wake.set()
@@ -141,8 +144,8 @@ class MatchPlayer:
 
             if self._is_restart_after_half_time(ev):
                 await self._let_moment_land()  # the half-time break: the summary is said before play restarts
-            elif self.mode == "key_moments" and SALIENCE.get(ev.type, 0) >= 2 and self.speed <= 4:
-                await self._hold_for_explanation()  # never start a big moment over an explanation
+            elif self.mode == "key_moments" and self.speed <= 4 and self._big_moment_coming(ev):
+                await self._hold_for_explanation()  # never play a big moment over an explanation
             delay = self._delay_to(ev)
             if delay > 0 and not await self._wait(delay):
                 continue  # woken by a control change: re-evaluate
@@ -163,6 +166,8 @@ class MatchPlayer:
         if self.mode == "key_moments" and gap and nxt and self._delay_to(nxt) > 0:
             pace = round(max(pace, gap / (self._delay_to(nxt) * self.speed)), 2)  # dead time is compressed
         await self.send(event_message(update, gap, pace))
+        if self._outranked_by_next(ev, nxt):
+            return  # a second yellow and its red card come together: talk about the red, not before it
         if self.session.should_wake(update):
             task = asyncio.create_task(self._commentate(update))
             self._tasks.add(task)
@@ -187,6 +192,23 @@ class MatchPlayer:
         if self.mode == "key_moments" and (chapter is None or nxt.elapsed > chapter.end):
             return None
         return nxt.elapsed - ev.elapsed
+
+    def _big_moment_coming(self, ev) -> bool:
+        """Is this the start of the build-up to a big moment (a goal's attack, the foul before a card)?
+        Play waits here once, so the whole move is seen and called as it happens, not under an
+        explanation of something else."""
+        i = bisect.bisect_left(self._notable, ev.elapsed)
+        if i == len(self._notable) or self._notable[i] - ev.elapsed > BUILD_UP_S or self._notable[i] in self._held_for:
+            return False
+        self._held_for.add(self._notable[i])
+        return True
+
+    @staticmethod
+    def _outranked_by_next(ev, nxt) -> bool:
+        """Events in the same second (a shot and its goal, a second yellow and its red card) are one
+        moment: only the biggest of them is talked about."""
+        return (nxt is not None and nxt.elapsed == ev.elapsed
+                and SALIENCE.get(nxt.type, 0) > SALIENCE.get(ev.type, 0))
 
     async def _hold_for_explanation(self) -> None:
         """Wait until what is being explained has been written and said, so the viewer can take it in."""
