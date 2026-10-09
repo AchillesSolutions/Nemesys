@@ -120,7 +120,7 @@ def test_highlights_compress_quiet_play_and_bridge_long_gaps(client, match):
         messages = receive_until(ws, "finished")
     events = [m for m in messages if m["type"] == "event"]
     paces = {m["pace"] for m in events}
-    assert paces == {1.0, 4.0}, "quiet stretches inside a moment run faster, notable ones at normal speed"
+    assert min(paces) == 1.0 and max(paces) >= 8.0, "quiet stretches and dead time run faster, moments at normal speed"
     notable = [m for m in events if m["salience"] >= 2]
     assert all(m["pace"] == 1.0 for m in notable[1:]), "the build-up to and aftermath of moments play at normal speed"
     bridges = [m for m in messages if m["type"] == "bridge"]

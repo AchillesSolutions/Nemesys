@@ -13,6 +13,8 @@ EN, ZH, ES = Language.EN, Language.ZH, Language.ES
 
 CONCEPT_LABELS: dict[str, dict[Language, str]] = {
     "kick_off": {EN: "Kick-off", ZH: "开球", ES: "Saque inicial"},
+    "team_size": {EN: "Eleven a side", ZH: "每队十一人", ES: "Once por equipo"},
+    "points": {EN: "Points for a win", ZH: "积分规则", ES: "Puntos por partido"},
     "goal": {EN: "Goals", ZH: "进球", ES: "Goles"},
     "offside": {EN: "Offside", ZH: "越位", ES: "Fuera de juego"},
     "foul": {EN: "Fouls", ZH: "犯规", ES: "Faltas"},
@@ -94,12 +96,21 @@ CALLS: dict[tuple[EventType, str], dict[Language, str]] = {
                                 ES: "El VAR está revisando la jugada."},
     (EventType.VAR_DECISION, "penalty"): {EN: "VAR decision: it's a penalty!", ZH: "VAR判定：点球！",
                                           ES: "¡Decisión del VAR: penal!"},
-    (EventType.KICK_OFF, "1"): {EN: "We're under way!", ZH: "比赛开始！", ES: "¡Arranca el partido!"},
+    (EventType.KICK_OFF, "1"): {EN: "We're under way! {kits}", ZH: "比赛开始！{kits}", ES: "¡Arranca el partido! {kits}"},
     (EventType.KICK_OFF, "2"): {EN: "The second half is under way.", ZH: "下半场开始。", ES: "Comienza la segunda parte."},
     (EventType.HALF_TIME, ""): {EN: "Half-time. {score}.", ZH: "中场休息。{score}。", ES: "Descanso. {score}."},
     (EventType.FREE_KICK, "wall"): {EN: "Free kick to {team}, in shooting range.", ZH: "{team}获得前场任意球，有射门机会。",
                                     ES: "Tiro libre para {team}, en zona de disparo."},
 }
+
+# Kit colours, so a newcomer knows which dots are which.
+KITS: dict[str, dict[Language, str]] = {
+    "kil": {EN: "teal and white", ZH: "青绿色和白色", ES: "verde azulado y blanco"},
+    "hbr": {EN: "navy and orange", ZH: "藏青色和橙色", ES: "azul marino y naranja"},
+}
+KIT_LINE = {EN: "{a} are in {ka}, {b} in {kb}.", ZH: "{a}身穿{ka}，{b}身穿{kb}。", ES: "{a} viste de {ka} y {b} de {kb}."}
+KIT_LINE_FAN = {EN: "We're in {ka}, {b} are in {kb}.", ZH: "我们身穿{ka}，{b}身穿{kb}。",
+                ES: "Nosotros vestimos de {ka} y {b} de {kb}."}
 
 HEADLINE_TITLES: dict[EventType, dict[Language, str]] = {
     EventType.GOAL: {EN: "GOAL!", ZH: "进球！", ES: "¡GOL!"},

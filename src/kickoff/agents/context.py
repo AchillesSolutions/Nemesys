@@ -32,13 +32,17 @@ EVENT_CONCEPTS: dict[EventType, list[str]] = {
 
 def concepts_for(ev: MatchEvent) -> list[str]:
     concepts = list(EVENT_CONCEPTS.get(ev.type, []))
+    if ev.type == EventType.KICK_OFF and ev.period == 1:
+        concepts = ["team_size", "kick_off"]  # at the start: who is on the pitch; at half-time's restart: kick-offs
     if ev.type == EventType.FREE_KICK and ev.detail.get("wall"):
         concepts.insert(0, "direct_free_kick")
     if ev.type == EventType.RED_CARD and ev.detail.get("reason") == "second yellow card":
         concepts.insert(0, "second_yellow")
         concepts.append("ten_men")
-    if ev.type == EventType.GOAL and ev.detail.get("pattern") == "counter_attack":
-        concepts.append("counter_attack")
+    if ev.type == EventType.GOAL:
+        concepts.append("points")  # the first goal is when the table, and so points, start to matter
+        if ev.detail.get("pattern") == "counter_attack":
+            concepts.append("counter_attack")
     if ev.minute.count("+") and ev.type in (EventType.GOAL, EventType.HALF_TIME, EventType.FULL_TIME):
         concepts.append("added_time")
     return concepts

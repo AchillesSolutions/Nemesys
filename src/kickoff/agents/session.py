@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ..match_reader import ReaderUpdate
 from ..models import EventType, Match, Position, World
 from .context import Describer, concepts_for
-from .i18n import CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, concept_label
+from .i18n import CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, KIT_LINE_FAN, KITS, concept_label
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
@@ -105,10 +105,19 @@ class CommentarySession:
         keeper = next((p for p in defending.players_on_pitch
                        if self.world.club(defending.id).player(p).position == Position.GK), None)
         text = templates[lang].format(
-            player=surname(ev.player), team=self.describer.club(ev.team), keeper=surname(keeper),
+            kits=self.kit_line(), player=surname(ev.player), team=self.describer.club(ev.team), keeper=surname(keeper),
             on=surname(ev.other_player), off=surname(ev.player),
             score=f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}")
         return Line(text=text, tone=team_tone(self._moment(update)), call=True)
+
+    def kit_line(self) -> str:
+        """Which team wears what: the supporter's own team first, as "we"."""
+        lang, home, away = self.profile.language, self.match.home, self.match.away
+        ours = self.profile.team if self.profile.team in (home, away) else None
+        first, second = (ours, away if ours == home else home) if ours else (home, away)
+        template = KIT_LINE_FAN if ours else KIT_LINE
+        return template[lang].format(a=self.describer.club(first), ka=KITS[first][lang],
+                                     b=self.describer.club(second), kb=KITS[second][lang])
 
     def instant(self, update: ReaderUpdate) -> Line | None:
         """What to say the instant an event happens: a headline for big moments, otherwise a call."""

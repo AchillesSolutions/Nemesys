@@ -45,6 +45,8 @@ Rules:
 - If the brief has a "voice" instruction, the final lines must follow it (a supporter hears "we" for their team).
 - Put stakes or story proposals that are not urgent into defer_ids; they will be offered again in a quiet spell.
 - card_title is two to four words in the viewer's language.
+- Never address the viewer by a team's name ("Kilburn, ..."): you are talking to a person, not to a team.
+- Say minutes as a commentator would: "the 62nd minute" (第62分钟 / "el minuto 62"), never a bare number.
 """
 
 
@@ -100,7 +102,7 @@ class Producer(Executor):
         by_id = {p.id: p for p in candidates}
         brief = {
             "language": LANGUAGE_NAMES[m.profile.language],
-            "supports": self.describer.club(m.profile.team) if m.profile.team else "neutral",
+            "team_the_viewer_supports": self.describer.club(m.profile.team) if m.profile.team else "none (neutral viewer)",
             **({"voice": FAN_VOICE.format(team=self.describer.club(m.profile.team))} if m.profile.team else {}),
             "event": m.event_text,
             "importance": ["routine", "a chance", "a stoppage worth explaining", "a big moment"][m.salience],

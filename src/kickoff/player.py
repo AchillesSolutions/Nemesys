@@ -25,19 +25,20 @@ from .agents.host import Host, HostReply
 from .agents.llm import ClientFactory
 from .chapters import Chapter, build_chapters, chapter_at
 from .match_reader import SALIENCE, MatchReader, ReaderUpdate
-from .models import Match, World
+from .models import EventType, Match, World
 
 log = logging.getLogger(__name__)
 
 Send = Callable[[dict], Awaitable[None]]
 Mode = Literal["full", "key_moments"]
 
-QUIET_PACE = 4.0         # quiet play inside a key moment runs this much faster...
+QUIET_PACE = 8.0         # quiet play inside a key moment runs this much faster...
 QUIET_AHEAD_S = 15       # ...when nothing notable is coming within this many match seconds
 QUIET_BEHIND_S = 8       # ...and nothing notable has just happened
 BRIDGE_MIN_GAP_S = 240   # jumps of at least four minutes get a bridging line between moments
 BRIDGE_MAX_PAUSE_S = 10
-LAND_MAX_S = 12          # how long to let a moment's explanation finish before skipping ahead
+LAND_MAX_S = 6           # how long to let a moment's explanation finish before skipping ahead
+MAX_STILL_S = 4.0        # in highlights, the longest the picture stands still unless Kick-Off is talking
 
 
 class MatchPlayer:
@@ -135,7 +136,9 @@ class MatchPlayer:
                 await self._bridge_to_next_chapter(ev.elapsed)
                 continue
 
-            delay = (ev.elapsed - self.position) / (self.speed * self.pace_at(self.position))
+            if self._is_restart_after_half_time(ev):
+                await self._let_moment_land()  # the half-time break: the summary is said before play restarts
+            delay = self._delay_to(ev)
             if delay > 0 and not await self._wait(delay):
                 continue  # woken by a control change: re-evaluate
             await self._play(ev)
@@ -149,7 +152,12 @@ class MatchPlayer:
         if chapter and chapter is not self._chapter:
             self._chapter = chapter
             await self.send({"type": "chapter", "chapter": chapter.model_dump()})
-        await self.send(event_message(update, self._gap_to_next(ev, chapter), self.pace_at(ev.elapsed)))
+        gap = self._gap_to_next(ev, chapter)
+        nxt = self.match.events[self.index] if self.index < len(self.match.events) else None
+        pace = self.pace_at(ev.elapsed)
+        if self.mode == "key_moments" and gap and nxt and self._delay_to(nxt) > 0:
+            pace = round(max(pace, gap / (self._delay_to(nxt) * self.speed)), 2)  # dead time is compressed
+        await self.send(event_message(update, gap, pace))
         if self.session.should_wake(update):
             task = asyncio.create_task(self._commentate(update))
             self._tasks.add(task)
@@ -174,6 +182,20 @@ class MatchPlayer:
         if self.mode == "key_moments" and (chapter is None or nxt.elapsed > chapter.end):
             return None
         return nxt.elapsed - ev.elapsed
+
+    def _is_restart_after_half_time(self, ev) -> bool:
+        last = self._last_update.event if self._last_update else None
+        return ev.type == EventType.KICK_OFF and last is not None and last.type == EventType.HALF_TIME
+
+    def _delay_to(self, ev) -> float:
+        """Real seconds to wait before playing ``ev``. In highlights, dead time (VAR reviews, celebrations,
+        substitutions) never leaves the screen silent and still: at most a few seconds, or until
+        Kick-Off finishes what it is saying."""
+        natural = (ev.elapsed - self.position) / (self.speed * self.pace_at(self.position))
+        if self.mode != "key_moments":
+            return natural
+        talking = max(0.0, self.session.busy_until - self.session.clock())
+        return min(natural, max(MAX_STILL_S / max(1.0, self.speed), talking + 0.4))
 
     def pace_at(self, elapsed: int) -> float:
         """How fast play runs from here: quiet stretches inside a key moment are compressed."""
@@ -218,15 +240,19 @@ class MatchPlayer:
             "corners_in_gap": {a.home.id: a.home.corners - b.home.corners, a.away.id: a.away.corners - b.away.corners},
         }
         await self.send({"type": "bridge", "from_minute": signal["from_minute"], "to_minute": signal["to_minute"]})
-        spoken = 0.0
+        # The bridging line is written while play moves on to the next moment (whose quiet build-up it
+        # covers), rather than holding the picture still.
+        task = asyncio.create_task(self._bridge_line(after.model_copy(update={"signals": [signal], "salience": 0})))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        await self._wait(1.5 if self.speed <= 4 else 0.05)
+
+    async def _bridge_line(self, update: ReaderUpdate) -> None:
         try:
-            async for commentary in self.session.respond_now(after.model_copy(update={"signals": [signal], "salience": 0})):
+            async for commentary in self.session.respond_now(update):
                 await self.send({"type": "commentary", **commentary.model_dump(mode="json")})
-                spoken += sum(speech_seconds(line.text, self.session.profile.language) for line in commentary.lines)
         except Exception:
             log.exception("bridge commentary failed")
-        # Let the line land before play resumes; when fast-forwarding (sound muted), just a beat.
-        await self._wait(min(1.2 + spoken, BRIDGE_MAX_PAUSE_S) if self.speed <= 4 else 0.2)
 
     async def _wait(self, seconds: float | None) -> bool:
         """Sleep, but wake early on any control change. True if the full time passed."""

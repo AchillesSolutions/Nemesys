@@ -94,7 +94,7 @@ def test_beginner_hears_offside_explained_then_nodded(world, match):
     offside = [line.text for _, line in lines(out) if "offside" in line.concepts]
     assert len(offside) >= 2
     assert len(offside[0]) > len(offside[-1]), "later offside lines should be shorter"
-    assert session.learned_labels()[:2] == ["Kick-off", "Offside"]
+    assert session.learned_labels()[:2] == ["Eleven a side", "Offside"]
 
 
 def test_analyst_gets_no_rule_lessons(world, match):
