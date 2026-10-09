@@ -171,3 +171,21 @@ def test_reasoning_models_get_an_effort_instead_of_a_temperature(monkeypatch):
                                                                                "reasoning_effort": "low"}
     C.kickoff_model = "gpt-4.1-mini"
     assert options_for(C(), {"temperature": 0.3}) == {"temperature": 0.3}
+
+
+def test_held_back_lines_are_dropped_once_the_score_changes(world, match):
+    from kickoff.agents.messages import Proposal
+    from kickoff.agents.producer import still_true
+
+    reader = MatchReader(world, match.home, match.away)
+    for ev in match.events:
+        update = reader.apply(ev)
+        if ev.type == EventType.GOAL and update.snapshot.home.score == 3:
+            break
+    session = CommentarySession(world, match, ViewerProfile(team=HOME_ID), CountingFactory())
+    stale = Proposal(id=1, agent="league_guide", text="We go up to seventh with 13 points.", priority=6,
+                     kind="stakes", made_at=update.event.elapsed - 200, score=(2, 2))
+    fresh = Proposal(id=2, agent="league_guide", text="We go up to fifth.", priority=4, kind="stakes",
+                     made_at=update.event.elapsed, score=(3, 2))
+    session.backlog = [stale, fresh]
+    assert still_true(session._moment(update), recent=set()) == [fresh]

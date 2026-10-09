@@ -97,7 +97,8 @@ class Specialist(Executor):
                 drafts = []
             proposals = [
                 Proposal(id=next(_ids), agent=self.name, text=d.text.strip(), priority=max(1, min(10, d.priority)),
-                         kind=self.kind, concept=d.concept, made_at=m.update.event.elapsed)
+                         kind=self.kind, concept=d.concept, made_at=m.update.event.elapsed,
+                         score=(m.update.snapshot.home.score, m.update.snapshot.away.score))
                 for d in drafts[:2] if d.text.strip()
             ]
         await ctx.send_message(SpecialistResult(agent=self.name, moment=m, proposals=proposals))

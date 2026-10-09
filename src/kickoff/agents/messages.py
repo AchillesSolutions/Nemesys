@@ -42,6 +42,7 @@ class Proposal:
     kind: Literal["explain", "story", "stakes"]
     concept: str | None = None
     made_at: int = 0  # match elapsed seconds
+    score: tuple[int, int] = (0, 0)  # the score when it was written: a held-back line is stale once this changes
 
 
 @dataclass

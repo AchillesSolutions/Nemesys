@@ -65,6 +65,14 @@ def team_tone(m: Moment) -> Tone:
     return Tone.NEUTRAL
 
 
+def still_true(m: Moment, recent: set[str]) -> list[Proposal]:
+    """Held-back lines worth reusing: not too old, not already said, and written at this same score."""
+    now = m.update.event.elapsed
+    score = (m.update.snapshot.home.score, m.update.snapshot.away.score)
+    return [p for p in m.backlog
+            if now - p.made_at <= BACKLOG_MAX_AGE_S and p.score == score and p.text not in recent]
+
+
 class Producer(Executor):
     def __init__(self, agent: Agent, describer: Describer):
         super().__init__(id="producer")
@@ -73,10 +81,9 @@ class Producer(Executor):
     @handler
     async def decide(self, results: list[SpecialistResult], ctx: WorkflowContext[Never, Decision]) -> None:
         m = results[0].moment
-        now = m.update.event.elapsed
         recent = set(m.recent_lines)
         fresh = [p for r in results for p in r.proposals if p.text not in recent]
-        backlog = [p for p in m.backlog if now - p.made_at <= BACKLOG_MAX_AGE_S and p.text not in recent]
+        backlog = still_true(m, recent)
         candidates = sorted(fresh + backlog, key=lambda p: -p.priority)
 
         if not candidates:
