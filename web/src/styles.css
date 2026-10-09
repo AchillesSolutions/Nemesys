@@ -262,3 +262,7 @@ h1, h2, p { margin: 0; }
 @media (max-width: 560px) { .miy-row { grid-template-columns: 1fr; gap: .3rem; } }
 .lobby .start { justify-self: center; }
 .voice-ui .subtitle.reply { border-left: 3px solid var(--accent); text-align: left; }
+.miy-row { padding: .3rem .5rem; border-radius: 10px; transition: background .3s; }
+.miy-row.asking { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.miy-row.asking .miy-label { color: var(--accent); font-weight: 600; }
+.achilles-says .achilles + .achilles { font-size: 1.1rem; color: var(--muted); margin-top: -.3rem; }

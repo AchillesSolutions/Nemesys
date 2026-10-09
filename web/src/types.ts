@@ -135,6 +135,7 @@ export interface Line {
   concepts: string[];
   headline: boolean;
   call?: boolean; // a quick play-by-play call
+  language?: Language; // speak this line in this language, whatever the rest of the batch is in
 }
 
 export interface ProposalView {

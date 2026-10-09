@@ -3,39 +3,51 @@ import type { Directory } from "../api";
 import { LANGUAGE_NAMES, LEVELS, t } from "../i18n";
 import { listener, type ListenState } from "../listen";
 import { sound } from "../sound";
-import type { Language, Line, MatchInfo, Profile } from "../types";
+import type { HelpLevel, Language, Line, MatchInfo, Profile } from "../types";
 import { voice } from "../voice";
 import { VoiceStatus } from "./VoiceStatus";
 
 /**
  * The match lobby. After one key press (browsers need it before sound), Achilles welcomes the viewer
- * and, in a short spoken back-and-forth, asks who they support, which language they want, and whether
- * they are watching alone. The "Make it yours" options light up as they answer. A countdown runs to
- * kick-off, shortening to ten seconds once everything is answered. Silence means a neutral beginner in
- * English. With ?demo=1 the options can also be clicked, for testing without a microphone.
+ * and asks one question at a time: which language (asked in all three, back to back), which team, how
+ * familiar they are with football, and whether they are watching alone. The "Make it yours" options
+ * light up as they answer, and anything already answered in an earlier reply is not asked again.
+ * A countdown runs to kick-off, shortening to ten seconds once everything is answered; silence means
+ * a neutral beginner in English. With ?demo=1 the options can also be clicked.
  */
 
-type Stage = "splash" | "ask-team" | "ask-alone" | "thinking" | "tip" | "ready" | "started";
+type Stage = "splash" | "asking" | "thinking" | "tip" | "ready" | "started";
+type Step = "language" | "team" | "level" | "alone";
 
+const STEPS: Step[] = ["language", "team", "level", "alone"];
+const STEP_OF: Record<string, Step> = { language: "language", team: "team", level: "level", hands_free: "alone" };
 const COUNTDOWN_S = 90;
 const SOON_S = 10;
 const NO_ANSWER_MS = 15000;
 const DEFAULT: Profile = { team: null, language: "en", level: "beginner", hands_free: false };
+const LANGUAGES: Language[] = ["en", "zh", "es"];
 
-const spoken = (text: string, tone: Line["tone"] = "hopeful"): Line =>
-  ({ text, tone, card_title: "", sources: ["host"], proposal_ids: [], concepts: [], headline: false });
+const spoken = (text: string, language?: Language, tone: Line["tone"] = "hopeful"): Line =>
+  ({ text, tone, card_title: "", sources: ["host"], proposal_ids: [], concepts: [], headline: false, language });
+
+function question(step: Step, lang: Language): string {
+  return t(lang, ({ language: "askLanguage", team: "askTeam", level: "askLevel", alone: "askAlone" } as const)[step]);
+}
 
 export function Setup({ dir, match, demo, onStart }: {
   dir: Directory; match: MatchInfo; demo: boolean; onStart: (p: Profile) => void;
 }) {
   const [stage, setStage] = useState<Stage>("splash");
+  const [step, setStep] = useState<Step>("language");
   const [profile, setProfile] = useState<Profile>(DEFAULT);
-  const [said, setSaid] = useState("");
+  const [said, setSaid] = useState<string[]>([]);
   const [listen, setListen] = useState<{ state: ListenState; caption?: string }>({ state: "off" });
   const [kickoffAt, setKickoffAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => performance.now());
   const stageRef = useRef(stage);
+  const stepRef = useRef(step);
   const profileRef = useRef(profile);
+  const answered = useRef(new Set<Step>());
   const prompted = useRef(0);
   stageRef.current = stage;
   profileRef.current = profile;
@@ -43,61 +55,66 @@ export function Setup({ dir, match, demo, onStart }: {
   const home = dir.club(match.home)!, away = dir.club(match.away)!;
 
   const go = (s: Stage) => { stageRef.current = s; setStage(s); };
-  const stillAsking = () => stageRef.current === "ask-team"; // read fresh: it changes while Achilles talks
-  const say = async (text: string, language: Language) => {
-    setSaid(text);
-    await voice.sayAndWait([spoken(text)], language);
+  const say = async (lines: Line[], language: Language) => {
+    setSaid(lines.map((l) => l.text));
+    await voice.sayAndWait(lines, language); // queued together, so they play back to back
   };
 
   /** Turn what the viewer said into settings (the Host's tools do the understanding). */
-  const understand = async (text: string, language: Language, question?: string): Promise<Profile> => {
+  const understand = async (text: string, language: Language, asked: string) => {
     const res = await fetch("/api/setup", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: question ? `Achilles asked: "${question}" The viewer answered: "${text}"` : text,
-        spoken: language, profile: profileRef.current,
-      }),
+      body: JSON.stringify({ text: `Achilles asked: "${asked}" The viewer answered: "${text}"`, spoken: language,
+                             profile: profileRef.current }),
     });
-    const body = await res.json() as { profile: Profile };
+    const body = await res.json() as { profile: Profile; changes: Partial<Profile> };
     profileRef.current = body.profile;
     setProfile(body.profile);
-    return body.profile;
+    return body;
   };
 
   const start = (p: Profile) => {
     if (stageRef.current === "started") return;
     go("started");
     listener.mode = "wake";
-    void voice.sayAndWait([spoken(t(p.language, "letsGo"), "excited")], p.language);
+    void voice.sayAndWait([spoken(t(p.language, "letsGo"), p.language, "excited")], p.language);
     onStart(p);
   };
 
   const tip = async (p: Profile) => {
     go("tip");
-    await say(t(p.language, p.hands_free ? "tipAlone" : "tipOthers"), p.language);
+    await say([spoken(t(p.language, p.hands_free ? "tipAlone" : "tipOthers"))], p.language);
     go("ready");
     setKickoffAt((at) => Math.min(at ?? Infinity, performance.now() + SOON_S * 1000));
-    await say(t(p.language, "kickoffSoon"), p.language);
+    await say([spoken(t(p.language, "kickoffSoon"))], p.language);
   };
 
-  const askAlone = async (p: Profile) => {
-    go("ask-alone");
-    await say(t(p.language, "askAlone"), p.language);
+  /** Ask the next question nobody has answered yet, or finish. */
+  const askNext = async (p: Profile) => {
+    const next = STEPS.find((s) => !answered.current.has(s));
+    if (!next) return tip(p);
+    stepRef.current = next;
+    setStep(next);
+    prompted.current = 0;
+    go("asking");
+    if (next === "language") {
+      // The one question asked in all three languages, back to back.
+      await say(LANGUAGES.map((l) => spoken(question("language", l), l)), "en");
+    } else {
+      await say([spoken(question(next, p.language))], p.language);
+    }
   };
 
-  // Step one: the welcome, then the team and language question.
   const begin = async () => {
     if (stageRef.current !== "splash") return;
-    go("ask-team"); // answers are welcome even while Achilles is still talking
+    go("asking"); // answers are welcome even while Achilles is still talking
     await sound.enable();
     voice.enable();
     listener.on({ state: (state, caption) => setListen({ state, caption }) });
     listener.mode = "open"; // in the lobby, everything said is an answer
     void listener.start("en");
     setKickoffAt(performance.now() + COUNTDOWN_S * 1000);
-    await say(t("en", "welcome"), "en");
-    if (stillAsking()) await voice.sayAndWait([spoken(t("zh", "greetingOther"))], "zh");
-    if (stillAsking()) await voice.sayAndWait([spoken(t("es", "greetingOther"))], "es");
+    await say([spoken(t("en", "welcome"), "en"), ...LANGUAGES.map((l) => spoken(question("language", l), l))], "en");
   };
 
   // Press any key (or tap) to start.
@@ -112,53 +129,51 @@ export function Setup({ dir, match, demo, onStart }: {
     return () => { window.removeEventListener("keydown", handler); window.removeEventListener("pointerdown", handler); };
   });
 
-  // The viewer's answers, step by step.
+  // The viewer's answers, one step at a time.
   useEffect(() => {
     listener.on({
       command: async (text, language) => {
-        const step = stageRef.current;
-        if (step !== "ask-team" && step !== "ask-alone" && step !== "ready") { listener.done(false); return; }
+        const at = stageRef.current;
+        if (at !== "asking" && at !== "ready") { listener.done(false); return; }
         voice.stop(); // the viewer answered: stop asking
         go("thinking");
+        const current = stepRef.current;
         try {
-          if (step === "ask-team") {
-            const p = await understand(text, language);
-            listener.done(false);
-            await say(p.team ? t(p.language, "confirmTeam").replace("{team}", dir.club(p.team)!.short_name)
-                             : t(p.language, "confirmNeutral"), p.language);
-            if (p.hands_free) await tip(p); else await askAlone(p);
-          } else if (step === "ask-alone") {
-            const p = await understand(text, language, t(profileRef.current.language, "askAlone"));
-            listener.done(false);
-            await tip(p);
-          } else {
-            await understand(text, language); // a change of mind before kick-off
-            listener.done(false);
-            go("ready");
-          }
+          const { profile: p, changes } = await understand(text, language, question(current, profileRef.current.language));
+          listener.done(false);
+          if (at === "ready") { go("ready"); return; } // a change of mind just before kick-off
+          answered.current.add(current);
+          Object.keys(changes).forEach((k) => STEP_OF[k] && answered.current.add(STEP_OF[k]));
+          const confirm = current === "language" ? t(p.language, "confirmLanguage")
+            : current === "team" ? (p.team ? t(p.language, "confirmTeam").replace("{team}", dir.club(p.team)!.short_name)
+                                            : t(p.language, "confirmNeutral"))
+            : current === "level" ? t(p.language, "confirmLevel") : null;
+          if (confirm) await say([spoken(confirm)], p.language);
+          await askNext(p);
         } catch {
           listener.done(false);
-          go(step);
+          go(at);
         }
       },
     });
   });
 
-  // Nobody answers: ask once more, then carry on with the defaults.
+  // Nobody answers: ask once more, then carry on with the default for that question.
   useEffect(() => {
-    if (stage !== "ask-team" && stage !== "ask-alone") return;
+    if (stage !== "asking") return;
     const id = setTimeout(async () => {
       const p = profileRef.current;
       if (prompted.current++ === 0) {
-        await say(t(p.language, stage === "ask-team" ? "setupPrompt" : "askAlone"), p.language);
-      } else if (stage === "ask-team") {
-        await askAlone(p);
+        const s = stepRef.current;
+        await say(s === "language" ? LANGUAGES.map((l) => spoken(question("language", l), l))
+                                   : [spoken(question(s, p.language))], p.language);
       } else {
-        await tip(p);
+        answered.current.add(stepRef.current);
+        await askNext(p);
       }
     }, NO_ANSWER_MS);
     return () => clearTimeout(id);
-  }, [stage, listen.caption]);
+  }, [stage, step, listen.caption]);
 
   // The countdown.
   useEffect(() => {
@@ -187,6 +202,7 @@ export function Setup({ dir, match, demo, onStart }: {
     setProfile(p);
   };
   const mmss = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
+  const levels: HelpLevel[] = ["beginner", "getting_there", "big_picture"];
 
   return (
     <main className={`lobby ${demo ? "" : "voice-only"}`}>
@@ -202,7 +218,12 @@ export function Setup({ dir, match, demo, onStart }: {
 
       <section className="make-it-yours" aria-label={t(lang, "makeItYours")}>
         <h2>{t(lang, "makeItYours")}</h2>
-        <Row label={t(lang, "team")}>
+        <Row label={t(lang, "language")} asking={stage !== "ready" && step === "language"}>
+          {LANGUAGES.map((l) => (
+            <Option key={l} on={profile.language === l} onPick={() => pick({ language: l })}>{LANGUAGE_NAMES[l]}</Option>
+          ))}
+        </Row>
+        <Row label={t(lang, "team")} asking={stage !== "ready" && step === "team"}>
           {[home, away].map((c) => (
             <Option key={c.id} on={profile.team === c.id} onPick={() => pick({ team: c.id })}>
               <span className="crest" style={{ background: c.colours[0], borderColor: c.colours[1] }} />{c.short_name}
@@ -210,27 +231,20 @@ export function Setup({ dir, match, demo, onStart }: {
           ))}
           <Option on={profile.team === null} onPick={() => pick({ team: null })}>{t(lang, "neutral")}</Option>
         </Row>
-        <Row label={t(lang, "language")}>
-          {(Object.keys(LANGUAGE_NAMES) as Language[]).map((l) => (
-            <Option key={l} on={profile.language === l} onPick={() => pick({ language: l })}>{LANGUAGE_NAMES[l]}</Option>
+        <Row label={t(lang, "guide")} asking={stage !== "ready" && step === "level"}>
+          {levels.map((l) => (
+            <Option key={l} on={profile.level === l || (l === "big_picture" && profile.level === "analyst")}
+                    onPick={() => pick({ level: l })}>{LEVELS[l][lang].name}</Option>
           ))}
         </Row>
-        <Row label={t(lang, "watching")}>
+        <Row label={t(lang, "watching")} asking={stage !== "ready" && step === "alone"}>
           <Option on={profile.hands_free} onPick={() => pick({ hands_free: true })}>{t(lang, "onMyOwn")}</Option>
           <Option on={!profile.hands_free} onPick={() => pick({ hands_free: false })}>{t(lang, "withOthers")}</Option>
-        </Row>
-        <Row label={t(lang, "guide")}>
-          <Option on={profile.level === "beginner"} onPick={() => pick({ level: "beginner" })}>
-            {LEVELS.beginner[lang].name}
-          </Option>
-          <Option on={profile.level !== "beginner"} onPick={() => pick({ level: "big_picture" })}>
-            {LEVELS.big_picture[lang].name}
-          </Option>
         </Row>
       </section>
 
       <section className="achilles-says">
-        <p className="achilles">{said}</p>
+        {said.map((line, i) => <p key={i} className="achilles">{line}</p>)}
         <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline handsFree />
       </section>
 
@@ -239,9 +253,9 @@ export function Setup({ dir, match, demo, onStart }: {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, asking, children }: { label: string; asking: boolean; children: ReactNode }) {
   return (
-    <div className="miy-row">
+    <div className={`miy-row ${asking ? "asking" : ""}`}>
       <span className="miy-label">{label}</span>
       <div className="miy-options">{children}</div>
     </div>

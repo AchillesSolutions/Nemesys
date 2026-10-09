@@ -66,3 +66,20 @@ describe("voice", () => {
     expect(FakeAudio.maxTogether).toBe(1);
   });
 });
+
+describe("voice languages", () => {
+  it("fetches each line in its own language", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", (url: string, init?: { body?: string }) => {
+      if (url.endsWith("/api/health")) return Promise.resolve({ json: () => Promise.resolve({ speech: true }) });
+      asked.push(JSON.parse(init!.body!).language);
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob()) });
+    });
+    const { voice } = await import("./voice");
+    await voice.init();
+    voice.enable();
+    voice.say([line("Which language?"), { ...line("哪种语言？"), language: "zh" }, { ...line("¿Qué idioma?"), language: "es" }], "en");
+    await settle();
+    expect(asked).toEqual(["en", "zh", "es"]);
+  });
+});

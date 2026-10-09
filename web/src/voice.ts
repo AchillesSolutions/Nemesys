@@ -80,8 +80,8 @@ class Voice {
   say(lines: Line[], lang: Language): void {
     if (!this.enabled) return;
     for (const line of lines) {
-      const item: Item = { line, lang, queuedAt: performance.now() };
-      if (this.azure) item.audio = this.fetchAudio(line, lang);
+      const item: Item = { line, lang: line.language ?? lang, queuedAt: performance.now() };
+      if (this.azure) item.audio = this.fetchAudio(line, item.lang);
       if (line.headline) {
         this.queue = [item, ...this.queue.filter((q) => q.line.headline)];
         this.playing?.stop();
