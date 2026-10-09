@@ -63,6 +63,7 @@ class MatchPlayer:
         self._chapter: Chapter | None = None
         self._last_update: ReaderUpdate | None = None
         self._jumped_to = 0  # where play last jumped to: commentary about earlier moments is stale
+        self.voice_speaking: bool | None = None  # reported by the viewer's browser; None = no voice reports
         self._notable = sorted(e.elapsed for e in match.events if SALIENCE.get(e.type, 0) >= 2)
 
     # -- controls --------------------------------------------------------------
@@ -193,8 +194,17 @@ class MatchPlayer:
         deadline = loop.time() + HOLD_MAX_S
         if self._tasks:
             await asyncio.wait(list(self._tasks), timeout=HOLD_MAX_S)
-        while (self.session.busy_until + SPEECH_SLACK_S > self.session.clock()) and loop.time() < deadline:
+        while self._still_talking() and loop.time() < deadline:
             await self._wait(0.25)
+
+    def _still_talking(self) -> bool:
+        """Is Achilles still speaking? The browser says so exactly; otherwise use the estimate."""
+        if self.voice_speaking is not None:
+            return self.voice_speaking or self.session.busy_until > self.session.clock()
+        return self.session.busy_until + SPEECH_SLACK_S > self.session.clock()
+
+    def set_voice_speaking(self, speaking: bool) -> None:
+        self.voice_speaking = speaking  # the hold checks this several times a second; no need to wake playback
 
     def _is_restart_after_half_time(self, ev) -> bool:
         last = self._last_update.event if self._last_update else None

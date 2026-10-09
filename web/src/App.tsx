@@ -102,6 +102,9 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     }
   }, [state.feed, state.profile.language]);
 
+  // Tell the server exactly when Achilles is speaking, so the next big moment waits for the end of a line.
+  useEffect(() => voice.onLine((line) => send({ action: "voice", speaking: line !== null })) as () => void, [send]);
+
   // Achilles' answers to the viewer: spoken (and so subtitled) in the language they were written in.
   useEffect(() => {
     if (!state.reply) return;

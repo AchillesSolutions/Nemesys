@@ -47,6 +47,8 @@ Rules:
 - card_title is two to four words in the viewer's language.
 - Never address the viewer by a team's name ("Kilburn, ..."): you are talking to a person, not to a team.
 - Say minutes as a commentator would: "the 62nd minute" (第62分钟 / "el minuto 62"), never a bare number.
+- Say scores as they sound aloud: "Kilburn 2, Harbour City 1", "it's 2-2" or "two all", never
+  "Kilburn 2-2 Harbour City".
 """
 
 

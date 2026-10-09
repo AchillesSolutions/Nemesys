@@ -149,3 +149,19 @@ def test_every_notable_moment_is_commentated_before_play_skips_ahead(client):
                and m["event"]["type"] in ("offside", "yellow_card", "var_check", "goal", "red_card")}
     commentated = {m["event_id"] for m in messages if m["type"] == "commentary"}
     assert notable and notable <= commentated, sorted(notable - commentated)
+
+
+def test_big_moments_wait_for_the_browser_to_stop_speaking(world, match):
+    """When the browser reports speech, the player trusts it over its own estimate."""
+    from kickoff.agents import ViewerProfile
+    from kickoff.player import MatchPlayer
+
+    async def send(_):
+        pass
+
+    player = MatchPlayer(world, match, ViewerProfile(), lambda role: OfflineChatClient(role), send)
+    player.session.busy_until = 0  # the estimate says silence...
+    player.set_voice_speaking(True)  # ...but the browser is still speaking
+    assert player._still_talking()
+    player.set_voice_speaking(False)
+    assert not player._still_talking()

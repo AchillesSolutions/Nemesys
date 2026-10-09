@@ -10,6 +10,7 @@ Messages to the server, as {"action": ...}:
     speed        {"value": 1.5}
     mode         {"mode": "full" | "key_moments"}
     next_chapter
+    voice        {"speaking": true}  (Achilles started or stopped speaking in the viewer's browser)
     seek_chapter {"chapter": 3}
     seek         {"minute": 52}
     profile      {"team": "kil" | null, "language": "zh", "level": "beginner", "hands_free": false}  (any subset)
@@ -187,6 +188,8 @@ def apply_control(player: MatchPlayer, message: dict) -> dict | None:
             player.set_mode("full" if message["mode"] == "full" else "key_moments")
         case "next_chapter":
             player.next_chapter()
+        case "voice":  # the browser reports when Achilles starts and stops speaking
+            player.set_voice_speaking(bool(message["speaking"]))
         case "seek_chapter":
             player.seek_chapter(int(message["chapter"]))
         case "seek":

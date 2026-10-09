@@ -179,4 +179,5 @@ export type Control =
   | { action: "seek_chapter"; chapter: number }
   | { action: "seek"; minute: number }
   | { action: "ask"; text: string; language?: Language }
+  | { action: "voice"; speaking: boolean }
   | ({ action: "profile" } & Partial<Profile>);

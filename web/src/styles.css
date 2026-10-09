@@ -296,3 +296,10 @@ h1, h2, p { margin: 0; }
 .col-side .panel { padding: .7rem .95rem; }
 .col-side .table td { padding: .16rem .3rem; }
 .stats td { padding: .15rem 0; }
+
+/* The talk card glows gently now and then, to remind viewers they can talk to Achilles */
+.talk-card { animation: talk-pulse 6s ease-in-out infinite; }
+@keyframes talk-pulse {
+  0%, 70%, 100% { box-shadow: 0 0 0 0 transparent; border-color: var(--line); }
+  80% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
+}

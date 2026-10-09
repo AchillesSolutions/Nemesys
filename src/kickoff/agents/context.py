@@ -133,7 +133,7 @@ class Describer:
         return f"{ev.type.value} {team} {p}".strip()
 
     def _score(self, score: dict[str, int]) -> str:
-        return f"{self.club(self.home)} {score[self.home]}-{score[self.away]} {self.club(self.away)}"
+        return f"{self.club(self.home)} {score[self.home]}, {self.club(self.away)} {score[self.away]}"
 
     def situation(self, update: ReaderUpdate) -> str:
         """A compact summary of the live state for prompts."""
@@ -142,7 +142,7 @@ class Describer:
     def snapshot_summary(self, s: MatchSnapshot) -> str:
         h, a = s.home, s.away
         lines = [
-            f"Minute {s.minute}, period {s.period}. Score: {h.name} {h.score}-{a.score} {a.name}.",
+            f"Minute {s.minute}, period {s.period}. Score: {h.name} {h.score}, {a.name} {a.score}.",
             f"Possession overall {h.name} {h.possession_pct}% / {a.name} {a.possession_pct}%; "
             f"last 10 minutes {h.possession_last_10_pct}% / {a.possession_last_10_pct}%.",
             f"Shots (on target): {h.name} {h.shots} ({h.shots_on_target}), {a.name} {a.shots} ({a.shots_on_target}).",
