@@ -22,7 +22,7 @@ from .i18n import (CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, K
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
-from .viewer import Knowledge, Language, ViewerProfile, depth_for
+from .viewer import ASSUMED_KNOWN, Knowledge, Language, ViewerProfile, depth_for
 from .workflow import build_workflow
 
 SIGNALS_WORTH_WAKING = {"quiet_spell", "possession_dominance", "numerical_advantage"}
@@ -209,9 +209,11 @@ class CommentarySession:
         used_ids = {i for line in decision.lines for i in line.proposal_ids}
         self.backlog = [p for p in self.backlog if p.id not in used_ids]
         self.backlog = (decision.deferred + self.backlog)[:BACKLOG_SIZE]
+        known = ASSUMED_KNOWN[self.profile.level]
         for line in decision.lines:
             for concept in line.concepts:
-                self.knowledge.record(concept, decision.moment.update.event.elapsed)
+                if "*" not in known and concept not in known:  # nothing is "learned" that they knew already
+                    self.knowledge.record(concept, decision.moment.update.event.elapsed)
         self._speak(decision.lines)
 
     def _speak(self, lines: list[Line]) -> None:

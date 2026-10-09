@@ -229,3 +229,10 @@ def test_scores_are_said_the_way_commentators_say_them():
     assert score_phrase(Language.ES, "Kilburn", 0, "Harbour City", 1) == "Harbour City gana 1 a 0"
     assert score_phrase(Language.ES, "Kilburn", 1, "Harbour City", 1) == "empate a 1"
     assert score_phrase(Language.ZH, "Kilburn", 3, "Harbour City", 2, final=True) == "Kilburn以3比2获胜"
+
+
+def test_only_a_rule_the_teacher_was_asked_to_teach_counts_as_learned():
+    from kickoff.agents.specialists import Specialist
+    assert Specialist._concept("offside", {"concept": "offside"}) == "offside"
+    assert Specialist._concept("possession", {"signals": []}) is None  # a story line that mentions possession
+    assert Specialist._concept("possession", {"concept": "offside"}) is None
