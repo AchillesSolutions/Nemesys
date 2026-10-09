@@ -5,6 +5,8 @@ import { listener, type ListenState } from "../listen";
 import { sound } from "../sound";
 import type { HelpLevel, Language, Line, MatchInfo, Profile } from "../types";
 import { quickAnswer } from "../quickAnswer";
+import { Crest } from "./Crest";
+import { Fixture } from "./Fixture";
 import { voice } from "../voice";
 import { VoiceStatus } from "./VoiceStatus";
 
@@ -227,7 +229,11 @@ export function Setup({ dir, match, demo, onStart }: {
   if (stage === "splash") {
     return (
       <main className="splash" onClick={() => void begin()}>
-        <h1>Kick-Off</h1>
+        <h1 className="wordmark">Kick-Off<span>.</span></h1>
+        <p className="splash-fixture">
+          <Crest club={home} className="crest-small" />{home.name}<span className="v">v</span>{away.name}
+          <Crest club={away} className="crest-small" />
+        </p>
         <p className="press">{t("en", "pressToStart")}</p>
         <p className="press-other">{t("zh", "pressToStart")} · {t("es", "pressToStart")}</p>
         <p className="why">{t("en", "whyPress")}</p>
@@ -246,52 +252,50 @@ export function Setup({ dir, match, demo, onStart }: {
 
   return (
     <main className={`lobby ${demo ? "" : "voice-only"}`}>
-      <header className="lobby-head">
-        <h1>
-          <span style={{ color: home.colours[0] }}>{home.name}</span>
-          <span className="v">v</span>
-          <span style={{ color: away.colours[1] }}>{away.name}</span>
-        </h1>
-        <p className="venue">{match.venue} · {dir.world.league}</p>
-        <p className="countdown">
-          {remaining == null ? t(lang, "kickoffAt")
-            : <strong>{remaining > 0 ? `19:59:${String(60 - remaining).padStart(2, "0")}` : "20:00"}</strong>}
-        </p>
-      </header>
+      <Fixture dir={dir} match={match} lang={lang}>
+        <div className="score kickoff-time">
+          {remaining == null || remaining === 0 ? "20:00" : `19:59:${String(60 - remaining).padStart(2, "0")}`}
+        </div>
+        <p className="match-clock">{t(lang, "kickoffLabel")} · {match.venue}</p>
+      </Fixture>
 
-      <section className="make-it-yours" aria-label={t(lang, "makeItYours")}>
-        <h2>{t(lang, "makeItYours")}</h2>
-        <Row label={t(lang, "language")} asking={stage !== "ready" && step === "language"}>
-          {LANGUAGES.map((l) => (
-            <Option key={l} on={profile.language === l} onPick={() => pick({ language: l })}>{LANGUAGE_NAMES[l]}</Option>
-          ))}
-        </Row>
-        <Row label={t(lang, "team")} asking={stage !== "ready" && step === "team"}>
-          {[home, away].map((c) => (
-            <Option key={c.id} on={profile.team === c.id} onPick={() => pick({ team: c.id })}>
-              <span className="crest" style={{ background: c.colours[0], borderColor: c.colours[1] }} />{c.short_name}
-            </Option>
-          ))}
-          <Option on={profile.team === null} onPick={() => pick({ team: null })}>{t(lang, "neutral")}</Option>
-        </Row>
-        <Row label={t(lang, "guide")} asking={stage !== "ready" && step === "level"}>
-          {levels.map((l) => (
-            <Option key={l} on={profile.level === l || (l === "big_picture" && profile.level === "analyst")}
-                    onPick={() => pick({ level: l })}>{LEVELS[l][lang].name}</Option>
-          ))}
-        </Row>
-        <Row label={t(lang, "watching")} asking={stage !== "ready" && step === "alone"}>
-          <Option on={profile.hands_free} onPick={() => pick({ hands_free: true })}>{t(lang, "onMyOwn")}</Option>
-          <Option on={!profile.hands_free} onPick={() => pick({ hands_free: false })}>{t(lang, "withOthers")}</Option>
-        </Row>
-      </section>
+      <div className="lobby-stage">
+        <div className="lobby-card">
+          <section className="make-it-yours" aria-label={t(lang, "makeItYours")}>
+            <h2>{t(lang, "makeItYours")}</h2>
+            <Row label={t(lang, "language")} asking={stage !== "ready" && step === "language"}>
+              {LANGUAGES.map((l) => (
+                <Option key={l} on={profile.language === l} onPick={() => pick({ language: l })}>{LANGUAGE_NAMES[l]}</Option>
+              ))}
+            </Row>
+            <Row label={t(lang, "team")} asking={stage !== "ready" && step === "team"}>
+              {[home, away].map((c) => (
+                <Option key={c.id} on={profile.team === c.id} onPick={() => pick({ team: c.id })}>
+                  <Crest club={c} className="crest-small" />{c.short_name}
+                </Option>
+              ))}
+              <Option on={profile.team === null} onPick={() => pick({ team: null })}>{t(lang, "neutral")}</Option>
+            </Row>
+            <Row label={t(lang, "guide")} asking={stage !== "ready" && step === "level"}>
+              {levels.map((l) => (
+                <Option key={l} on={profile.level === l || (l === "big_picture" && profile.level === "analyst")}
+                        onPick={() => pick({ level: l })}>{LEVELS[l][lang].name}</Option>
+              ))}
+            </Row>
+            <Row label={t(lang, "watching")} asking={stage !== "ready" && step === "alone"}>
+              <Option on={profile.hands_free} onPick={() => pick({ hands_free: true })}>{t(lang, "onMyOwn")}</Option>
+              <Option on={!profile.hands_free} onPick={() => pick({ hands_free: false })}>{t(lang, "withOthers")}</Option>
+            </Row>
+          </section>
 
-      <section className="achilles-says">
-        {said.map((line, i) => <p key={i} className="achilles">{line}</p>)}
-        <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline handsFree />
-      </section>
+          <section className="achilles-says">
+            {said.map((line, i) => <p key={i} className="achilles">{line}</p>)}
+            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline handsFree />
+          </section>
 
-      {demo && <button className="btn primary start" onClick={() => start(profile)}>{t(lang, "kickoffNow")} →</button>}
+          {demo && <button className="btn primary start" onClick={() => start(profile)}>{t(lang, "kickoffNow")} →</button>}
+        </div>
+      </div>
     </main>
   );
 }

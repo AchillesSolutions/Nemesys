@@ -46,6 +46,13 @@ DEAD_BALL = {
 THREAT = {EventType.SHOT: 3, EventType.CORNER: 2, EventType.GOAL: 6, EventType.PENALTY: 4}
 
 
+class Goal(BaseModel):
+    player: str
+    minute: str
+    penalty: bool = False
+    event_id: int
+
+
 class TeamSnapshot(BaseModel):
     id: str
     name: str
@@ -65,6 +72,7 @@ class TeamSnapshot(BaseModel):
     lineup: list[str | None]  # formation slots in starting order; None where a player was sent off
     booked: list[str]
     sent_off: list[str]
+    goals: list[Goal] = []  # who scored and when, for the scorers under the team name
 
 
 class MatchSnapshot(BaseModel):
@@ -102,6 +110,7 @@ class _Team:
     passes: int = 0
     passes_completed: int = 0
     booked: list[str] = field(default_factory=list)
+    goals: list[Goal] = field(default_factory=list)
     sent_off: list[str] = field(default_factory=list)
 
 
@@ -177,6 +186,7 @@ class MatchReader:
                 passes=t.passes,
                 pass_accuracy_pct=round(100 * t.passes_completed / t.passes, 1) if t.passes else 0.0,
                 players_on_pitch=list(t.on_pitch), lineup=list(t.lineup), booked=list(t.booked), sent_off=list(t.sent_off),
+                goals=list(t.goals),
             )
 
         return MatchSnapshot(
@@ -228,6 +238,11 @@ class MatchReader:
             case EventType.GOAL | EventType.GOAL_DISALLOWED:
                 for cid, goals in ev.detail["score"].items():
                     self.teams[cid].score = goals
+                if ev.type == EventType.GOAL:
+                    t.goals.append(Goal(player=ev.player, minute=ev.minute, event_id=ev.id,
+                                        penalty=ev.detail.get("from") == "penalty"))
+                else:  # ruled out by VAR: it never counted
+                    t.goals = [g for g in t.goals if g.event_id != ev.detail.get("goal_event_id")]
         if t and ev.type in THREAT:
             self._threats.append((ev.elapsed, ev.team, THREAT[ev.type]))
         if t and ev.type == EventType.PASS and ev.outcome == "complete" and self._attacking_x(ev.team, ev.end_x) > 66:

@@ -7,7 +7,7 @@ import { Captions, TalkCard } from "./components/Captions";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
 import { Pitch, Ticker } from "./components/Pitch";
-import { Scoreboard } from "./components/Scoreboard";
+import { Fixture, Score } from "./components/Fixture";
 import { Setup } from "./components/Setup";
 import { LEVELS, t } from "./i18n";
 import type { HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
@@ -155,44 +155,50 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
 
   return (
     <div className="live" lang={lang === "zh" ? "zh-CN" : lang}>
-      <header className="topbar">
-        <span className="brand">Kick-Off</span>
-        <Scoreboard dir={dir} match={match} snapshot={state.snapshot} lang={lang}
-                    clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
-                             speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
-        {!state.connected && <span className="status">{t(lang, "connecting")}</span>}
-      </header>
-      {PRESET.demo && <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={toggles} />}
-      {PRESET.demo && (
-        <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
-      )}
-      <main className="grid">
-        <div className="col-main">
-          <div className="pitch-stack">
+      <div className="screen">
+        <Fixture dir={dir} match={match} home={state.snapshot?.home} away={state.snapshot?.away} lang={lang}>
+          <Score snapshot={state.snapshot} lang={lang}
+                 clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
+                          speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
+          {!state.connected && <p className="status">{t(lang, "connecting")}</p>}
+        </Fixture>
+
+        {/* The pitch in the middle of the stage, with frosted panels floating over the grass either side */}
+        <main className="stage">
+          <div className="stage-pitch">
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
           </div>
+          <aside className="rail left">
+            <TalkCard lang={lang} handsFree={state.profile.hands_free}>
+              {!PRESET.demo && <ProfileChips dir={dir} profile={state.profile} />}
+              <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
+                           handsFree={state.profile.hands_free} inCard />
+            </TalkCard>
+            <Learned learned={state.learned} lang={lang} />
+          </aside>
+          <aside className="rail right">
+            <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
+            <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
+          </aside>
           <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} dir={dir} clubs={[match.home, match.away]} />
-          {PRESET.demo && <Ticker dir={dir} event={state.event} lang={lang} />}
-          {PRESET.demo && (
-            <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
-                      elapsed={state.snapshot?.elapsed ?? 0} lang={lang} send={send} />
-          )}
-        </div>
-        <aside className="col-side">
-          <TalkCard lang={lang} handsFree={state.profile.hands_free}>
-            {!PRESET.demo && <ProfileChips dir={dir} profile={state.profile} />}
-            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
-                         handsFree={state.profile.hands_free} inCard />
-          </TalkCard>
-          <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
-          <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
-          <Learned learned={state.learned} lang={lang} />
-          {PRESET.demo && <Feed feed={state.feed} lang={lang} />}
-          {PRESET.demo && <UnderTheHood feed={state.feed} lang={lang} />}
-        </aside>
-      </main>
+        </main>
+      </div>
+
+      {PRESET.demo && (
+        <section className="demo-deck">
+          <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={toggles} />
+          <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
+          <Ticker dir={dir} event={state.event} lang={lang} />
+          <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
+                    elapsed={state.snapshot?.elapsed ?? 0} lang={lang} send={send} />
+          <div className="demo-panels">
+            <Feed feed={state.feed} lang={lang} />
+            <UnderTheHood feed={state.feed} lang={lang} />
+          </div>
+        </section>
+      )}
       {state.error && <div className="toast" role="alert">{state.error}</div>}
     </div>
   );

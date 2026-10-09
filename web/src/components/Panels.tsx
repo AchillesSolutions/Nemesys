@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { projectTable, type Directory } from "../api";
 import { AGENT_NAMES, t } from "../i18n";
 import type { Commentary, Language, MatchInfo, Snapshot, TeamSnapshot } from "../types";
@@ -17,27 +17,34 @@ export function Learned({ learned, lang }: { learned: string[]; lang: Language }
 export function Stats({ dir, snapshot, lang }: { dir: Directory; snapshot: Snapshot | null; lang: Language }) {
   if (!snapshot) return null;
   const { home, away } = snapshot;
-  const row = (label: string, f: (s: TeamSnapshot) => string | number) => (
-    <tr><td>{f(home)}</td><th scope="row">{label}</th><td>{f(away)}</td></tr>
+  // Each stat as a split bar in the two clubs' colours, the way a broadcast shows them.
+  const row = (label: string, h: number, a: number, show: (s: TeamSnapshot) => ReactNode = (s) => (s === home ? h : a)) => (
+    <div className="stat" key={label}>
+      <span className="stat-name">{label}</span>
+      <span className="stat-v">{show(home)}</span>
+      <span className="split" aria-hidden>
+        <i style={{ flexGrow: h || (a ? 0 : 1), background: dir.colour(home.id) }} />
+        <i style={{ flexGrow: a || (h ? 0 : 1), background: dir.colour(away.id) }} />
+      </span>
+      <span className="stat-v">{show(away)}</span>
+    </div>
+  );
+  const cards = (s: TeamSnapshot) => (
+    <>{s.yellow_cards}<span className="card-icon yellow" /> {s.red_cards > 0 && <>{s.red_cards}<span className="card-icon red" /></>}</>
   );
   return (
     <section className="panel stats" aria-label={t(lang, "stats")}>
       <h2>{t(lang, "stats")}</h2>
-      <div className="possession" aria-label={`${t(lang, "possession")} ${home.possession_pct}% – ${away.possession_pct}%`}>
-        <div style={{ width: `${home.possession_pct}%`, background: dir.colour(home.id) }}>{Math.round(home.possession_pct)}%</div>
-        <div style={{ width: `${away.possession_pct}%`, background: dir.colour(away.id) }}>{Math.round(away.possession_pct)}%</div>
+      <div className="stat-rows">
+        {row(t(lang, "goals"), home.score, away.score)}
+        {row(t(lang, "possession"), home.possession_pct, away.possession_pct, (s) => `${Math.round(s.possession_pct)}%`)}
+        {row(t(lang, "shots"), home.shots, away.shots, (s) => `${s.shots} (${s.shots_on_target})`)}
+        {row(t(lang, "corners"), home.corners, away.corners)}
+        {row(t(lang, "fouls"), home.fouls, away.fouls)}
+        {row(t(lang, "cards"), home.yellow_cards + home.red_cards * 2, away.yellow_cards + away.red_cards * 2, cards)}
+        {home.players_on_pitch.length !== away.players_on_pitch.length &&
+          row(t(lang, "players"), home.players_on_pitch.length, away.players_on_pitch.length)}
       </div>
-      <p className="possession-label">{t(lang, "possession")}</p>
-      <table>
-        <tbody>
-          {row(t(lang, "goals"), (s) => s.score)}
-          {row(t(lang, "shots"), (s) => `${s.shots} (${s.shots_on_target})`)}
-          {row(t(lang, "corners"), (s) => s.corners)}
-          {row(t(lang, "fouls"), (s) => s.fouls)}
-          {row(t(lang, "cards"), (s) => `${s.yellow_cards}🟨 ${s.red_cards}🟥`)}
-          {row(t(lang, "players"), (s) => s.players_on_pitch.length)}
-        </tbody>
-      </table>
     </section>
   );
 }

@@ -111,6 +111,7 @@ export interface TeamSnapshot {
   lineup: (string | null)[];
   booked: string[];
   sent_off: string[];
+  goals: { player: string; minute: string; penalty: boolean; event_id: number }[];
 }
 
 export interface Snapshot {

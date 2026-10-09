@@ -143,10 +143,6 @@ function Markings() {
   const box = 40.32, six = 18.32;
   return (
     <g className="markings">
-      <rect x={-3} y={-3} width={W + 6} height={H + 6} className="grass" />
-      {Array.from({ length: 10 }, (_, i) => (
-        <rect key={i} x={i * (W / 10)} y={0} width={W / 10} height={H} className={i % 2 ? "stripe" : "stripe alt"} />
-      ))}
       <rect x={0} y={0} width={W} height={H} className="line" />
       <line x1={W / 2} y1={0} x2={W / 2} y2={H} className="line" />
       <circle cx={W / 2} cy={H / 2} r={9.15} className="line" />
