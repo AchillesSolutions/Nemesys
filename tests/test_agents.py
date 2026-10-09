@@ -189,3 +189,26 @@ def test_held_back_lines_are_dropped_once_the_score_changes(world, match):
                      made_at=update.event.elapsed, score=(3, 2))
     session.backlog = [stale, fresh]
     assert still_true(session._moment(update), recent=set()) == [fresh]
+
+
+def test_play_by_play_calls_fill_the_gaps(world, match):
+    _, out, _ = run_match(world, match, ViewerProfile(), until_minute=60)
+    calls = [(ev, line) for ev, line in lines(out) if line.call]
+    kinds = {ev.type for ev, _ in calls}
+    assert {EventType.OFFSIDE, EventType.SHOT, EventType.VAR_CHECK, EventType.HALF_TIME} <= kinds
+    var = next(line.text for ev, line in calls if ev.type == EventType.VAR_CHECK)
+    assert var == "VAR check! They're looking at a possible penalty."
+    saved = next((line.text for ev, line in calls if ev.type == EventType.SHOT and ev.outcome == "saved"), None)
+    assert saved is None or "saved by Halloran" in saved or "saved by Brennan" in saved
+
+
+def test_var_check_is_called_before_the_explanation(world, match):
+    _, out, _ = run_match(world, match, ViewerProfile())
+    var = [c for ev, c in out if ev.type == EventType.VAR_CHECK][0]
+    assert var.lines[0].call, "the call comes first, the Teacher's explanation follows"
+
+
+def test_calls_are_in_the_viewers_language(world, match):
+    _, out, _ = run_match(world, match, ViewerProfile(language=Language.ZH), until_minute=60)
+    var = next(line.text for ev, line in lines(out) if line.call and ev.type == EventType.VAR_CHECK)
+    assert var == "VAR介入！正在检查是否是点球。"

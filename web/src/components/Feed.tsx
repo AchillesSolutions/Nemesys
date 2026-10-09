@@ -10,7 +10,7 @@ export function Feed({ feed, lang }: { feed: Commentary[]; lang: Language }) {
       {cards.length === 0 && <p className="empty">{t(lang, "commentaryEmpty")}</p>}
       <ol aria-live="polite">
         {cards.map(({ key, c, line }) => (
-          <li key={key} className={`card tone-${line.tone} ${line.headline ? "card-headline" : ""}`}>
+          <li key={key} className={`card tone-${line.tone} ${line.headline ? "card-headline" : ""} ${line.call ? "card-call" : ""}`}>
             <div className="card-top">
               <span className="card-minute">{c.minute}'</span>
               <span className="card-title">{line.card_title}</span>

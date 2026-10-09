@@ -13,9 +13,10 @@ const STALE_MS = 12000;
 const DUCKED_VOLUME = 0.25;
 const LOCALES: Record<Language, string[]> = { en: ["en-GB", "en"], zh: ["zh-CN", "zh"], es: ["es-MX", "es-US", "es"] };
 // Browser voices have no speaking styles; rate and pitch carry a little of the tone instead.
+// The base rate is brisk, like a commentator rather than an audiobook.
 const BROWSER_TONE: Record<string, { rate: number; pitch: number }> = {
-  excited: { rate: 1.08, pitch: 1.12 }, hopeful: { rate: 1.03, pitch: 1.05 }, tense: { rate: 1.0, pitch: 0.96 },
-  disappointed: { rate: 0.93, pitch: 0.9 }, calm: { rate: 0.96, pitch: 1.0 }, neutral: { rate: 1.0, pitch: 1.0 },
+  excited: { rate: 1.24, pitch: 1.12 }, hopeful: { rate: 1.18, pitch: 1.05 }, tense: { rate: 1.15, pitch: 0.96 },
+  disappointed: { rate: 1.06, pitch: 0.9 }, calm: { rate: 1.1, pitch: 1.0 }, neutral: { rate: 1.15, pitch: 1.0 },
 };
 
 interface Item {

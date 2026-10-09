@@ -15,9 +15,9 @@ from collections.abc import AsyncIterator, Callable
 from pydantic import BaseModel, Field
 
 from ..match_reader import ReaderUpdate
-from ..models import Match, World
+from ..models import EventType, Match, Position, World
 from .context import Describer, concepts_for
-from .i18n import FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, concept_label
+from .i18n import CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, concept_label
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
@@ -29,10 +29,10 @@ BACKLOG_SIZE = 3
 
 
 def speech_seconds(text: str, language: Language) -> float:
-    """Rough time to speak a line aloud."""
+    """Rough time to speak a line aloud, at Kick-Off's brisk commentary pace."""
     if language == Language.ZH:
-        return len(text) / 4.5
-    return len(text.split()) / 2.6
+        return len(text) / 5.2
+    return len(text.split()) / 3.0
 
 
 class Commentary(BaseModel):
@@ -89,21 +89,59 @@ class CommentarySession:
         moment = self._moment(update)
         return Line(text=text, tone=team_tone(moment), card_title=HEADLINE_TITLES[ev.type][lang], headline=True)
 
+    def call(self, update: ReaderUpdate) -> Line | None:
+        """A quick play-by-play line for this event, if it has one ("Mwangi shoots… saved!")."""
+        ev, lang = update.event, self.profile.language
+        variant = {"shot": ev.outcome or "", "var_check": ev.detail.get("reason", ""),
+                   "var_decision": ev.detail.get("decision", ""), "kick_off": str(ev.period),
+                   "free_kick": "wall" if ev.detail.get("wall") else "none"}.get(ev.type.value, "")
+        templates = CALLS.get((ev.type, variant)) or CALLS.get((ev.type, ""))
+        if not templates or (ev.type == EventType.KICK_OFF and update.salience < 2):
+            return None
+        snap = update.snapshot
+        surname = lambda pid: (self.describer.player(pid) or "").split(" ")[-1]  # noqa: E731
+        defending = snap.away if ev.team == snap.home.id else snap.home
+        keeper = next((p for p in defending.players_on_pitch
+                       if self.world.club(defending.id).player(p).position == Position.GK), None)
+        text = templates[lang].format(
+            player=surname(ev.player), team=self.describer.club(ev.team), keeper=surname(keeper),
+            on=surname(ev.other_player), off=surname(ev.player),
+            score=f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}")
+        return Line(text=text, tone=team_tone(self._moment(update)), call=True)
+
+    def instant(self, update: ReaderUpdate) -> Line | None:
+        """What to say the instant an event happens: a headline for big moments, otherwise a call."""
+        return self.headline(update) or self.call(update)
+
+    def call_only(self, update: ReaderUpdate) -> Commentary | None:
+        """For events the agents are not woken for: just the call, if there is one and there is room for it.
+        Notable moments (salience 2+) always get their call; minor ones only when Kick-Off is quiet."""
+        if update.salience < 2 and self.is_speaking():
+            return None
+        line = self.call(update)
+        if not line:
+            return None
+        self._speak([line])
+        return Commentary(event_id=update.event.id, minute=update.event.minute, lines=[line],
+                          reasoning="Play-by-play call.", learned=self.learned_labels())
+
     # -- main entry point ----------------------------------------------------
 
     async def respond(self, update: ReaderUpdate) -> AsyncIterator[Commentary]:
-        """Yield commentary for an update if it is worth waking the agents for."""
+        """Yield commentary for an update: the agents if it is worth waking them, otherwise maybe a quick call."""
         if self.should_wake(update):
             async for commentary in self.respond_now(update):
                 yield commentary
+        elif call := self.call_only(update):
+            yield call
 
     async def respond_now(self, update: ReaderUpdate) -> AsyncIterator[Commentary]:
-        """Yield commentary without the wake check: an instant headline first, then the agents' lines."""
-        headline = self.headline(update)
-        if headline:
-            self._speak([headline])
-            yield Commentary(event_id=update.event.id, minute=update.event.minute, lines=[headline],
-                             reasoning="Instant headline for a big moment.", learned=self.learned_labels())
+        """Yield commentary without the wake check: an instant line first, then the agents' lines."""
+        first = self.instant(update)
+        if first:
+            self._speak([first])
+            yield Commentary(event_id=update.event.id, minute=update.event.minute, lines=[first],
+                             reasoning="Instant line, before the agents.", learned=self.learned_labels())
 
         async with self._lock:
             decision = await self._run_agents(update)

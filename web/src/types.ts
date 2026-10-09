@@ -134,6 +134,7 @@ export interface Line {
   proposal_ids: number[];
   concepts: string[];
   headline: boolean;
+  call?: boolean; // a quick play-by-play call
 }
 
 export interface ProposalView {

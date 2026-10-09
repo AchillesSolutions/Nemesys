@@ -68,6 +68,39 @@ FAN_HEADLINES: dict[tuple[EventType, str], dict[Language, str]] = {
                                      ES: "¡Roja! {player} expulsado. ¡Se quedan con diez!"},
 }
 
+# Play-by-play calls: short lines spoken the instant something happens, before (or instead of) the agents.
+# Keyed by event type and a variant (shot outcome, VAR reason, half); "" is the default.
+CALLS: dict[tuple[EventType, str], dict[Language, str]] = {
+    (EventType.SHOT, "saved"): {EN: "{player} shoots… saved by {keeper}!", ZH: "{player}射门……被{keeper}扑出！",
+                                ES: "¡Disparo de {player}… lo para {keeper}!"},
+    (EventType.SHOT, "off_target"): {EN: "{player} shoots, just wide!", ZH: "{player}射门，稍稍偏出！",
+                                     ES: "¡Disparo de {player}, se va desviado!"},
+    (EventType.SHOT, "blocked"): {EN: "{player}'s shot is blocked!", ZH: "{player}的射门被挡出！",
+                                  ES: "¡Bloquean el disparo de {player}!"},
+    (EventType.CORNER, ""): {EN: "Corner to {team}.", ZH: "{team}获得角球。", ES: "Córner para {team}."},
+    (EventType.OFFSIDE, ""): {EN: "Flag's up! {player} is offside.", ZH: "边裁举旗！{player}越位了。",
+                              ES: "¡Bandera arriba! {player} está en fuera de juego."},
+    (EventType.YELLOW_CARD, ""): {EN: "Yellow card for {player}.", ZH: "{player}吃到黄牌。",
+                                  ES: "Tarjeta amarilla para {player}."},
+    (EventType.SUBSTITUTION, ""): {EN: "{team} change: {on} comes on for {off}.", ZH: "{team}换人：{on}替换{off}。",
+                                   ES: "Cambio en {team}: entra {on} por {off}."},
+    (EventType.VAR_CHECK, "possible penalty"): {EN: "VAR check! They're looking at a possible penalty.",
+                                                ZH: "VAR介入！正在检查是否是点球。",
+                                                ES: "¡Revisión del VAR! Están mirando un posible penal."},
+    (EventType.VAR_CHECK, "possible offside"): {EN: "Hold on, VAR is checking this for offside.",
+                                                ZH: "等一下，VAR正在检查是否越位。",
+                                                ES: "Atención, el VAR revisa un posible fuera de juego."},
+    (EventType.VAR_CHECK, ""): {EN: "VAR is taking a look at this.", ZH: "VAR正在查看回放。",
+                                ES: "El VAR está revisando la jugada."},
+    (EventType.VAR_DECISION, "penalty"): {EN: "VAR decision: it's a penalty!", ZH: "VAR判定：点球！",
+                                          ES: "¡Decisión del VAR: penal!"},
+    (EventType.KICK_OFF, "1"): {EN: "We're under way!", ZH: "比赛开始！", ES: "¡Arranca el partido!"},
+    (EventType.KICK_OFF, "2"): {EN: "The second half is under way.", ZH: "下半场开始。", ES: "Comienza la segunda parte."},
+    (EventType.HALF_TIME, ""): {EN: "Half-time. {score}.", ZH: "中场休息。{score}。", ES: "Descanso. {score}."},
+    (EventType.FREE_KICK, "wall"): {EN: "Free kick to {team}, in shooting range.", ZH: "{team}获得前场任意球，有射门机会。",
+                                    ES: "Tiro libre para {team}, en zona de disparo."},
+}
+
 HEADLINE_TITLES: dict[EventType, dict[Language, str]] = {
     EventType.GOAL: {EN: "GOAL!", ZH: "进球！", ES: "¡GOL!"},
     EventType.GOAL_DISALLOWED: {EN: "Goal ruled out", ZH: "进球无效", ES: "Gol anulado"},

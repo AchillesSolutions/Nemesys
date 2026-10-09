@@ -85,6 +85,7 @@ class Line(BaseModel):
     proposal_ids: list[int] = Field(default_factory=list)
     concepts: list[str] = Field(default_factory=list)
     headline: bool = False
+    call: bool = False  # a quick play-by-play call, spoken instantly
 
 
 class ProducerLine(BaseModel):

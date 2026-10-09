@@ -29,8 +29,8 @@ SWING_THRESHOLD = 62.0
 
 SALIENCE = {
     EventType.GOAL: 3, EventType.GOAL_DISALLOWED: 3, EventType.PENALTY: 3, EventType.RED_CARD: 3,
-    EventType.VAR_DECISION: 3, EventType.FULL_TIME: 3,
-    EventType.VAR_CHECK: 2, EventType.OFFSIDE: 2, EventType.YELLOW_CARD: 2, EventType.CORNER: 2,
+    EventType.VAR_DECISION: 3, EventType.FULL_TIME: 3, EventType.VAR_CHECK: 3,
+    EventType.OFFSIDE: 2, EventType.YELLOW_CARD: 2, EventType.CORNER: 2,
     EventType.SUBSTITUTION: 2, EventType.HALF_TIME: 2, EventType.KICK_OFF: 2,
     EventType.SHOT: 1, EventType.SAVE: 1, EventType.FOUL: 1, EventType.FREE_KICK: 1,
 }

@@ -39,7 +39,7 @@ TONE_STYLES = {
     "calm": ["calm", "narration-relaxed", "reflective", "chat"],
     "neutral": ["sports-commentary", "newscast", "chat"],
 }
-TONE_RATE = {"excited": "+8%", "hopeful": "+3%", "tense": "0%", "disappointed": "-6%", "calm": "-4%", "neutral": "0%"}
+TONE_RATE = {"excited": "+22%", "hopeful": "+16%", "tense": "+14%", "disappointed": "+6%", "calm": "+8%", "neutral": "+13%"}
 
 CACHE_SIZE = 400
 

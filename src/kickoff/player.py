@@ -151,6 +151,8 @@ class MatchPlayer:
             task = asyncio.create_task(self._commentate(update))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+        elif call := self.session.call_only(update):
+            await self.send({"type": "commentary", **call.model_dump(mode="json")})
 
     async def _commentate(self, update: ReaderUpdate) -> None:
         try:

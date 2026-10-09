@@ -262,3 +262,9 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .hands-free { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .hands-free-explain { color: var(--muted); font-size: .92rem; }
 .hands-free-toggle { display: inline-flex; gap: .5rem; align-items: center; }
+
+/* Play-by-play calls: one compact line, so the explanations stay prominent */
+.card-call { display: flex; gap: .5rem; align-items: baseline; padding: .35rem .8rem; background: transparent; border-left-color: var(--line); }
+.card-call .card-top { margin: 0; }
+.card-call .card-title { display: none; }
+.card-call .card-text { color: var(--muted); font-size: .92rem; }
