@@ -186,6 +186,7 @@ class Listener {
     const config = sdk.SpeechConfig.fromEndpoint(new URL(`wss://${first.region}.stt.speech.microsoft.com/speech/universal/v2`));
     config.authorizationToken = first.token;
     config.setProperty(sdk.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
+    config.setProperty(sdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "500"); // answer sooner after a pause
     const languages = [LOCALES[this.hint], ...Object.values(LOCALES).filter((l) => l !== LOCALES[this.hint])];
     const recognizer = sdk.SpeechRecognizer.FromConfig(
       config, sdk.AutoDetectSourceLanguageConfig.fromLanguages(languages), sdk.AudioConfig.fromDefaultMicrophoneInput());

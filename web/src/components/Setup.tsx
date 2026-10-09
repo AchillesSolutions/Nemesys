@@ -4,6 +4,7 @@ import { LANGUAGE_NAMES, LEVELS, t } from "../i18n";
 import { listener, type ListenState } from "../listen";
 import { sound } from "../sound";
 import type { HelpLevel, Language, Line, MatchInfo, Profile } from "../types";
+import { quickAnswer } from "../quickAnswer";
 import { voice } from "../voice";
 import { VoiceStatus } from "./VoiceStatus";
 
@@ -74,6 +75,29 @@ export function Setup({ dir, match, demo, onStart }: {
     return body;
   };
 
+  /** A simple answer, understood in the browser: no round trip to the model. */
+  const applyLocally = (changes: Partial<Profile>) => {
+    const p = { ...profileRef.current, ...changes };
+    profileRef.current = p;
+    setProfile(p);
+    return { profile: p, changes };
+  };
+
+  /** While a question is being asked, download the likely replies and the next question. */
+  const preloadAfter = (step: Step, lang: Language) => {
+    const langs = step === "language" ? LANGUAGES : [lang];
+    const lines = langs.flatMap((l) => {
+      switch (step) {
+        case "language": return [spoken(t(l, "confirmLanguage"), l), spoken(question("team", l), l)];
+        case "team": return [home, away].map((c) => spoken(t(l, "confirmTeam").replace("{team}", c.short_name), l))
+          .concat([spoken(t(l, "confirmNeutral"), l), spoken(question("level", l), l)]);
+        case "level": return [spoken(t(l, "confirmLevel"), l), spoken(question("alone", l), l)];
+        case "alone": return [spoken(t(l, "tipAlone"), l), spoken(t(l, "tipOthers"), l), spoken(t(l, "kickoffSoon"), l)];
+      }
+    });
+    void voice.preload(lines, lang);
+  };
+
   const start = (p: Profile) => {
     if (stageRef.current === "started") return;
     go("started");
@@ -99,6 +123,7 @@ export function Setup({ dir, match, demo, onStart }: {
     prompted.current = 0;
     go("asking");
     setAskedAt(null);
+    preloadAfter(next, p.language);
     if (next === "language") {
       // The one question asked in all three languages, back to back.
       await say(LANGUAGES.map((l) => spoken(question("language", l), l)), "en");
@@ -116,6 +141,7 @@ export function Setup({ dir, match, demo, onStart }: {
     listener.on({ state: (state, caption) => setListen({ state, caption }) });
     listener.mode = "open"; // in the lobby, everything said is an answer
     void listener.start("en");
+    preloadAfter("language", "en");
     await say([spoken(t("en", "welcome"), "en"), ...LANGUAGES.map((l) => spoken(question("language", l), l))], "en");
     setAskedAt(performance.now());
   };
@@ -147,7 +173,10 @@ export function Setup({ dir, match, demo, onStart }: {
         go("thinking");
         const current = stepRef.current;
         try {
-          const { profile: p, changes } = await understand(text, language, question(current, profileRef.current.language));
+          const quick = at === "asking" ? quickAnswer(current, text) : null;
+          const { profile: p, changes } = quick
+            ? applyLocally(quick)
+            : await understand(text, language, question(current, profileRef.current.language));
           listener.done(false);
           if (at === "ready") { go("ready"); return; } // a change of mind just before kick-off
           answered.current.add(current);
@@ -225,7 +254,8 @@ export function Setup({ dir, match, demo, onStart }: {
         </h1>
         <p className="venue">{match.venue} · {dir.world.league}</p>
         <p className="countdown">
-          {remaining == null ? t(lang, "kickoffWhenReady") : <>{t(lang, "kickoffIn")} <strong>{remaining}</strong></>}
+          {remaining == null ? t(lang, "kickoffAt")
+            : <strong>{remaining > 0 ? `19:59:${String(60 - remaining).padStart(2, "0")}` : "20:00"}</strong>}
         </p>
       </header>
 
