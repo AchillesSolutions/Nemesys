@@ -83,13 +83,16 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   useEffect(() => listener.setHint(state.profile.language), [state.profile.language]);
   useEffect(() => { listener.handsFree = state.profile.hands_free; }, [state.profile.hands_free]);
 
-  // A short hint on how to talk to Achilles: at kick-off, and when hands-free changes.
+  // A gentle reminder of what can be said: at kick-off, when hands-free changes, then every few minutes.
   const [hintUntil, setHintUntil] = useState(() => performance.now() + 15000);
   useEffect(() => setHintUntil(performance.now() + 15000), [state.profile.hands_free]);
+  useEffect(() => {
+    const id = setInterval(() => setHintUntil(performance.now() + 8000), 4 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
   const [, tick] = useState(0);
   useEffect(() => { const id = setTimeout(() => tick((n) => n + 1), Math.max(0, hintUntil - performance.now()) + 50); return () => clearTimeout(id); }, [hintUntil]);
-  const hint = performance.now() < hintUntil
-    ? (state.profile.hands_free ? t(lang, "justTalk") : t(lang, "sayWake").replace("{name}", "Achilles")) : null;
+  const hint = performance.now() < hintUntil ? t(lang, state.profile.hands_free ? "hintAlone" : "hintWake") : null;
   const spoken = useRef<Commentary | null>(null);
 
   // Speak each new piece of commentary once, as it arrives.

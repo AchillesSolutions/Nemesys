@@ -24,25 +24,6 @@ button, select { font: inherit; color: inherit; }
 h1, h2, p { margin: 0; }
 .boot { padding: 3rem; text-align: center; color: var(--muted); }
 
-/* ---------- Setup ---------- */
-.setup { max-width: 860px; margin: 0 auto; padding: 3rem 1.25rem 4rem; display: grid; gap: 1.75rem; }
-.setup-head h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); letter-spacing: -0.03em; }
-.setup-head h1::after { content: "."; color: var(--accent); }
-.setup-head p { color: var(--muted); font-size: 1.15rem; margin-top: .25rem; }
-.setup-head .fixture { font-size: .95rem; margin-top: .75rem; }
-fieldset { border: 0; padding: 0; margin: 0; }
-legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
-.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
-.choices.levels { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-.choice {
-  display: grid; gap: .35rem; justify-items: start; text-align: left; padding: 1rem 1.1rem;
-  background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius); cursor: pointer;
-  transition: border-color .15s, transform .15s, background .15s;
-}
-.choice:hover { transform: translateY(-1px); border-color: #3a5180; }
-.choice.on { border-color: var(--accent); background: var(--surface-2); }
-.choice.team.on { border-color: var(--club, var(--accent)); box-shadow: 0 0 0 1px var(--club2, transparent) inset; }
-.choice small { color: var(--muted); line-height: 1.35; }
 .btn {
   padding: .55rem 1rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer;
 }
@@ -236,21 +217,8 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .splash .tagline { color: var(--muted); font-size: 1.3rem; }
 .splash .fixture { color: var(--muted); }
 .splash .press { margin-top: 2.5rem; font-size: 1.2rem; animation: pulse 2s infinite; }
-.setup-voice { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.2rem; display: grid; gap: .8rem; }
 .achilles { font-size: 1.25rem; line-height: 1.5; }
-.setup.voice-only .choice { pointer-events: none; }
-.chip-host { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.chip.big { font-size: .9rem; padding: .3rem .8rem; }
-.toggles { margin-left: auto; display: inline-flex; gap: .4rem; }
-
-/* ---------- Voice indicator: a mic light and fading subtitles ---------- */
-.pitch-stack .voice-ui { position: absolute; inset: 0; pointer-events: none; }
-.voice-ui .subtitle {
-  position: absolute; left: 50%; bottom: 2.6rem; transform: translateX(-50%); max-width: 80%;
-  background: rgba(0, 0, 0, .72); color: #fff; padding: .35rem .9rem; border-radius: 8px;
-  font-size: 1.15rem; text-align: center; animation: slide .2s ease-out;
-}
-.voice-ui .voice-row { position: absolute; right: 1rem; top: .85rem; display: flex; align-items: center; gap: .6rem; }
+.setup.voice-only .voice-ui .voice-row { position: absolute; right: 1rem; top: .85rem; display: flex; align-items: center; gap: .6rem; }
 .voice-ui.inline { position: relative; display: grid; gap: .5rem; min-height: 1.4rem; }
 .voice-ui.inline .subtitle { position: static; transform: none; justify-self: start; max-width: 100%; }
 .voice-ui.inline .voice-row { position: static; justify-self: start; flex-direction: row-reverse; }
@@ -268,3 +236,28 @@ legend { font-weight: 600; font-size: 1.1rem; margin-bottom: .75rem; }
 .card-call .card-top { margin: 0; }
 .card-call .card-title { display: none; }
 .card-call .card-text { color: var(--muted); font-size: .92rem; }
+
+/* ---------- Match lobby ---------- */
+.splash .venue { color: var(--muted); }
+.lobby { max-width: 900px; margin: 0 auto; padding: 3rem 1.25rem 3rem; display: grid; gap: 1.6rem; }
+.lobby-head { text-align: center; display: grid; gap: .4rem; }
+.lobby-head h1 { font-size: clamp(1.8rem, 4.5vw, 3rem); letter-spacing: -0.02em; display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
+.lobby-head .v { color: var(--muted); font-weight: 400; }
+.lobby-head .venue { color: var(--muted); }
+.countdown { font-size: 1.15rem; }
+.countdown strong { font-variant-numeric: tabular-nums; font-size: 1.6rem; margin-left: .3rem; }
+.make-it-yours { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.3rem; display: grid; gap: .8rem; }
+.make-it-yours h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.miy-row { display: grid; grid-template-columns: 7rem 1fr; align-items: center; gap: .8rem; }
+.miy-label { color: var(--muted); }
+.miy-options { display: flex; flex-wrap: wrap; gap: .5rem; }
+.miy-option {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .95rem; border-radius: 999px;
+  background: var(--surface-2); border: 2px solid var(--line); cursor: pointer; transition: border-color .2s, background .2s, transform .2s;
+}
+.miy-option.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); transform: scale(1.04); }
+.lobby.voice-only .miy-option { pointer-events: none; }
+.achilles-says { display: grid; gap: .6rem; justify-items: center; text-align: center; min-height: 5rem; }
+.achilles { font-size: 1.25rem; line-height: 1.5; max-width: 46rem; }
+@media (max-width: 560px) { .miy-row { grid-template-columns: 1fr; gap: .3rem; } }
+.lobby .start { justify-self: center; }
