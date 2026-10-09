@@ -113,7 +113,8 @@ class CommentarySession:
         keeper = next((p for p in defending.players_on_pitch
                        if self.world.club(defending.id).player(p).position == Position.GK), None)
         text = templates[lang].format(
-            kits=self.kit_line(), player=surname(ev.player), team=self.describer.club(ev.team), keeper=surname(keeper),
+            kits=self.kit_line(), player=surname(ev.player), keeper=surname(keeper),
+            team=self.describer.club(ev.team or ev.detail.get("for_team")),
             on=surname(ev.other_player), off=surname(ev.player),
             score=f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}")
         return Line(text=text, tone=team_tone(self._moment(update)), call=True)

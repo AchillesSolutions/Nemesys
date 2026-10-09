@@ -453,11 +453,11 @@ def _var_penalty(s: _Sim, _: State) -> State:
     tackle = s.emit(EventType.TACKLE, "hbr", "hbr-3", at=(12, 70), other_player="kil-7", outcome="won",
                     detail={"in_penalty_area": True, "referee_signal": "play on"})
     s.tick(12)
-    s.emit(EventType.VAR_CHECK, detail={"reason": "possible penalty", "incident_event_id": tackle.id,
+    s.emit(EventType.VAR_CHECK, detail={"reason": "possible penalty", "for_team": "kil", "incident_event_id": tackle.id,
                                         "incident": "Pike's tackle on Quintero in the penalty area"})
     s.tick(75)
     s.emit(EventType.VAR_DECISION, detail={
-        "decision": "penalty", "on_field_review": True, "overturned": True,
+        "decision": "penalty", "for_team": "kil", "on_field_review": True, "overturned": True,
         "explanation": "Replays show Pike caught Quintero's ankle before reaching the ball.",
     })
     s.tick(60)
@@ -515,11 +515,11 @@ def _disallowed_goal(s: _Sim, _: State) -> State:
     s.score["kil"] += 1
     goal = s.emit(EventType.GOAL, "kil", "kil-9", at=(90, 45), detail={"assist": "kil-10", **s.score_detail()})
     s.tick(35)
-    s.emit(EventType.VAR_CHECK, detail={"reason": "possible offside", "incident_event_id": goal.id,
+    s.emit(EventType.VAR_CHECK, detail={"reason": "possible offside", "for_team": "kil", "incident_event_id": goal.id,
                                         "incident": "Whitcombe's position when Andersen played the pass"})
     s.tick(80)
     s.emit(EventType.VAR_DECISION, detail={
-        "decision": "no goal", "on_field_review": False, "overturned": True,
+        "decision": "no goal", "for_team": "kil", "on_field_review": False, "overturned": True,
         "explanation": "Whitcombe's shoulder was beyond the last defender when the pass was played.",
         **offside,
     })

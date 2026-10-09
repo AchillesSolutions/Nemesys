@@ -85589,6 +85589,7 @@
    "type": "var_check",
    "detail": {
     "reason": "possible penalty",
+    "for_team": "kil",
     "incident_event_id": 804,
     "incident": "Pike's tackle on Quintero in the penalty area"
    },
@@ -85692,6 +85693,7 @@
    "type": "var_decision",
    "detail": {
     "decision": "penalty",
+    "for_team": "kil",
     "on_field_review": true,
     "overturned": true,
     "explanation": "Replays show Pike caught Quintero's ankle before reaching the ball."
@@ -127314,6 +127316,7 @@
    "type": "var_check",
    "detail": {
     "reason": "possible offside",
+    "for_team": "kil",
     "incident_event_id": 1202,
     "incident": "Whitcombe's position when Andersen played the pass"
    },
@@ -127413,6 +127416,7 @@
    "type": "var_decision",
    "detail": {
     "decision": "no goal",
+    "for_team": "kil",
     "on_field_review": false,
     "overturned": true,
     "explanation": "Whitcombe's shoulder was beyond the last defender when the pass was played.",

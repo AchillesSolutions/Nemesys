@@ -3,7 +3,7 @@ import { Directory, loadStatic } from "./api";
 import { BridgeBanner, Chapters, DemoControls, ProfileChips, ViewerSettings } from "./components/Controls";
 import { VoiceStatus } from "./components/VoiceStatus";
 import { listener, type ListenState } from "./listen";
-import { Captions } from "./components/Captions";
+import { Captions, TalkCard } from "./components/Captions";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
 import { Pitch, Ticker } from "./components/Pitch";
@@ -84,13 +84,9 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   useEffect(() => listener.setHint(state.profile.language), [state.profile.language]);
   useEffect(() => { listener.handsFree = state.profile.hands_free; }, [state.profile.hands_free]);
 
-  // A gentle reminder of what can be said: at kick-off, when hands-free changes, then every few minutes.
+  // A short hint on how to talk to Achilles, at kick-off and when hands-free changes (the talk card stays).
   const [hintUntil, setHintUntil] = useState(() => performance.now() + 15000);
   useEffect(() => setHintUntil(performance.now() + 15000), [state.profile.hands_free]);
-  useEffect(() => {
-    const id = setInterval(() => setHintUntil(performance.now() + 8000), 4 * 60 * 1000);
-    return () => clearInterval(id);
-  }, []);
   const [, tick] = useState(0);
   useEffect(() => { const id = setTimeout(() => tick((n) => n + 1), Math.max(0, hintUntil - performance.now()) + 50); return () => clearTimeout(id); }, [hintUntil]);
   const hint = performance.now() < hintUntil ? t(lang, state.profile.hands_free ? "hintAlone" : "hintWake") : null;
@@ -164,10 +160,10 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
-            <Captions voiceOn={voiceOn} feed={state.feed} />
             <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
                          handsFree={state.profile.hands_free} />
           </div>
+          <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} />
           {PRESET.demo && <Ticker dir={dir} event={state.event} lang={lang} />}
           {PRESET.demo && (
             <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}
@@ -178,6 +174,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
           <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
           <Learned learned={state.learned} lang={lang} />
           <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
+          <TalkCard lang={lang} handsFree={state.profile.hands_free} />
           {PRESET.demo && <Feed feed={state.feed} lang={lang} />}
           {PRESET.demo && <UnderTheHood feed={state.feed} lang={lang} />}
         </aside>

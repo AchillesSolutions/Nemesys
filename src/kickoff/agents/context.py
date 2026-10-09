@@ -55,6 +55,9 @@ class Describer:
     def club(self, club_id: str | None) -> str:
         return self.world.club(club_id).short_name if club_id else ""
 
+    def _other(self, club_id: str | None) -> str | None:
+        return None if club_id is None else self.away if club_id == self.home else self.home
+
     def player(self, player_id: str | None) -> str:
         if not player_id:
             return ""
@@ -113,9 +116,14 @@ class Describer:
             case EventType.SUBSTITUTION:
                 return f"{team} substitution: {o} comes on for {p}. {d.get('note', '')}."
             case EventType.VAR_CHECK:
-                return f"VAR is checking a {d.get('reason')}: {d.get('incident')}."
+                for_team = self.club(d.get("for_team"))
+                return (f"VAR is checking a {d.get('reason')} for {for_team} "
+                        f"(against {self.club(self._other(d.get('for_team')))}): {d.get('incident')}.")
             case EventType.VAR_DECISION:
-                return f"VAR decision: {d.get('decision')}. {d.get('explanation', '')}"
+                for_team = self.club(d.get("for_team"))
+                verdict = {"penalty": f"a penalty to {for_team}",
+                           "no goal": f"no goal: {for_team}'s goal is ruled out"}.get(d.get("decision"), d.get("decision"))
+                return f"VAR decision: {verdict}. {d.get('explanation', '')}"
             case EventType.PENALTY:
                 return f"Penalty to {team}! {p} will take it."
             case EventType.HALF_TIME:

@@ -12,8 +12,9 @@ import { VoiceStatus } from "./VoiceStatus";
  * and asks one question at a time: which language (asked in all three, back to back), which team, how
  * familiar they are with football, and whether they are watching alone. The "Make it yours" options
  * light up as they answer, and anything already answered in an earlier reply is not asked again.
- * A countdown runs to kick-off, shortening to ten seconds once everything is answered; silence means
- * a neutral beginner in English. With ?demo=1 the options can also be clicked.
+ * Kick-off waits until every choice is made: then a five-second countdown starts. If nobody answers,
+ * each question is asked once more and then its default is used (a neutral beginner in English).
+ * With ?demo=1 the options can also be clicked.
  */
 
 type Stage = "splash" | "asking" | "thinking" | "tip" | "ready" | "started";
@@ -21,9 +22,8 @@ type Step = "language" | "team" | "level" | "alone";
 
 const STEPS: Step[] = ["language", "team", "level", "alone"];
 const STEP_OF: Record<string, Step> = { language: "language", team: "team", level: "level", hands_free: "alone" };
-const COUNTDOWN_S = 90;
-const SOON_S = 10;
-const NO_ANSWER_MS = 15000;
+const SOON_S = 5;
+const NO_ANSWER_MS = 12000; // counted from when the question has finished being asked
 const DEFAULT: Profile = { team: null, language: "en", level: "beginner", hands_free: false };
 const LANGUAGES: Language[] = ["en", "zh", "es"];
 
@@ -43,6 +43,7 @@ export function Setup({ dir, match, demo, onStart }: {
   const [said, setSaid] = useState<string[]>([]);
   const [listen, setListen] = useState<{ state: ListenState; caption?: string }>({ state: "off" });
   const [kickoffAt, setKickoffAt] = useState<number | null>(null);
+  const [askedAt, setAskedAt] = useState<number | null>(null); // when the current question finished
   const [now, setNow] = useState(() => performance.now());
   const stageRef = useRef(stage);
   const stepRef = useRef(step);
@@ -85,7 +86,7 @@ export function Setup({ dir, match, demo, onStart }: {
     go("tip");
     await say([spoken(t(p.language, p.hands_free ? "tipAlone" : "tipOthers"))], p.language);
     go("ready");
-    setKickoffAt((at) => Math.min(at ?? Infinity, performance.now() + SOON_S * 1000));
+    setKickoffAt(performance.now() + SOON_S * 1000);
     await say([spoken(t(p.language, "kickoffSoon"))], p.language);
   };
 
@@ -97,12 +98,14 @@ export function Setup({ dir, match, demo, onStart }: {
     setStep(next);
     prompted.current = 0;
     go("asking");
+    setAskedAt(null);
     if (next === "language") {
       // The one question asked in all three languages, back to back.
       await say(LANGUAGES.map((l) => spoken(question("language", l), l)), "en");
     } else {
       await say([spoken(question(next, p.language))], p.language);
     }
+    setAskedAt(performance.now());
   };
 
   const begin = async () => {
@@ -113,8 +116,8 @@ export function Setup({ dir, match, demo, onStart }: {
     listener.on({ state: (state, caption) => setListen({ state, caption }) });
     listener.mode = "open"; // in the lobby, everything said is an answer
     void listener.start("en");
-    setKickoffAt(performance.now() + COUNTDOWN_S * 1000);
     await say([spoken(t("en", "welcome"), "en"), ...LANGUAGES.map((l) => spoken(question("language", l), l))], "en");
+    setAskedAt(performance.now());
   };
 
   // Press any key (or tap) to start.
@@ -158,22 +161,25 @@ export function Setup({ dir, match, demo, onStart }: {
     });
   });
 
-  // Nobody answers: ask once more, then carry on with the default for that question.
+  // Nobody answers (counted from when the question has been fully asked): ask once more, then use
+  // the default for that question and move on.
   useEffect(() => {
-    if (stage !== "asking") return;
+    if (stage !== "asking" || askedAt == null) return;
     const id = setTimeout(async () => {
       const p = profileRef.current;
       if (prompted.current++ === 0) {
         const s = stepRef.current;
+        setAskedAt(null);
         await say(s === "language" ? LANGUAGES.map((l) => spoken(question("language", l), l))
                                    : [spoken(question(s, p.language))], p.language);
+        setAskedAt(performance.now());
       } else {
         answered.current.add(stepRef.current);
         await askNext(p);
       }
     }, NO_ANSWER_MS);
     return () => clearTimeout(id);
-  }, [stage, step, listen.caption]);
+  }, [stage, step, askedAt, listen.caption]);
 
   // The countdown.
   useEffect(() => {
@@ -181,8 +187,8 @@ export function Setup({ dir, match, demo, onStart }: {
     const id = setInterval(() => setNow(performance.now()), 250);
     return () => clearInterval(id);
   }, [kickoffAt, stage]);
-  const remaining = kickoffAt == null ? COUNTDOWN_S : Math.max(0, Math.ceil((kickoffAt - now) / 1000));
-  useEffect(() => { if (kickoffAt != null && remaining === 0) start(profileRef.current); }, [remaining, kickoffAt]);
+  const remaining = kickoffAt == null ? null : Math.max(0, Math.ceil((kickoffAt - now) / 1000));
+  useEffect(() => { if (remaining === 0) start(profileRef.current); }, [remaining]);
 
   if (stage === "splash") {
     return (
@@ -201,7 +207,7 @@ export function Setup({ dir, match, demo, onStart }: {
     profileRef.current = p;
     setProfile(p);
   };
-  const mmss = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
+
   const levels: HelpLevel[] = ["beginner", "getting_there", "big_picture"];
 
   return (
@@ -213,7 +219,9 @@ export function Setup({ dir, match, demo, onStart }: {
           <span style={{ color: away.colours[1] }}>{away.name}</span>
         </h1>
         <p className="venue">{match.venue} · {dir.world.league}</p>
-        <p className="countdown">{t(lang, "kickoffIn")} <strong>{mmss}</strong></p>
+        <p className="countdown">
+          {remaining == null ? t(lang, "kickoffWhenReady") : <>{t(lang, "kickoffIn")} <strong>{remaining}</strong></>}
+        </p>
       </header>
 
       <section className="make-it-yours" aria-label={t(lang, "makeItYours")}>

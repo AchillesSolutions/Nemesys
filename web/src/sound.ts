@@ -47,7 +47,7 @@ export class MatchSound {
     const pattern = WHISTLES[ev.type];
     if (pattern) this.whistle(pattern);
     switch (ev.type) {
-      case "goal": this.swell(0.42, 5, 1800); break;
+      case "goal": this.swell(0.3, 4, 1800); break; // a roar, but Achilles stays on top
       case "penalty": case "red_card": this.swell(0.22, 3, 1200); break;
       case "shot": if (ev.outcome !== "goal") this.swell(0.16, 1.6, 1100); break; // the "ooh"
       case "corner": case "var_decision": this.swell(0.1, 2, 900); break;
@@ -120,7 +120,7 @@ export class MatchSound {
   /** Lower the crowd while commentary is speaking, and bring it back afterwards. */
   duck(on: boolean): void {
     if (!this.ctx || !this.ducker) return;
-    this.ducker.gain.setTargetAtTime(on ? 0.35 : 1, this.ctx.currentTime, on ? 0.08 : 0.4);
+    this.ducker.gain.setTargetAtTime(on ? 0.2 : 1, this.ctx.currentTime, on ? 0.06 : 0.4);
   }
 
   private startCrowd(): void {

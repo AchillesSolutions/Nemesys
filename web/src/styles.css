@@ -41,7 +41,7 @@ h1, h2, p { margin: 0; }
 .brand { font-weight: 800; letter-spacing: -0.02em; font-size: 1.2rem; }
 .brand::after { content: "."; color: var(--accent); }
 .status { color: var(--muted); font-size: .9rem; }
-.grid { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(300px, 1fr); gap: 1rem; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(300px, 1fr); gap: 1rem; align-items: stretch; }
 .col-main, .col-side { display: grid; gap: .75rem; min-width: 0; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 @media (max-width: 980px) {
@@ -267,16 +267,32 @@ h1, h2, p { margin: 0; }
 .achilles-says .achilles + .achilles { font-size: 1.1rem; color: var(--muted); margin-top: -.3rem; }
 
 /* ---------- Subtitles and the heard bubble ---------- */
-.captions {
-  /* centred with left/right, not a transform, so the fade-in animation can't move it */
-  position: absolute; left: 7%; right: 7%; bottom: 2.4rem; pointer-events: none; text-align: center; z-index: 5;
-  animation: slide .2s ease-out;
-}
-.captions p {
-  display: inline; background: rgba(0, 0, 0, .78); color: #fff; padding: .25rem .6rem; border-radius: 6px;
-  font-size: clamp(1rem, 1.45vw, 1.25rem); line-height: 1.75; box-decoration-break: clone; -webkit-box-decoration-break: clone;
-}
 .heard { background: rgba(11, 20, 34, .88); color: var(--text); padding: .25rem .75rem; border-radius: 999px; font-size: .9rem; font-style: italic; max-width: 26rem; }
 .col-side .table table { font-size: .88rem; }
 .splash .press-other { color: var(--muted); font-size: .95rem; margin-top: -.2rem; }
 .splash .why { color: var(--muted); max-width: 34rem; margin: 1.6rem auto 0; line-height: 1.55; font-size: .95rem; }
+
+.col-main { display: flex; flex-direction: column; }
+.col-side { align-content: start; }
+.caption-bar {
+  flex: 1; min-height: 6.5rem; display: flex; flex-direction: column; justify-content: center; gap: .45rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1.2rem;
+}
+.caption-text { font-size: clamp(1.1rem, 1.5vw, 1.35rem); line-height: 1.5; color: var(--muted); transition: color .3s; }
+.caption-bar.speaking .caption-text { color: var(--text); }
+.caption-text.empty { font-size: 1rem; }
+.caption-tag { align-self: flex-start; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: .12rem .55rem; border-radius: 999px; border: 1px solid currentColor; }
+.tag-live { color: var(--danger); }
+.tag-learning { color: var(--teacher); }
+.tag-commentary { color: var(--storyteller); }
+.tag-league { color: var(--league); }
+.tag-achilles { color: var(--accent); }
+.talk-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.talk-card li { color: var(--text); font-size: .92rem; }
+/* Everything in view on a laptop or TV: the pitch never grows taller than the screen allows */
+.pitch { max-height: calc(100vh - 21rem); margin: 0 auto; }
+.col-side { gap: .6rem; }
+.col-side .panel { padding: .7rem .95rem; }
+.col-side .table td { padding: .16rem .3rem; }
+.stats td { padding: .15rem 0; }
