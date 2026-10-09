@@ -46,7 +46,27 @@ class Voice {
   private turn: object | null = null; // identifies the line currently holding the speaker
 
   /** Ask the server whether Azure AI Speech is available. */
+  /** Resolves once we know whether Azure voices are available. */
+  ready: Promise<void> = Promise.resolve();
+  private preloaded = new Map<string, Promise<Blob | null>>();
+
+  /** Download lines' audio ahead of time, so they play the instant they are said (e.g. the welcome). */
+  async preload(lines: Line[], lang: Language): Promise<void> {
+    await this.ready;
+    if (!this.azure) return;
+    for (const line of lines) {
+      const language = line.language ?? lang;
+      const key = audioKey(line, language);
+      if (!this.preloaded.has(key)) this.preloaded.set(key, this.fetchAudio(line, language));
+    }
+  }
+
   async init(): Promise<void> {
+    this.ready = this.check();
+    return this.ready;
+  }
+
+  private async check(): Promise<void> {
     try {
       this.azure = Boolean((await (await fetch("/api/health")).json()).speech);
     } catch {
@@ -82,7 +102,7 @@ class Voice {
     if (!this.enabled) return;
     for (const line of lines) {
       const item: Item = { line, lang: line.language ?? lang, queuedAt: performance.now() };
-      if (this.azure) item.audio = this.fetchAudio(line, item.lang);
+      if (this.azure) item.audio = this.preloaded.get(audioKey(line, item.lang)) ?? this.fetchAudio(line, item.lang);
       if (line.headline) {
         this.queue = [item, ...this.queue.filter((q) => q.line.headline)];
         this.playing?.stop();
@@ -132,7 +152,9 @@ class Voice {
    */
   private async next(): Promise<void> {
     const now = performance.now();
-    this.queue = this.queue.filter((q) => q.line.headline || now - q.queuedAt < STALE_MS);
+    // Live commentary that has waited too long is dropped so it never lags the match; Achilles' own
+    // words to the viewer (the lobby, answers to questions) are always said.
+    this.queue = this.queue.filter((q) => q.line.headline || q.line.sources.includes("host") || now - q.queuedAt < STALE_MS);
     const item = this.queue.shift();
     if (!item) {
       this.playing = null;
@@ -206,6 +228,8 @@ class Voice {
     };
   }
 }
+
+const audioKey = (line: Line, lang: Language) => `${lang}|${line.tone}|${line.text}`;
 
 /** The best installed voice for a language: Edge's "Natural" (neural) voices first. */
 function pickBrowserVoice(lang: Language): SpeechSynthesisVoice | undefined {

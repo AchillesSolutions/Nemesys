@@ -83,3 +83,38 @@ describe("voice languages", () => {
     expect(asked).toEqual(["en", "zh", "es"]);
   });
 });
+
+describe("voice queue", () => {
+  it("never drops Achilles' own words as stale, but drops stale commentary", async () => {
+    const { voice } = await import("./voice");
+    await voice.init();
+    voice.enable();
+    const host = (text: string): Line => ({ ...line(text), sources: ["host"] });
+    voice.say([host("Welcome!"), line("Old commentary."), host("¿Qué idioma prefieres?")], "en");
+    await settle();
+    const realNow = performance.now.bind(performance);
+    vi.spyOn(performance, "now").mockImplementation(() => realNow() + 20000); // twenty seconds later
+    FakeAudio.all[0].end();
+    await settle();
+    expect(voice.current).toBe("¿Qué idioma prefieres?");
+    vi.restoreAllMocks();
+  });
+
+  it("uses audio downloaded in advance instead of fetching again", async () => {
+    let fetches = 0;
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url.endsWith("/api/health")) return Promise.resolve({ json: () => Promise.resolve({ speech: true }) });
+      fetches++;
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob()) });
+    });
+    const { voice } = await import("./voice");
+    await voice.init();
+    await voice.preload([line("Welcome to Kick-Off!")], "en");
+    expect(fetches).toBe(1);
+    voice.enable();
+    voice.say([line("Welcome to Kick-Off!")], "en");
+    await settle();
+    expect(fetches).toBe(1);
+    expect(voice.current).toBe("Welcome to Kick-Off!");
+  });
+});

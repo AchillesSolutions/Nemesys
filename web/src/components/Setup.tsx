@@ -120,6 +120,11 @@ export function Setup({ dir, match, demo, onStart }: {
     setAskedAt(performance.now());
   };
 
+  // While waiting for the key press, download the welcome so it starts the instant the key is pressed.
+  useEffect(() => {
+    void voice.preload([spoken(t("en", "welcome"), "en"), ...LANGUAGES.map((l) => spoken(question("language", l), l))], "en");
+  }, []);
+
   // Press any key (or tap) to start.
   useEffect(() => {
     if (stage !== "splash") return;
