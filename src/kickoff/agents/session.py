@@ -41,6 +41,7 @@ class Commentary(BaseModel):
     event_id: int
     minute: str
     elapsed: int = 0  # match second of the moment it is about, so the feed can stay in match order
+    language: Language = Language.EN  # what it was written in: lines in an old language are not spoken
     lines: list[Line]
     reasoning: str = ""
     proposals: list[dict] = Field(default_factory=list, description="Everything the specialists suggested")
@@ -139,7 +140,8 @@ class CommentarySession:
         if not line:
             return None
         self._speak([line])
-        return Commentary(event_id=update.event.id, minute=update.event.minute, elapsed=update.event.elapsed, lines=[line],
+        return Commentary(event_id=update.event.id, minute=update.event.minute, elapsed=update.event.elapsed,
+                          language=self.profile.language, lines=[line],
                           reasoning="Play-by-play call.", learned=self.learned_labels())
 
     # -- main entry point ----------------------------------------------------
@@ -157,7 +159,8 @@ class CommentarySession:
         first = self.instant(update)
         if first:
             self._speak([first])
-            yield Commentary(event_id=update.event.id, minute=update.event.minute, elapsed=update.event.elapsed, lines=[first],
+            yield Commentary(event_id=update.event.id, minute=update.event.minute, elapsed=update.event.elapsed,
+                             language=self.profile.language, lines=[first],
                              reasoning="Instant line, before the agents.", learned=self.learned_labels())
 
         async with self._lock:
@@ -166,6 +169,7 @@ class CommentarySession:
         if decision.lines:
             yield Commentary(
                 event_id=update.event.id, minute=update.event.minute, elapsed=update.event.elapsed,
+                language=decision.moment.profile.language,
                 lines=decision.lines,
                 reasoning=decision.reasoning, learned=self.learned_labels(),
                 proposals=[{"id": p.id, "agent": p.agent, "priority": p.priority, "text": p.text,

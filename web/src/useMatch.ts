@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  Chapter, Commentary, Control, MatchEvent, Mode, Profile, ServerMessage, Snapshot,
+  Chapter, Commentary, Control, Language, MatchEvent, Mode, Profile, ServerMessage, Snapshot,
 } from "./types";
 
 export interface MatchState {
@@ -27,6 +27,8 @@ export interface MatchState {
   error: string | null;
   asking: number; // questions waiting for the Host's answer
   lastReply: "answer" | "ignored" | null; // whether Kick-Off said something back to the last thing heard
+  /** Achilles' latest answer to the viewer: spoken and shown as a subtitle, not added to the match feed. */
+  reply: { seq: number; text: string; language: Language } | null;
 }
 
 const TRAIL = 6;
@@ -54,7 +56,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
     connected: false, chapters: [], chapter: null, event: null, recent: [], snapshot: null, feed: [],
     arrivedAt: 0, nextGap: null, pace: 1, bridge: null,
     learned: [], profile: initial ?? { team: null, language: "en", level: "beginner", hands_free: false },
-    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0, lastReply: null,
+    mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0, lastReply: null, reply: null,
   }));
   const ws = useRef<WebSocket | null>(null);
 
@@ -115,14 +117,9 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
     }
     case "profile":
       return { ...s, profile: msg.profile, learned: msg.learned };
-    case "host": {
-      const entry: Commentary = {
-        seq: ++feedSeq, event_id: -Date.now(), elapsed: s.event?.elapsed ?? 0, minute: s.event?.minute ?? "0", reasoning: "", proposals: [], learned: s.learned,
-        lines: [{ text: msg.answer, tone: "neutral", card_title: `“${msg.question}”`, sources: ["host"],
-                  proposal_ids: [], concepts: [], headline: false }],
-      };
-      return { ...s, feed: addToFeed(s.feed, entry), asking: Math.max(0, s.asking - 1), lastReply: "answer" };
-    }
+    case "host":
+      return { ...s, reply: { seq: ++feedSeq, text: msg.answer, language: msg.language },
+               asking: Math.max(0, s.asking - 1), lastReply: "answer" };
     case "ignored": {
       // Heard something that wasn't for Kick-Off (another person, the TV): say nothing.
       return { ...s, asking: Math.max(0, s.asking - 1), lastReply: "ignored" };

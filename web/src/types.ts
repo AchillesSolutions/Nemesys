@@ -151,6 +151,7 @@ export interface Commentary {
   event_id: number;
   minute: string;
   elapsed?: number; // match second of the moment it is about
+  language?: Language; // what it was written in
   lines: Line[];
   reasoning: string;
   proposals: ProposalView[];

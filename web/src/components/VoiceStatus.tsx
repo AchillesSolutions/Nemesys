@@ -10,8 +10,9 @@ const SUBTITLE_LINGER_MS = 2500;
  * Kick-Off is listening to you, and a subtitle of what it heard that fades away. An optional hint
  * (shown briefly) tells new viewers how to talk to it.
  */
-export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false }: {
+export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false, reply = null }: {
   state: ListenState; caption?: string; lang: Language; hint?: string | null; handsFree?: boolean; inline?: boolean;
+  reply?: string | null;
 }) {
   const [subtitle, setSubtitle] = useState<string | null>(null);
 
@@ -27,7 +28,7 @@ export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inl
     : live ? t(lang, "listening") : "";
   return (
     <div className={`voice-ui ${inline ? "inline" : ""}`} role="status" aria-live="polite" aria-label={label}>
-      {subtitle && <div className="subtitle">{subtitle}</div>}
+      {reply ? <div className="subtitle reply">{reply}</div> : subtitle && <div className="subtitle">{subtitle}</div>}
       <div className="voice-row">
         {(hint || state === "off") && <span className="voice-hint">{state === "off" ? t(lang, "micOff") : hint}</span>}
         <span className={`mic-dot md-${state} ${live ? "live" : ""}`} title={label} />

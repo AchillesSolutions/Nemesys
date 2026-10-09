@@ -215,3 +215,8 @@ def test_calls_are_in_the_viewers_language(world, match):
     _, out, _ = run_match(world, match, ViewerProfile(language=Language.ZH), until_minute=60)
     var = next(line.text for ev, line in lines(out) if line.call and ev.type == EventType.VAR_CHECK)
     assert var == "VAR介入！正在检查是否是点球。"
+
+
+def test_commentary_carries_the_language_it_was_written_in(world, match):
+    _, out, _ = run_match(world, match, ViewerProfile(language=Language.ES), until_minute=10)
+    assert out and all(c.language == Language.ES for _, c in out)

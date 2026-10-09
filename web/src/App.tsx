@@ -9,7 +9,7 @@ import { Pitch, Ticker } from "./components/Pitch";
 import { Scoreboard } from "./components/Scoreboard";
 import { Setup } from "./components/Setup";
 import { LEVELS, t } from "./i18n";
-import type { Commentary, HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
+import type { HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
 import { sound } from "./sound";
 import { voice } from "./voice";
 import { useMatch } from "./useMatch";
@@ -93,15 +93,28 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
   const [, tick] = useState(0);
   useEffect(() => { const id = setTimeout(() => tick((n) => n + 1), Math.max(0, hintUntil - performance.now()) + 50); return () => clearTimeout(id); }, [hintUntil]);
   const hint = performance.now() < hintUntil ? t(lang, state.profile.hands_free ? "hintAlone" : "hintWake") : null;
-  const spoken = useRef<Commentary | null>(null);
+  const spokenSeq = useRef(0); // the newest feed entry already spoken
 
-  // Speak each new piece of commentary once, as it arrives.
+  // Speak each new piece of commentary once, as it arrives, but only if it is in the viewer's
+  // current language (lines written just before a language switch are shown, not read out).
   useEffect(() => {
-    const latest = state.feed[0];
-    if (!latest || latest === spoken.current) return;
-    spoken.current = latest;
-    voice.say(latest.lines, state.profile.language);
+    const fresh = state.feed.filter((c) => (c.seq ?? 0) > spokenSeq.current).sort((x, y) => (x.seq ?? 0) - (y.seq ?? 0));
+    for (const c of fresh) {
+      spokenSeq.current = Math.max(spokenSeq.current, c.seq ?? 0);
+      if (!c.language || c.language === state.profile.language) voice.say(c.lines, state.profile.language);
+    }
   }, [state.feed, state.profile.language]);
+
+  // Achilles' answers to the viewer: spoken in the language they were written in, shown as a subtitle.
+  const [replyShown, setReplyShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!state.reply) return;
+    voice.say([{ text: state.reply.text, tone: "neutral", card_title: "", sources: ["host"], proposal_ids: [],
+                 concepts: [], headline: true }], state.reply.language);
+    setReplyShown(state.reply.text);
+    const id = setTimeout(() => setReplyShown(null), Math.min(14000, 2500 + state.reply.text.length * 60));
+    return () => clearTimeout(id);
+  }, [state.reply]);
 
   // A new language means the queued lines are in the wrong one.
   useEffect(() => voice.stop(), [state.profile.language]);
@@ -155,7 +168,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
             <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
-                         handsFree={state.profile.hands_free} />
+                         handsFree={state.profile.hands_free} reply={replyShown} />
           </div>
           <Ticker dir={dir} event={state.event} lang={lang} />
           <Chapters chapters={state.chapters} current={state.mode === "key_moments" ? state.chapter : null}

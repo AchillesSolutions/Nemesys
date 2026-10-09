@@ -261,3 +261,4 @@ h1, h2, p { margin: 0; }
 .achilles { font-size: 1.25rem; line-height: 1.5; max-width: 46rem; }
 @media (max-width: 560px) { .miy-row { grid-template-columns: 1fr; gap: .3rem; } }
 .lobby .start { justify-self: center; }
+.voice-ui .subtitle.reply { border-left: 3px solid var(--accent); text-align: left; }
