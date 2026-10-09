@@ -308,4 +308,6 @@ h1, h2, p { margin: 0; }
 .talk-card .card-dot { position: absolute; top: .85rem; right: .95rem; }
 .talk-note { margin-top: .55rem; color: var(--muted); font-size: .85rem; }
 .talk-note.heard-note { color: var(--text); font-style: italic; }
-.stakes { margin-top: .55rem; color: var(--muted); font-size: .85rem; line-height: 1.45; }
+.talk-card .profile-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .75rem; }
+.table tr.ours td { color: var(--club); }
+.table tr.ours td.pos { box-shadow: inset 3px 0 0 var(--club); }

@@ -161,11 +161,8 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
                     clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
                              speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
         {!state.connected && <span className="status">{t(lang, "connecting")}</span>}
-        {state.finished && <span className="status">{t(lang, "finished")}</span>}
       </header>
-      {PRESET.demo
-        ? <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={toggles} />
-        : <ProfileChips dir={dir} profile={state.profile} extra={toggles} />}
+      {PRESET.demo && <ViewerSettings dir={dir} match={match} profile={state.profile} send={send} extra={toggles} />}
       {PRESET.demo && (
         <DemoControls lang={lang} mode={state.mode} speed={state.speed} paused={state.paused} send={send} />
       )}
@@ -185,6 +182,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
         </div>
         <aside className="col-side">
           <TalkCard lang={lang} handsFree={state.profile.hands_free}>
+            {!PRESET.demo && <ProfileChips dir={dir} profile={state.profile} />}
             <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
                          handsFree={state.profile.hands_free} inCard />
           </TalkCard>

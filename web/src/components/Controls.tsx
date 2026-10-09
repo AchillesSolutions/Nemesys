@@ -33,16 +33,14 @@ export function DemoControls({ lang, mode, speed, paused, send }: {
   );
 }
 
-/** What the viewer has chosen, shown (not edited) on the TV screen: changes are made by voice. */
-export function ProfileChips({ dir, profile, extra }: { dir: Directory; profile: Profile; extra?: ReactNode }) {
+/** What the viewer has chosen, shown (not edited) in the talk card: changes are made by voice. */
+export function ProfileChips({ dir, profile }: { dir: Directory; profile: Profile }) {
   const lang = profile.language;
   return (
-    <div className="controls profile-chips">
-      <span className="chip big">{t(lang, "supporting")}: {dir.club(profile.team)?.short_name ?? t(lang, "neutral")}</span>
-      <span className="chip big">{LANGUAGE_NAMES[lang]}</span>
-      <span className="chip big">{LEVELS[profile.level][lang].name}</span>
-      {profile.hands_free && <span className="chip big hands-free">🎙 {t(lang, "handsFree")}</span>}
-      {extra}
+    <div className="profile-chips">
+      <span className="chip">{t(lang, "supporting")}: {dir.club(profile.team)?.short_name ?? t(lang, "neutral")}</span>
+      <span className="chip">{LANGUAGE_NAMES[lang]}</span>
+      <span className="chip">{LEVELS[profile.level][lang].name}</span>
     </div>
   );
 }
