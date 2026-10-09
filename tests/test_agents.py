@@ -220,3 +220,12 @@ def test_calls_are_in_the_viewers_language(world, match):
 def test_commentary_carries_the_language_it_was_written_in(world, match):
     _, out, _ = run_match(world, match, ViewerProfile(language=Language.ES), until_minute=10)
     assert out and all(c.language == Language.ES for _, c in out)
+
+
+def test_scores_are_said_the_way_commentators_say_them():
+    from kickoff.agents.i18n import score_phrase
+    assert score_phrase(Language.EN, "Kilburn", 1, "Harbour City", 2) == "Harbour City lead 2-1"
+    assert score_phrase(Language.EN, "Kilburn", 2, "Harbour City", 2) == "it's 2-2"
+    assert score_phrase(Language.ES, "Kilburn", 0, "Harbour City", 1) == "Harbour City gana 1 a 0"
+    assert score_phrase(Language.ES, "Kilburn", 1, "Harbour City", 1) == "empate a 1"
+    assert score_phrase(Language.ZH, "Kilburn", 3, "Harbour City", 2, final=True) == "Kilburn以3比2获胜"

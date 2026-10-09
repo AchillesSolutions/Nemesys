@@ -106,10 +106,6 @@ export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang }: Pr
         )}
       </svg>
       {stoppage && <div className="stoppage" role="status">{stoppage}</div>}
-      <div className="pitch-ends">
-        <span style={{ color: dir.colour(home.id) }}>{home.short_name} {t(lang, "attacking")} →</span>
-        <span style={{ color: dir.colour(away.id) }}>← {away.short_name} {t(lang, "attacking")}</span>
-      </div>
     </div>
   );
 }
@@ -144,10 +140,10 @@ function ballTarget(ev: MatchEvent | null, snapshot: Snapshot | null): [number, 
 function stoppageLabel(ev: MatchEvent | null, nextGap: number | null, lang: Language): string | null {
   if (!ev) return null;
   const long = nextGap == null || nextGap >= 8;
-  if (ev.type === "pass" && ev.outcome === "out" && long) return `⏸ ${t(lang, "outOfPlay")}`;
+  if (ev.type === "pass" && ev.outcome === "out" && long) return t(lang, "outOfPlay");
   if (!STOPPAGES.has(ev.type) || !long) return null;
-  if (ev.type === "var_check") return `⏸ ${t(lang, "varInProgress")}`;
-  return `⏸ ${EVENT_LABELS[ev.type]?.[lang] ?? ev.type}`;
+  if (ev.type === "var_check") return t(lang, "varInProgress");
+  return EVENT_LABELS[ev.type]?.[lang] ?? ev.type;
 }
 
 function Markings() {

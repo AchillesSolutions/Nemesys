@@ -37,3 +37,20 @@ describe("quickAnswer", () => {
     expect(quickAnswer("language", "Spanish, and I support Kilburn")).toBeNull();
   });
 });
+
+import { quickCommand } from "./quickAnswer";
+
+describe("quickCommand", () => {
+  it("acts on obvious language switches straight away", () => {
+    expect(quickCommand("switch to Spanish")).toEqual({ language: "es" });
+    expect(quickCommand("Can we change to Mandarin?")).toEqual({ language: "zh" });
+    expect(quickCommand("切换成英语")).toEqual({ language: "en" });
+    expect(quickCommand("en español por favor")).toEqual({ language: "es" });
+    expect(quickCommand("中文")).toEqual({ language: "zh" });
+  });
+
+  it("leaves questions to the Host", () => {
+    expect(quickCommand("why was that offside?")).toBeNull();
+    expect(quickCommand("is the Spanish league better than this one?")).toBeNull();
+  });
+});

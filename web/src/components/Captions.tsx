@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { t } from "../i18n";
 import type { Commentary, Language, Line } from "../types";
 import { voice } from "../voice";
@@ -48,14 +48,15 @@ export function Captions({ voiceOn, feed, lang }: { voiceOn: boolean; feed: Comm
 }
 
 /** A standing reminder of what can be said to Achilles, in the viewer's language. */
-export function TalkCard({ lang, handsFree }: { lang: Language; handsFree: boolean }) {
+export function TalkCard({ lang, handsFree, children }: { lang: Language; handsFree: boolean; children?: ReactNode }) {
   const prefix = handsFree ? "" : t(lang, "talkPrefix");
   return (
     <section className="panel talk-card">
-      <h2>🎙 {t(lang, handsFree ? "talkTitleAlone" : "talkTitle")}</h2>
+      <h2>{t(lang, handsFree ? "talkTitleAlone" : "talkTitle")}</h2>
       <ul>
         {(["talkEx1", "talkEx2", "talkEx3"] as const).map((k) => <li key={k}>“{prefix}{t(lang, k)}”</li>)}
       </ul>
+      {children}
     </section>
   );
 }

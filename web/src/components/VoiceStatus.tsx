@@ -10,8 +10,9 @@ const SUBTITLE_LINGER_MS = 2500;
  * Kick-Off is listening to you, with what it heard beside it, fading away. An optional hint (shown
  * briefly) tells new viewers how to talk to it. What Achilles says is subtitled separately (Captions).
  */
-export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false }: {
+export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inline = false, inCard = false }: {
   state: ListenState; caption?: string; lang: Language; hint?: string | null; handsFree?: boolean; inline?: boolean;
+  inCard?: boolean;
 }) {
   const [subtitle, setSubtitle] = useState<string | null>(null);
 
@@ -25,6 +26,15 @@ export function VoiceStatus({ state, caption, lang, hint, handsFree = false, inl
   const live = state === "awake" || state === "push" || state === "conversation" || (handsFree && state === "idle");
   const label = state === "off" ? t(lang, "micOff") : state === "thinking" ? t(lang, "thinking")
     : live ? t(lang, "listening") : "";
+  if (inCard) {
+    const note = subtitle ? `“${subtitle}”` : state === "off" ? t(lang, "micOff") : hint;
+    return (
+      <>
+        <span className={`mic-dot card-dot md-${state} ${live ? "live" : ""}`} title={label} role="status" aria-label={label} />
+        {note && <p className={`talk-note ${subtitle ? "heard-note" : ""}`} aria-live="polite">{note}</p>}
+      </>
+    );
+  }
   return (
     <div className={`voice-ui ${inline ? "inline" : ""}`} role="status" aria-live="polite" aria-label={label}>
       <div className="voice-row">

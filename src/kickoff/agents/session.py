@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 from ..match_reader import ReaderUpdate
 from ..models import EventType, Match, Position, World
 from .context import Describer, concepts_for
-from .i18n import CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, KIT_LINE_FAN, KITS, concept_label
+from .i18n import (CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, KIT_LINE_FAN, KITS, concept_label,
+                   score_phrase)
 from .llm import ClientFactory
 from .messages import Decision, Line, Moment, Proposal
 from .producer import team_tone
@@ -89,7 +90,7 @@ class CommentarySession:
         if not templates:
             return None
         snap, lang = update.snapshot, self.profile.language
-        score = f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}"
+        score = self.spoken_score(update, final=ev.type == EventType.FULL_TIME)
         if self.profile.team and ev.team:
             side = "ours" if ev.team == self.profile.team else "theirs"
             templates = FAN_HEADLINES.get((ev.type, side), templates)
@@ -116,8 +117,13 @@ class CommentarySession:
             kits=self.kit_line(), player=surname(ev.player), keeper=surname(keeper),
             team=self.describer.club(ev.team or ev.detail.get("for_team")),
             on=surname(ev.other_player), off=surname(ev.player),
-            score=f"{snap.home.name} {snap.home.score}, {snap.away.name} {snap.away.score}")
+            score=self.spoken_score(update))
         return Line(text=text, tone=team_tone(self._moment(update)), call=True)
+
+    def spoken_score(self, update: ReaderUpdate, final: bool = False) -> str:
+        snap = update.snapshot
+        phrase = score_phrase(self.profile.language, snap.home.name, snap.home.score, snap.away.name, snap.away.score, final)
+        return phrase[0].upper() + phrase[1:]
 
     def kit_line(self) -> str:
         """Which team wears what: the supporter's own team first, as "we"."""

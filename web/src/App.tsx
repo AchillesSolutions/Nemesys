@@ -11,6 +11,7 @@ import { Scoreboard } from "./components/Scoreboard";
 import { Setup } from "./components/Setup";
 import { LEVELS, t } from "./i18n";
 import type { HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
+import { quickCommand } from "./quickAnswer";
 import { sound } from "./sound";
 import { voice } from "./voice";
 import { useMatch } from "./useMatch";
@@ -66,7 +67,18 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     listener.mode = "wake";
     listener.on({
       state: (state, caption) => setListen({ state, caption }),
-      command: (text, language) => send({ action: "ask", text, language }),
+      command: (text, language) => {
+        const quick = quickCommand(text);
+        if (quick) {
+          // An obvious language switch: act now and say so in the new language; no round trip to the Host.
+          send({ action: "profile", language: quick.language });
+          voice.say([{ text: t(quick.language, "switchedLanguage"), tone: "hopeful", card_title: "", sources: ["host"],
+                       proposal_ids: [], concepts: [], headline: true }], quick.language);
+          listener.done(true);
+          return;
+        }
+        send({ action: "ask", text, language });
+      },
     });
     void listener.start(profile.language);
     const isField = (e: KeyboardEvent) => (e.target as HTMLElement).closest?.("select, input, textarea");
@@ -163,8 +175,6 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
                    nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
             <BridgeBanner bridge={state.bridge} lang={lang} />
-            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
-                         handsFree={state.profile.hands_free} />
           </div>
           <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} />
           {PRESET.demo && <Ticker dir={dir} event={state.event} lang={lang} />}
@@ -174,10 +184,13 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
           )}
         </div>
         <aside className="col-side">
+          <TalkCard lang={lang} handsFree={state.profile.hands_free}>
+            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} hint={hint}
+                         handsFree={state.profile.hands_free} inCard />
+          </TalkCard>
           <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
-          <Learned learned={state.learned} lang={lang} />
           <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
-          <TalkCard lang={lang} handsFree={state.profile.hands_free} />
+          <Learned learned={state.learned} lang={lang} />
           {PRESET.demo && <Feed feed={state.feed} lang={lang} />}
           {PRESET.demo && <UnderTheHood feed={state.feed} lang={lang} />}
         </aside>

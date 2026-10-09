@@ -112,6 +112,20 @@ KIT_LINE = {EN: "{a} are in {ka}, {b} in {kb}.", ZH: "{a}身穿{ka}，{b}身穿{
 KIT_LINE_FAN = {EN: "We're in {ka}, {b} are in {kb}.", ZH: "我们身穿{ka}，{b}身穿{kb}。",
                 ES: "Nosotros vestimos de {ka} y {b} de {kb}."}
 
+# Scores as a commentator says them in each language: who leads, or that it is level.
+SCORE_LEAD = {EN: "{team} lead {hi}-{lo}", ZH: "{team}以{hi}比{lo}领先", ES: "{team} gana {hi} a {lo}"}
+SCORE_WIN = {EN: "{team} win {hi}-{lo}", ZH: "{team}以{hi}比{lo}获胜", ES: "victoria de {team} por {hi} a {lo}"}
+SCORE_LEVEL = {EN: "it's {n}-{n}", ZH: "{n}比{n}平", ES: "empate a {n}"}
+
+
+def score_phrase(lang: Language, home: str, home_goals: int, away: str, away_goals: int, final: bool = False) -> str:
+    """'Harbour City lead 1-0', 'empate a uno', '1比1平': never two team names around a score."""
+    if home_goals == away_goals:
+        return SCORE_LEVEL[lang].format(n=home_goals)
+    team, hi, lo = (home, home_goals, away_goals) if home_goals > away_goals else (away, away_goals, home_goals)
+    return (SCORE_WIN if final else SCORE_LEAD)[lang].format(team=team, hi=hi, lo=lo)
+
+
 HEADLINE_TITLES: dict[EventType, dict[Language, str]] = {
     EventType.GOAL: {EN: "GOAL!", ZH: "进球！", ES: "¡GOL!"},
     EventType.GOAL_DISALLOWED: {EN: "Goal ruled out", ZH: "进球无效", ES: "Gol anulado"},

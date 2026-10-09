@@ -59,3 +59,16 @@ export function quickAnswer(step: LobbyStep, text: string): Partial<Profile> | n
     case "alone": { const m = first(ALONE, t); return m && { hands_free: m.value }; }
   }
 }
+
+// During the match: an obvious language switch ("switch to Spanish", "中文", "en español por favor") is
+// acted on instantly; anything else is a question for the Host.
+const SWITCH_VERB = /switch|change|speak|talk|use|go (to|back)|\bin\b|切换|换成|改成|说|用|cambia|habla|en\b|pasa a/i;
+
+export function quickCommand(text: string): { language: Language } | null {
+  const t = text.trim();
+  if (!t || words(t) > 6) return null;
+  const hits = LANGUAGE.filter(([re]) => re.test(t));
+  if (hits.length !== 1) return null;
+  const bare = words(t) <= 2; // just "Spanish" or "中文"
+  return bare || SWITCH_VERB.test(t) ? { language: hits[0][1] } : null;
+}
