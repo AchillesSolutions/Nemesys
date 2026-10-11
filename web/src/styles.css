@@ -292,11 +292,6 @@ h1, h2, p { margin: 0; }
   font-size: clamp(64px, 13vw, 180px); line-height: .85; letter-spacing: -.01em;
 }
 .wordmark span { color: var(--accent); }
-.splash-fixture {
-  display: inline-flex; align-items: center; gap: .55em; font-family: var(--display); font-stretch: 85%; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .06em; font-size: clamp(13px, 1.3vw, 17px); color: var(--muted); margin-top: .6rem;
-}
-.splash-fixture .v { opacity: .6; text-transform: lowercase; }
 .splash .press { margin-top: 2.6rem; font-size: 1.15rem; animation: pulse 2.4s infinite; }
 .splash .press-other { color: var(--muted); font-size: .92rem; }
 .splash .why { color: var(--muted); max-width: 34rem; margin-top: 1.6rem; line-height: 1.55; font-size: .92rem; }
@@ -353,4 +348,8 @@ h1, h2, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+.splash .tagline {
+  font-family: var(--display); font-stretch: 85%; font-weight: 600; text-transform: uppercase; letter-spacing: .14em;
+  font-size: clamp(13px, 1.3vw, 17px); color: var(--muted); margin-top: .6rem;
 }

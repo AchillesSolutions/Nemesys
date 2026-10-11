@@ -230,10 +230,7 @@ export function Setup({ dir, match, demo, onStart }: {
     return (
       <main className="splash" onClick={() => void begin()}>
         <h1 className="wordmark">Kick-Off<span>.</span></h1>
-        <p className="splash-fixture">
-          <Crest club={home} className="crest-small" />{home.name}<span className="v">v</span>{away.name}
-          <Crest club={away} className="crest-small" />
-        </p>
+        <p className="tagline">{t("en", "tagline")}</p>
         <p className="press">{t("en", "pressToStart")}</p>
         <p className="press-other">{t("zh", "pressToStart")} · {t("es", "pressToStart")}</p>
         <p className="why">{t("en", "whyPress")}</p>
@@ -248,7 +245,10 @@ export function Setup({ dir, match, demo, onStart }: {
     setProfile(p);
   };
 
-  const levels: HelpLevel[] = ["beginner", "getting_there", "big_picture"];
+  // Two levels on screen, as Kick-Off is for newcomers. Saying "I know football well" still works:
+  // that level is understood by voice and appears here once chosen.
+  const levels: HelpLevel[] = profile.level === "big_picture" || profile.level === "analyst"
+    ? ["beginner", "getting_there", "big_picture"] : ["beginner", "getting_there"];
 
   return (
     <main className={`lobby ${demo ? "" : "voice-only"}`}>
@@ -261,6 +261,11 @@ export function Setup({ dir, match, demo, onStart }: {
 
       <div className="lobby-stage">
         <div className="lobby-card">
+          <section className="achilles-says">
+            {said.map((line, i) => <p key={i} className="achilles">{line}</p>)}
+            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline handsFree />
+          </section>
+
           <section className="make-it-yours" aria-label={t(lang, "makeItYours")}>
             <h2>{t(lang, "makeItYours")}</h2>
             <Row label={t(lang, "language")} asking={stage !== "ready" && step === "language"}>
@@ -286,11 +291,6 @@ export function Setup({ dir, match, demo, onStart }: {
               <Option on={profile.hands_free} onPick={() => pick({ hands_free: true })}>{t(lang, "onMyOwn")}</Option>
               <Option on={!profile.hands_free} onPick={() => pick({ hands_free: false })}>{t(lang, "withOthers")}</Option>
             </Row>
-          </section>
-
-          <section className="achilles-says">
-            {said.map((line, i) => <p key={i} className="achilles">{line}</p>)}
-            <VoiceStatus state={listen.state} caption={listen.caption} lang={lang} inline handsFree />
           </section>
 
           {demo && <button className="btn primary start" onClick={() => start(profile)}>{t(lang, "kickoffNow")} →</button>}
