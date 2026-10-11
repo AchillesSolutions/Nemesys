@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Directory } from "../api";
-import { t } from "../i18n";
+import { AGENT_NAMES, t } from "../i18n";
 import { withTeams } from "../teams";
 import type { Commentary, Language, Line } from "../types";
 import { voice } from "../voice";
@@ -16,14 +16,21 @@ function kindOf(line: Line): Kind {
   return "commentary";
 }
 
+/** In the demo, the tag names the agents behind the line ("Teacher + League guide"), so judges can follow along. */
+function agentsOf(line: Line, lang: Language): string {
+  if (line.sources.includes("host")) return AGENT_NAMES.host[lang];
+  if (line.call || line.headline || line.sources.length === 0) return t(lang, "tag_live");
+  return line.sources.map((s) => AGENT_NAMES[s]?.[lang] ?? s).join(" + ");
+}
+
 /**
  * Broadcast-style subtitles in a bar under the pitch: the line Achilles is saying right now, tagged
  * with what kind of line it is. They follow the voice exactly; the last line stays (dimmed) until the
  * next one. With the voice off, each new line of commentary is shown instead, so the words are never
  * lost (for viewers who can't hear, a noisy room, or a muted demo video).
  */
-export function Captions({ voiceOn, feed, lang, dir, clubs }: {
-  voiceOn: boolean; feed: Commentary[]; lang: Language; dir: Directory; clubs: string[];
+export function Captions({ voiceOn, feed, lang, dir, clubs, demo = false }: {
+  voiceOn: boolean; feed: Commentary[]; lang: Language; dir: Directory; clubs: string[]; demo?: boolean;
 }) {
   const [shown, setShown] = useState<{ line: Line; speaking: boolean } | null>(null);
 
@@ -41,7 +48,7 @@ export function Captions({ voiceOn, feed, lang, dir, clubs }: {
     <section className={`caption-bar ${shown?.speaking ? "speaking" : ""}`} aria-live="polite">
       {shown ? (
         <>
-          <span className={`caption-tag tag-${kindOf(shown.line)}`}>{t(lang, `tag_${kindOf(shown.line)}`)}</span>
+          <span className={`caption-tag tag-${kindOf(shown.line)}`}>{demo ? agentsOf(shown.line, lang) : t(lang, `tag_${kindOf(shown.line)}`)}</span>
           <p className="caption-text">{withTeams(shown.line.text, dir, clubs, lang)}</p>
         </>
       ) : (

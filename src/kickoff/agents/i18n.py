@@ -11,8 +11,22 @@ from .viewer import Language
 
 EN, ZH, ES = Language.EN, Language.ZH, Language.ES
 
+# The introduction before kick-off: a fixed opening and closing around what the agents write.
+INTRO_OPEN = {
+    EN: "There's a little while before kick-off, so let me run you through a few starter points.",
+    ZH: "离开球还有一点时间，我先给你讲几个入门要点。",
+    ES: "Falta un poco para el inicio, así que te cuento algunos puntos para empezar.",
+}
+INTRO_CLOSE = {
+    EN: "It's almost 8pm, and the teams are walking out. Here we go!",
+    ZH: "快到晚上八点了，球员们正在入场。比赛马上开始！",
+    ES: "Son casi las ocho y los equipos salen al campo. ¡Allá vamos!",
+}
+INTRO_TITLES = {EN: "Before kick-off", ZH: "赛前", ES: "Antes del partido"}
+
 CONCEPT_LABELS: dict[str, dict[Language, str]] = {
     "kick_off": {EN: "Kick-off", ZH: "开球", ES: "Saque inicial"},
+    "match_length": {EN: "90 minutes, two halves", ZH: "九十分钟，上下半场", ES: "90 minutos, dos tiempos"},
     "team_size": {EN: "Eleven a side", ZH: "每队十一人", ES: "Once por equipo"},
     "points": {EN: "Points for a win", ZH: "积分规则", ES: "Puntos por partido"},
     "goal": {EN: "Goals", ZH: "进球", ES: "Goles"},

@@ -54,9 +54,10 @@ export function LeagueTable({ dir, match, snapshot, lang }: {
 }) {
   const home = dir.club(match.home)!, away = dir.club(match.away)!;
   const hs = snapshot?.home.score ?? 0, as = snapshot?.away.score ?? 0;
-  const projected = useMemo(() => projectTable(dir.world.table, [
+  const started = snapshot != null && snapshot.status !== "pre_match";
+  const projected = useMemo(() => started ? projectTable(dir.world.table, [
     { name: home.name, gf: hs, ga: as }, { name: away.name, gf: as, ga: hs },
-  ]), [dir, home.name, away.name, hs, as]);
+  ]) : dir.world.table, [dir, home.name, away.name, hs, as, started]);
   const before = new Map(dir.world.table.map((r, i) => [r.club, i + 1]));
   // Live: the table as it would be if the match ended now (a draw counts too), and at full time the
   // final standings. The two teams playing are marked in their colours with how far they've moved.

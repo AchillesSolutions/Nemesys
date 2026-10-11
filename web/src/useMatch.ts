@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  Chapter, Commentary, Control, Language, MatchEvent, Mode, Profile, ServerMessage, Snapshot,
+  AgentState, Chapter, Commentary, Control, Language, MatchEvent, Mode, Profile, ServerMessage, Snapshot,
 } from "./types";
 
 export interface MatchState {
@@ -29,6 +29,10 @@ export interface MatchState {
   lastReply: "answer" | "ignored" | null; // whether Kick-Off said something back to the last thing heard
   /** Achilles' latest answer to the viewer: spoken and shown as a subtitle, not added to the match feed. */
   reply: { seq: number; text: string; language: Language } | null;
+  /** Where the players stand before kick-off, so the pitch is not empty during the introduction. */
+  lineup: Record<string, number[]> | null;
+  /** Demo only: what each agent is doing for the latest moment the agents were woken for. */
+  agents: { eventId: number; nodes: Record<string, { state: AgentState; texts: string[] }> } | null;
 }
 
 const TRAIL = 6;
@@ -47,6 +51,7 @@ function socketUrl(profile: Profile, mode: Mode, speed: number): string {
   const q = new URLSearchParams({ language: profile.language, level: profile.level, mode, speed: String(speed) });
   if (profile.team) q.set("team", profile.team);
   if (profile.hands_free) q.set("hands_free", "true");
+  if (new URLSearchParams(location.search).get("demo") === "1") q.set("demo", "true"); // agents report what they do
   return `${proto}://${location.host}/ws?${q}`;
 }
 
@@ -57,6 +62,7 @@ export function useMatch(initial: Profile | null, initialMode: Mode = "key_momen
     arrivedAt: 0, nextGap: null, pace: 1, bridge: null,
     learned: [], profile: initial ?? { team: null, language: "en", level: "beginner", hands_free: false },
     mode: initialMode, speed: initialSpeed, paused: false, finished: false, error: null, asking: 0, lastReply: null, reply: null,
+    lineup: null, agents: null,
   }));
   const ws = useRef<WebSocket | null>(null);
 
@@ -123,6 +129,14 @@ function reduce(s: MatchState, msg: ServerMessage): MatchState {
     case "ignored": {
       // Heard something that wasn't for Kick-Off (another person, the TV): say nothing.
       return { ...s, asking: Math.max(0, s.asking - 1), lastReply: "ignored" };
+    }
+    case "pre_match":
+      return { ...s, lineup: msg.frame };
+    case "agents": {
+      // A new moment starts the strip afresh; reports for the same moment fill it in.
+      const same = s.agents?.eventId === msg.event_id && !(msg.agent !== "producer" && s.agents.nodes.producer?.state === "done");
+      const nodes = same ? s.agents!.nodes : {};
+      return { ...s, agents: { eventId: msg.event_id, nodes: { ...nodes, [msg.agent]: { state: msg.state, texts: msg.texts } } } };
     }
     case "finished":
       return { ...s, finished: true };

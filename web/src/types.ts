@@ -160,6 +160,8 @@ export interface Commentary {
   learned: string[];
 }
 
+export type AgentState = "thinking" | "idle" | "done";
+
 export type ServerMessage =
   | { type: "ready"; chapters: Chapter[]; profile: Profile; mode: Mode; speed: number }
   | { type: "chapter"; chapter: Chapter }
@@ -170,6 +172,8 @@ export type ServerMessage =
   | { type: "profile"; profile: Profile; learned: string[] }
   | { type: "host"; question: string; answer: string; changes: Partial<Profile>; tools: string[]; language: Language }
   | { type: "ignored"; question: string }
+  | { type: "pre_match"; frame: Record<string, number[]> }
+  | { type: "agents"; event_id: number; agent: string; state: AgentState; texts: string[] }
   | { type: "finished" }
   | { type: "error"; message: string };
 

@@ -26,6 +26,7 @@ const STRINGS = {
     table: "League table",
     finalStandings: "final standings",
     beforeKickoff: "before kick-off",
+    introTitle: "Before kick-off",
     ifEndedNow: "if it ended now",
     switchedLanguage: "Sure, English from now on.",
     underTheHood: "Under the hood",
@@ -116,6 +117,7 @@ const STRINGS = {
     table: "积分榜",
     finalStandings: "最终排名",
     beforeKickoff: "赛前排名",
+    introTitle: "赛前要点",
     ifEndedNow: "按当前比分",
     switchedLanguage: "好的，现在开始用中文。",
     underTheHood: "幕后",
@@ -206,6 +208,7 @@ const STRINGS = {
     table: "Tabla de posiciones",
     finalStandings: "clasificación final",
     beforeKickoff: "antes del partido",
+    introTitle: "Antes del partido",
     ifEndedNow: "si terminara ahora",
     switchedLanguage: "Claro, a partir de ahora en español.",
     underTheHood: "Detrás de escena",
@@ -310,6 +313,7 @@ export const AGENT_NAMES: Record<string, Record<Language, string>> = {
   storyteller: { en: "Storyteller", zh: "故事员", es: "Narrador" },
   league_guide: { en: "League guide", zh: "联赛向导", es: "Guía de liga" },
   host: { en: "Host", zh: "主持人", es: "Anfitrión" },
+  producer: { en: "Producer", zh: "制作人", es: "Productor" },
 };
 
 // Short labels for the event ticker under the pitch.

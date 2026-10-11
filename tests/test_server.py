@@ -98,6 +98,7 @@ def test_next_chapter_skips_ahead_without_spoiling(client, match):
     chapters = build_chapters(match)
     with client.websocket_connect("/ws?mode=key_moments&speed=1") as ws:
         ws.receive_json()
+        ws.send_json({"action": "next_chapter"})  # before kick-off, this skips the introduction
         ws.send_json({"action": "next_chapter"})  # from kick-off to the first offside chapter
         seen = receive_until(ws, "chapter")
         while seen[-1]["chapter"]["id"] == 1:
@@ -189,3 +190,29 @@ def test_play_waits_before_the_build_up_not_between_shot_and_goal(world, match):
     j = next(n for n, e in enumerate(events) if e.type == EventType.RED_CARD)
     if events[j - 1].elapsed == events[j].elapsed:
         assert player._outranked_by_next(events[j - 1], events[j])
+
+
+def test_the_introduction_comes_before_kick_off_and_teaches_the_basics(client):
+    """Before the first event: a fixed opening, the agents' starter points (the rules count as learned), and a
+    fixed closing. In demo mode, each agent reports what it is doing."""
+    with client.websocket_connect("/ws?mode=key_moments&speed=600&demo=true") as ws:
+        ws.receive_json()
+        messages = receive_until(ws, "event")
+    kinds = [m["type"] for m in messages]
+    assert kinds[0] == "pre_match" and messages[0]["frame"]
+    intro = [m for m in messages if m["type"] == "commentary"]
+    assert len(intro) == 3 and all(m["event_id"] == 0 for m in intro)
+    assert intro[0]["lines"][0]["text"].startswith("There's a little while before kick-off")
+    assert {"90 minutes, two halves", "Eleven a side", "Points for a win"} <= set(intro[-1]["learned"])
+    agents = {(m["agent"], m["state"]) for m in messages if m["type"] == "agents"}
+    assert {("teacher", "done"), ("league_guide", "done"), ("storyteller", "done"), ("producer", "done")} <= agents
+
+
+def test_viewers_who_know_a_little_skip_the_rules_before_kick_off(client):
+    with client.websocket_connect("/ws?mode=key_moments&speed=600&level=getting_there") as ws:
+        ws.receive_json()
+        messages = receive_until(ws, "event")
+    intro = [m for m in messages if m["type"] == "commentary"]
+    sources = {s for m in intro for line in m["lines"] for s in line["sources"]}
+    assert "teacher" not in sources and intro[-1]["learned"] == []
+    assert not any(m["type"] == "agents" for m in messages)  # only the demo gets agent reports

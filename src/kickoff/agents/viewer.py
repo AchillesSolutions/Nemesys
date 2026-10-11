@@ -42,7 +42,8 @@ class ViewerProfile(BaseModel):
 ASSUMED_KNOWN: dict[HelpLevel, set[str]] = {
     HelpLevel.BEGINNER: set(),
     HelpLevel.GETTING_THERE: {"kick_off", "goal", "throw_in", "goal_kick", "corner", "foul", "free_kick",
-                              "yellow_card", "half_time", "substitution", "possession", "counter_attack"},
+                              "yellow_card", "half_time", "substitution", "possession", "counter_attack",
+                              "match_length", "team_size", "points"},
     HelpLevel.BIG_PICTURE: {"*"},
     HelpLevel.ANALYST: {"*"},
 }

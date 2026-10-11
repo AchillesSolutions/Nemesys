@@ -10,6 +10,8 @@ RULES: dict[str, str] = {
         "Each team has 11 players on the pitch: one goalkeeper, the only player allowed to handle the ball, and "
         "only inside their own penalty area, plus ten outfield players."
     ),
+    "match_length": ("A match lasts 90 minutes: two halves of 45 minutes with a 15-minute break in between. The referee"
+                     " adds a few minutes at the end of each half to make up for time lost."),
     "points": "In the league, a win earns 3 points, a draw 1 point each, and a defeat none. The table is ranked by points.",
     "kick_off": ("Each half starts with a kick-off from the centre spot: one team kicks off the first half, the other team"
                  " the second half. After a goal, the team that conceded kicks off."),

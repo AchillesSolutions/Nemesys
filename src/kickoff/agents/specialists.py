@@ -17,6 +17,7 @@ from agent_framework import Agent, Executor, WorkflowContext, handler
 
 from ..league import stakes
 from ..models import EventType, World
+from ..world import EUROPE_PLACES, FIXTURE_NOTES
 from .context import Describer
 from .glossary import RULES
 from .i18n import concept_label
@@ -94,6 +95,7 @@ class Specialist(Executor):
     async def run(self, m: Moment, ctx: WorkflowContext[SpecialistResult]) -> None:
         brief = self.brief(m)
         proposals: list[Proposal] = []
+        await m.report(self.name, "thinking" if brief is not None else "idle")
         if brief is not None:
             try:
                 reply = await self.agent.run(json.dumps(brief, ensure_ascii=False))
@@ -105,8 +107,9 @@ class Specialist(Executor):
                 Proposal(id=next(_ids), agent=self.name, text=d.text.strip(), priority=max(1, min(10, d.priority)),
                          kind=self.kind, concept=self._concept(d.concept, brief), made_at=m.update.event.elapsed,
                          score=(m.update.snapshot.home.score, m.update.snapshot.away.score))
-                for d in drafts[:2] if d.text.strip()
+                for d in drafts[:3 if "concepts" in brief else 2] if d.text.strip()
             ]
+            await m.report(self.name, "done", [p.text for p in proposals])
         await ctx.send_message(SpecialistResult(agent=self.name, moment=m, proposals=proposals))
 
 
@@ -114,7 +117,8 @@ class Specialist(Executor):
     def _concept(concept: str | None, brief: dict) -> str | None:
         """Only the rule the brief asked to be taught counts as taught: a story line mentioning
         possession has not explained it."""
-        return concept if concept and concept == brief.get("concept") else None
+        allowed = {brief.get("concept")} | {c["concept"] for c in brief.get("concepts", [])}
+        return concept if concept and concept in allowed else None
 
 
 class Teacher(Specialist):
@@ -126,9 +130,18 @@ The brief says how deep to go:
 - "reminder": they have heard it once. One short sentence linking the rule to this moment.
 - "nod": they know it now. Eight words or fewer.
 Priority: full 8, reminder 5, nod 3. Set "concept" to the concept id from the brief.
+Before kick-off the brief lists several "concepts" instead: write one proposal for each, in the order given,
+one or two short sentences each, priority 8, with its "concept" id. These are the viewer's first rules.
 """
 
     def brief(self, m: Moment) -> dict | None:
+        if m.update.event.type == EventType.PRE_MATCH:
+            todo = [c for c in m.concepts if c in RULES and depth_for(m.profile, m.knowledge, c, 0) == "full"]
+            if not todo:
+                return None
+            return {**self.base_brief(m), "depth": "full",
+                    "concepts": [{"concept": c, "concept_name": concept_label(c, m.profile.language),
+                                  "rule_fact": RULES[c]} for c in todo]}
         for concept in m.concepts:
             depth = depth_for(m.profile, m.knowledge, concept, m.update.event.elapsed)
             if depth and concept in RULES:
@@ -149,6 +162,8 @@ minutes went using possession_in_gap and shots_in_gap, but only if something sta
 If nothing stands out, return no proposals.
 If the brief has a "voice" instruction, follow it. Leave "concept" empty
 unless you are illustrating "possession" or "counter_attack".
+Before kick-off, give the build-up in one or two sentences from "fixture_notes" and the two clubs' styles:
+why this match is worth watching. Priority 6.
 """
     TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
     EVENTS = {EventType.HALF_TIME, EventType.FULL_TIME, EventType.SUBSTITUTION, EventType.VAR_DECISION,
@@ -156,6 +171,10 @@ unless you are illustrating "possession" or "counter_attack".
 
     def brief(self, m: Moment) -> dict | None:
         ev = m.update.event
+        if ev.type == EventType.PRE_MATCH:
+            home, away = self.describer.home, self.describer.away
+            return {**self.base_brief(m), "fixture_notes": FIXTURE_NOTES,
+                    "home_club": self.describer.club_profile(home), "away_club": self.describer.club_profile(away)}
         triggers = self.TRIGGERS | ({"quiet_spell"} if m.profile.level == HelpLevel.ANALYST else set())
         if not (m.signal_kinds & triggers or ev.type in self.EVENTS):
             return None
@@ -173,11 +192,21 @@ the viewer where the teams stand, at priority 4. "if_score_stands" is where each
 current score were the final score: describe that, and do not invent other scorelines. A club that would not
 move can still be interesting (who they would stay level with, how far from the top four).
 One or two sentences. Priority 3-6; up to 7 at full-time. Leave "concept" empty.
+Before kick-off, say where both clubs stand, that both are chasing a European place (the top four), and what a
+win would do for each, using "if_home_win", "if_draw" and "if_away_win". Priority 7.
 """
     TRIGGERS = {"quiet_spell", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
 
     def brief(self, m: Moment) -> dict | None:
         ev = m.update.event
+        if ev.type == EventType.PRE_MATCH:
+            home, away = self.describer.home, self.describer.away
+            return {**self.base_brief(m), "league": self.world.league, "matchweek": self.world.matchweek,
+                    "european_places": f"The top {EUROPE_PLACES} qualify for European competition.",
+                    "table_before_this_match": self.describer.table(top=8),
+                    "if_home_win": stakes(self.world, home, away, 1, 0),
+                    "if_draw": stakes(self.world, home, away, 0, 0),
+                    "if_away_win": stakes(self.world, home, away, 0, 1)}
         if not (m.signal_kinds & self.TRIGGERS or ev.type in (EventType.HALF_TIME, EventType.FULL_TIME)):
             return None
         snap = m.update.snapshot

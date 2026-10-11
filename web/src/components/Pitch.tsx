@@ -28,9 +28,10 @@ interface Props {
   nextGap: number | null;
   speed: number;
   lang: Language;
+  lineup?: Record<string, number[]> | null; // before kick-off: where the players line up
 }
 
-export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang }: Props) {
+export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang, lineup }: Props) {
   const latest = recent.at(-1) ?? null;
   const marker = latest && MARKED.has(latest.type) && latest.x != null ? latest : null;
   const home = dir.club(match.home)!, away = dir.club(match.away)!;
@@ -45,7 +46,7 @@ export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang }: Pr
   // from player to player. Each dot glides at no more than sprinting speed, so long runs look like runs.
   const previous = useRef<Record<string, number[]>>({});
   const dots = useMemo(() => {
-    const frame = latest?.frame ?? {};
+    const frame = latest?.frame ?? lineup ?? {};
     const prev = previous.current;
     const out = Object.entries(frame).map(([id, [x, y]]) => {
       const from = prev[id] ?? [x, y];
@@ -55,7 +56,7 @@ export function Pitch({ dir, match, snapshot, recent, nextGap, speed, lang }: Pr
     });
     previous.current = frame;
     return out;
-  }, [latest, glide, speed]);
+  }, [latest, glide, speed, lineup]);
   const ball = ballTarget(latest, snapshot);
   const stoppage = stoppageLabel(latest, nextGap, lang);
   const offside = offsidePicture(latest);

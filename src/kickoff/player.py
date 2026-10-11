@@ -41,12 +41,13 @@ LAND_MAX_S = 6           # how long to let a moment's explanation finish before 
 MAX_STILL_S = 4.0        # in highlights, the longest the picture stands still unless Kick-Off is talking
 HOLD_MAX_S = 20          # the longest play waits for an explanation to finish before the next big moment
 BUILD_UP_S = 6           # ...and it waits before the build-up, so the attack itself is seen while it is called
+INTRO_MAX_S = 120        # the longest the introduction can hold up kick-off
 SPEECH_SLACK_S = 1.0     # the voice starts a little after the line is sent (audio download)
 
 
 class MatchPlayer:
     def __init__(self, world: World, match: Match, profile: ViewerProfile, clients: ClientFactory, send: Send,
-                 mode: Mode = "full", speed: float = 1.0):
+                 mode: Mode = "full", speed: float = 1.0, show_agents: bool = False):
         self.world, self.match, self.send = world, match, send
         self.mode: Mode = mode
         self.speed = speed
@@ -67,6 +68,9 @@ class MatchPlayer:
         self.voice_speaking: bool | None = None  # reported by the viewer's browser; None = no voice reports
         self._notable = sorted(e.elapsed for e in match.events if SALIENCE.get(e.type, 0) >= 2)
         self._held_for: set[int] = set()  # big moments whose build-up has already waited for quiet
+        self._intro = "to_come"  # the introduction before kick-off: to_come, playing, skipped or done
+        if show_agents:  # the demo shows each agent at work; viewers don't need the extra messages
+            self.session.on_progress = self._progress
 
     # -- controls --------------------------------------------------------------
 
@@ -111,7 +115,11 @@ class MatchPlayer:
         self._wake.set()
 
     def next_chapter(self) -> None:
-        """Skip to the next key moment after the current position."""
+        """Skip to the next key moment after the current position (or, before kick-off, skip the introduction)."""
+        if self._intro in ("to_come", "playing"):
+            self._intro = "skipped"
+            self._wake.set()
+            return
         upcoming = next((c for c in self.chapters if c.start > self.position), None)
         self.mode = "key_moments"
         self.seek(upcoming.start if upcoming else self.match.events[-1].elapsed)
@@ -126,6 +134,8 @@ class MatchPlayer:
     async def run(self) -> None:
         await self.send({"type": "ready", "chapters": [c.model_dump() for c in self.chapters],
                          "profile": self.session.profile.model_dump(), "mode": self.mode, "speed": self.speed})
+        if self._intro == "to_come" and self.index == 0:
+            await self._pre_match()
         while True:
             if self.index >= len(self.match.events):
                 if not self.finished:
@@ -150,6 +160,35 @@ class MatchPlayer:
             if delay > 0 and not await self._wait(delay):
                 continue  # woken by a control change: re-evaluate
             await self._play(ev)
+
+    async def _pre_match(self) -> None:
+        """Before kick-off: the players line up and Achilles runs through a few starter points. Kick-off
+        waits until the introduction has been said (or skipped in the demo)."""
+        self._intro = "playing"
+        await self.send({"type": "pre_match", "frame": self.match.events[0].frame})
+        task = asyncio.create_task(self._intro_lines())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (INTRO_MAX_S if self.speed <= 4 else 5)
+        while not task.done() and self._intro == "playing" and loop.time() < deadline:
+            await asyncio.wait([task], timeout=0.25)
+        while self.speed <= 4 and self._intro == "playing" and self._still_talking() and loop.time() < deadline:
+            await self._wait(0.25)
+        if self._intro == "playing":
+            self._intro = "done"
+
+    async def _intro_lines(self) -> None:
+        try:
+            async for commentary in self.session.pre_match(self.reader.snapshot()):
+                if self._intro == "skipped":
+                    return
+                await self.send({"type": "commentary", **commentary.model_dump(mode="json")})
+        except Exception:
+            log.exception("introduction failed")
+
+    async def _progress(self, payload: dict) -> None:
+        await self.send({"type": "agents", **payload})
 
     async def _play(self, ev) -> None:
         self.index += 1

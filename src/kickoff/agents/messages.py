@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
@@ -10,6 +12,11 @@ from pydantic import BaseModel, Field
 
 from ..match_reader import ReaderUpdate
 from .viewer import Knowledge, ViewerProfile
+
+
+# Where agents report what they are doing (for the demo's agent strip). A context variable rather than a
+# field on the Moment, because the workflow copies messages between executors and a callback cannot be copied.
+REPORTER: ContextVar[Callable[[dict], Awaitable[None]] | None] = ContextVar("kickoff_reporter", default=None)
 
 
 class Tone(StrEnum):
@@ -58,6 +65,11 @@ class Moment:
     recent_lines: list[str]
     backlog: list[Proposal] = field(default_factory=list)
     signals: list[dict] = field(default_factory=list)
+
+    async def report(self, agent: str, state: str, texts: list[str] | None = None) -> None:
+        """Tell the viewer's screen what an agent is doing: thinking, idle, or done (with what it wrote)."""
+        if reporter := REPORTER.get():
+            await reporter({"event_id": self.update.event.id, "agent": agent, "state": state, "texts": texts or []})
 
     @property
     def salience(self) -> int:

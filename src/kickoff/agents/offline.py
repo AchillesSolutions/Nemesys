@@ -41,6 +41,8 @@ def _brief(messages: list[Message]) -> dict:
 
 
 def _teacher(b: dict) -> dict:
+    if "concepts" in b:  # starter points before kick-off: one per rule
+        return {"proposals": [{"text": c["rule_fact"], "priority": 8, "concept": c["concept"]} for c in b["concepts"]]}
     fact, depth = b["rule_fact"], b["depth"]
     if depth == "full":
         text, priority = fact, 8
@@ -53,7 +55,9 @@ def _teacher(b: dict) -> dict:
 
 def _storyteller(b: dict) -> dict:
     kinds = {s["kind"]: s for s in b.get("signals", [])}
-    if "bridge" in kinds:
+    if "fixture_notes" in b:
+        text, priority = b["fixture_notes"][-1], 6
+    elif "bridge" in kinds:
         gap = kinds["bridge"]["possession_in_gap"]
         leader = max(gap, key=gap.get)
         text, priority = f"Since then, {leader.upper()} have had {round(gap[leader])}% of the ball.", 5
@@ -73,6 +77,9 @@ def _ordinal(n: int) -> str:
 
 
 def _league_guide(b: dict) -> dict:
+    if "if_home_win" in b:
+        return {"proposals": [{"text": f"Both clubs are chasing a European place. {b['european_places']}", "priority": 7,
+                               "concept": None}]}
     stakes = {k: v for k, v in b["if_score_stands"].items() if isinstance(v, dict)}
     club, move = max(stakes.items(), key=lambda kv: abs(kv[1]["position_before"] - kv[1]["position_if_score_stands"]))
     before, after = move["position_before"], move["position_if_score_stands"]

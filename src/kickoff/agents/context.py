@@ -32,6 +32,8 @@ EVENT_CONCEPTS: dict[EventType, list[str]] = {
 
 def concepts_for(ev: MatchEvent) -> list[str]:
     concepts = list(EVENT_CONCEPTS.get(ev.type, []))
+    if ev.type == EventType.PRE_MATCH:
+        return ["match_length", "team_size", "points"]  # the starter points before kick-off
     if ev.type == EventType.KICK_OFF and ev.period == 1:
         concepts = ["team_size", "kick_off"]  # at the start: who is on the pitch; at half-time's restart: kick-offs
     if ev.type == EventType.FREE_KICK and ev.detail.get("wall"):
@@ -68,6 +70,9 @@ class Describer:
         team, p, o = self.club(ev.team), self.player(ev.player), self.player(ev.other_player)
         d = ev.detail
         match ev.type:
+            case EventType.PRE_MATCH:
+                return ("Before kick-off: the match starts at 8pm. This is a short introduction for the viewer "
+                        "while the teams get ready.")
             case EventType.KICK_OFF:
                 return f"{team} kick off."
             case EventType.PASS:

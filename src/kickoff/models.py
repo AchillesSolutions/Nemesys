@@ -108,6 +108,7 @@ class EventType(StrEnum):
     PENALTY = "penalty"
     HALF_TIME = "half_time"
     FULL_TIME = "full_time"
+    PRE_MATCH = "pre_match"  # not in the match data: the introduction before kick-off
 
 
 class MatchEvent(BaseModel):

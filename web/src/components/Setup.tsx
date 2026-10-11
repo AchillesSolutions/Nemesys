@@ -25,7 +25,6 @@ type Step = "language" | "team" | "level" | "alone";
 
 const STEPS: Step[] = ["language", "team", "level", "alone"];
 const STEP_OF: Record<string, Step> = { language: "language", team: "team", level: "level", hands_free: "alone" };
-const SOON_S = 5;
 const NO_ANSWER_MS = 12000; // counted from when the question has finished being asked
 const DEFAULT: Profile = { team: null, language: "en", level: "beginner", hands_free: false };
 const LANGUAGES: Language[] = ["en", "zh", "es"];
@@ -45,9 +44,7 @@ export function Setup({ dir, match, demo, onStart }: {
   const [profile, setProfile] = useState<Profile>(DEFAULT);
   const [said, setSaid] = useState<string[]>([]);
   const [listen, setListen] = useState<{ state: ListenState; caption?: string }>({ state: "off" });
-  const [kickoffAt, setKickoffAt] = useState<number | null>(null);
   const [askedAt, setAskedAt] = useState<number | null>(null); // when the current question finished
-  const [now, setNow] = useState(() => performance.now());
   const stageRef = useRef(stage);
   const stepRef = useRef(step);
   const profileRef = useRef(profile);
@@ -94,7 +91,7 @@ export function Setup({ dir, match, demo, onStart }: {
         case "team": return [home, away].map((c) => spoken(t(l, "confirmTeam").replace("{team}", c.short_name), l))
           .concat([spoken(t(l, "confirmNeutral"), l), spoken(question("level", l), l)]);
         case "level": return [spoken(t(l, "confirmLevel"), l), spoken(question("alone", l), l)];
-        case "alone": return [spoken(t(l, "tipAlone"), l), spoken(t(l, "tipOthers"), l), spoken(t(l, "kickoffSoon"), l)];
+        case "alone": return [spoken(t(l, "tipAlone"), l), spoken(t(l, "tipOthers"), l)];
       }
     });
     void voice.preload(lines, lang);
@@ -104,16 +101,13 @@ export function Setup({ dir, match, demo, onStart }: {
     if (stageRef.current === "started") return;
     go("started");
     listener.mode = "wake";
-    void voice.sayAndWait([spoken(t(p.language, "letsGo"), p.language, "excited")], p.language);
-    onStart(p);
+    onStart(p); // the match screen opens with the introduction before kick-off
   };
 
   const tip = async (p: Profile) => {
     go("tip");
     await say([spoken(t(p.language, p.hands_free ? "tipAlone" : "tipOthers"))], p.language);
-    go("ready");
-    setKickoffAt(performance.now() + SOON_S * 1000);
-    await say([spoken(t(p.language, "kickoffSoon"))], p.language);
+    start(p);
   };
 
   /** Ask the next question nobody has answered yet, or finish. */
@@ -217,14 +211,6 @@ export function Setup({ dir, match, demo, onStart }: {
     return () => clearTimeout(id);
   }, [stage, step, askedAt, listen.caption]);
 
-  // The countdown.
-  useEffect(() => {
-    if (kickoffAt == null || stage === "started") return;
-    const id = setInterval(() => setNow(performance.now()), 250);
-    return () => clearInterval(id);
-  }, [kickoffAt, stage]);
-  const remaining = kickoffAt == null ? null : Math.max(0, Math.ceil((kickoffAt - now) / 1000));
-  useEffect(() => { if (remaining === 0) start(profileRef.current); }, [remaining]);
 
   if (stage === "splash") {
     return (
@@ -254,7 +240,7 @@ export function Setup({ dir, match, demo, onStart }: {
     <main className={`lobby ${demo ? "" : "voice-only"}`}>
       <Fixture dir={dir} match={match} lang={lang}>
         <div className="score kickoff-time">
-          {remaining == null || remaining === 0 ? "20:00" : `19:59:${String(60 - remaining).padStart(2, "0")}`}
+          20:00
         </div>
         <p className="match-clock">{t(lang, "kickoffLabel")} · {match.venue}</p>
       </Fixture>

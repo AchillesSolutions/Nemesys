@@ -22,6 +22,15 @@ TABLE_SEED = 7
 
 HOME_ID = "kil"
 AWAY_ID = "hbr"
+EUROPE_PLACES = 4  # the top four qualify for European competition
+
+# Background to this fixture, for the build-up before kick-off. Invented, like the clubs.
+FIXTURE_NOTES = [
+    "Both clubs started the season aiming for a European place: the top four qualify for European competition.",
+    "Last season this fixture finished 2-2 at Lockside Park, with Harbour City equalising in stoppage time.",
+    "Kilburn have not beaten Harbour City in their last three meetings.",
+    "The styles are opposites: Kilburn keep the ball and pass patiently; Harbour City defend deep and break fast.",
+]
 
 OTHER_CLUBS = [
     "Kestrel Bay", "Millbrook Athletic", "Stonegate United", "Larkhill Forest",

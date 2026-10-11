@@ -7,7 +7,9 @@ import { Captions, TalkCard } from "./components/Captions";
 import { Feed } from "./components/Feed";
 import { Learned, LeagueTable, Stats, UnderTheHood } from "./components/Panels";
 import { Pitch, Ticker } from "./components/Pitch";
+import { AgentStrip } from "./components/AgentStrip";
 import { Fixture, Score } from "./components/Fixture";
+import { IntroCard } from "./components/IntroCard";
 import { Setup } from "./components/Setup";
 import { LEVELS, t } from "./i18n";
 import type { HelpLevel, Language, MatchInfo, Mode, Profile, World } from "./types";
@@ -157,17 +159,26 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
     <div className="live" lang={lang === "zh" ? "zh-CN" : lang}>
       <div className="screen">
         <Fixture dir={dir} match={match} home={state.snapshot?.home} away={state.snapshot?.away} lang={lang}>
-          <Score snapshot={state.snapshot} lang={lang}
-                 clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
-                          speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
+          {state.event ? (
+            <Score snapshot={state.snapshot} lang={lang}
+                   clock={{ event: state.event, arrivedAt: state.arrivedAt, nextGap: state.nextGap,
+                            speed: state.speed * state.pace, paused: state.paused || state.bridge !== null }} />
+          ) : (
+            <>
+              <div className="score kickoff-time">20:00</div>
+              <p className="match-clock">{t(lang, "kickoffLabel")} · {match.venue}</p>
+            </>
+          )}
           {!state.connected && <p className="status">{t(lang, "connecting")}</p>}
         </Fixture>
 
         {/* The pitch in the middle of the stage, with frosted panels floating over the grass either side */}
-        <main className="stage">
+        <main className={`stage ${PRESET.demo ? "with-agents" : ""}`}>
+          {PRESET.demo && <AgentStrip agents={state.agents} asking={state.asking} lang={lang} />}
           <div className="stage-pitch">
             <Pitch dir={dir} match={match} snapshot={state.snapshot} recent={state.recent}
-                   nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} />
+                   nextGap={state.nextGap} speed={state.speed * state.pace} lang={lang} lineup={state.lineup} />
+            {!state.event && <IntroCard feed={state.feed} lang={lang} />}
             <BridgeBanner bridge={state.bridge} lang={lang} />
           </div>
           <aside className="rail left">
@@ -182,7 +193,7 @@ function Live({ dir, match, profile }: { dir: Directory; match: MatchInfo; profi
             <LeagueTable dir={dir} match={match} snapshot={state.snapshot} lang={lang} />
             <Stats dir={dir} snapshot={state.snapshot} lang={lang} />
           </aside>
-          <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} dir={dir} clubs={[match.home, match.away]} />
+          <Captions voiceOn={voiceOn} feed={state.feed} lang={lang} dir={dir} clubs={[match.home, match.away]} demo={PRESET.demo} />
         </main>
       </div>
 

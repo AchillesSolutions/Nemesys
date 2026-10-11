@@ -10,17 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
-from ..match_reader import ReaderUpdate
-from ..models import EventType, Match, Position, World
+from ..match_reader import MatchSnapshot, ReaderUpdate
+from ..models import EventType, Match, MatchEvent, Position, World
 from .context import Describer, concepts_for
-from .i18n import (CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, KIT_LINE, KIT_LINE_FAN, KITS, concept_label,
-                   score_phrase)
+from .i18n import (CALLS, FAN_HEADLINES, HEADLINE_TITLES, HEADLINES, INTRO_CLOSE, INTRO_OPEN, INTRO_TITLES, KIT_LINE,
+                   KIT_LINE_FAN, KITS, concept_label, score_phrase)
 from .llm import ClientFactory
-from .messages import Decision, Line, Moment, Proposal
+from .messages import REPORTER, Decision, Line, Moment, Proposal
 from .producer import team_tone
 from .viewer import ASSUMED_KNOWN, Knowledge, Language, ViewerProfile, depth_for
 from .workflow import build_workflow
@@ -61,6 +61,7 @@ class CommentarySession:
         self.busy_until = 0.0
         self._pending_quiet = False
         self._lock = asyncio.Lock()
+        self.on_progress: Callable[[dict], Awaitable[None]] | None = None  # what each agent is doing, for the demo
 
     # -- triggering ----------------------------------------------------------
 
@@ -184,12 +185,45 @@ class CommentarySession:
                            for p in decision.proposals],
             )
 
+    async def pre_match(self, snapshot: MatchSnapshot) -> AsyncIterator[Commentary]:
+        """The introduction before kick-off: a fixed opening, the agents' starter points (the rules from the
+        Teacher, the stakes from the League guide, the build-up from the Storyteller, put in order by the
+        Producer), then a fixed closing as the teams walk out."""
+        lang = self.profile.language
+        event = MatchEvent(id=0, elapsed=0, period=1, clock=0, minute="0", type=EventType.PRE_MATCH)
+        update = ReaderUpdate(event=event, salience=2, signals=[], snapshot=snapshot)
+
+        def said(lines: list[Line], reasoning: str, decision: Decision | None = None) -> Commentary:
+            self._speak(lines)
+            return Commentary(event_id=0, minute="0", elapsed=0, language=lang, lines=lines, reasoning=reasoning,
+                              learned=self.learned_labels(),
+                              proposals=[{"id": p.id, "agent": p.agent, "priority": p.priority, "text": p.text,
+                                          "used": any(p.id in line.proposal_ids for line in decision.lines)}
+                                         for p in decision.proposals] if decision else [])
+
+        yield said([Line(text=INTRO_OPEN[lang], tone="hopeful", card_title=INTRO_TITLES[lang], headline=True)],
+                   "Fixed opening, while the agents write the starter points.")
+        async with self._lock:
+            decision = await self._run_agents(update)
+        self.backlog = []  # nothing from the introduction is kept for later
+        for line in decision.lines:
+            for concept in line.concepts:
+                self.knowledge.record(concept, 0)
+        if decision.lines:
+            yield said(decision.lines, decision.reasoning, decision)
+        yield said([Line(text=INTRO_CLOSE[lang], tone="excited", card_title=INTRO_TITLES[lang], headline=True)],
+                   "Fixed closing: kick-off is next.")
+
     async def _run_agents(self, update: ReaderUpdate) -> Decision:
         moment = self._moment(update)
         if self._pending_quiet and "quiet_spell" not in moment.signal_kinds:
             moment.signals.append({"kind": "quiet_spell", "seconds": update.snapshot.seconds_since_highlight})
         self._pending_quiet = False
-        result = await self.workflow.run(moment)
+        token = REPORTER.set(self.on_progress)
+        try:
+            result = await self.workflow.run(moment)
+        finally:
+            REPORTER.reset(token)
         return result.get_outputs()[-1]
 
     # -- bookkeeping ---------------------------------------------------------

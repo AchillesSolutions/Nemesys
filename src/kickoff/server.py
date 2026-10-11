@@ -113,7 +113,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.websocket("/ws")
     async def live(ws: WebSocket, team: str | None = None, language: Language = Language.EN,
                    level: HelpLevel = HelpLevel.BEGINNER, mode: str = Query("key_moments"),
-                   speed: float = 1.0, hands_free: bool = False) -> None:
+                   speed: float = 1.0, hands_free: bool = False, demo: bool = False) -> None:
         await ws.accept()
         send_lock = asyncio.Lock()
 
@@ -124,7 +124,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         team = team if team in (match.home, match.away) else None
         profile = ViewerProfile(team=team, language=language, level=level, hands_free=hands_free)
         player = MatchPlayer(world, match, profile, clients, send,
-                             mode="full" if mode == "full" else "key_moments", speed=speed)
+                             mode="full" if mode == "full" else "key_moments", speed=speed, show_agents=demo)
         runner = asyncio.create_task(player.run())
         asks: set[asyncio.Task] = set()
 

@@ -47,6 +47,10 @@ Rules:
 - card_title is two to four words in the viewer's language.
 - Never address the viewer by a team's name ("Kilburn, ..."): you are talking to a person, not to a team.
 - Say minutes as a commentator would: "the 62nd minute" (第62分钟 / "el minuto 62"), never a bare number.
+- Before kick-off ("importance" is "the introduction before kick-off"), the lines are starter points for a
+  newcomer, in this order: every rule the Teacher proposed (one line each, keep the explanation), then what is at
+  stake in the table, then why the match is worth watching. Keep each line short. The viewer has already been
+  welcomed, so do not greet them again. Give each line a card_title naming its point ("90 minutes", "Chasing Europe").
 - Say scores as they sound aloud: "Kilburn 2, Harbour City 1", "it's 2-2" or "two all", never
   "Kilburn 2-2 Harbour City". In English a zero in a score is "nil" ("one-nil"), never "zero".
 """
@@ -57,7 +61,10 @@ TWO_LINE_MOMENTS = {EventType.GOAL, EventType.PENALTY, EventType.RED_CARD, Event
 
 
 def max_lines_for(m: Moment) -> int:
-    """Goals, penalties and red cards can carry two lines; everything else gets one focused line."""
+    """Goals, penalties and red cards can carry two lines; everything else gets one focused line. The
+    introduction before kick-off is a short run of starter points."""
+    if m.update.event.type == EventType.PRE_MATCH:
+        return 5
     return 2 if m.update.event.type in TWO_LINE_MOMENTS else 1
 
 
@@ -96,14 +103,20 @@ class Producer(Executor):
         candidates = sorted(fresh + backlog, key=lambda p: -p.priority)
 
         if not candidates:
-            await ctx.yield_output(Decision(m, [], [], [], "Nothing worth saying."))
+            await self._out(ctx, Decision(m, [], [], [], "Nothing worth saying."))
         elif len(candidates) == 1:
             p = candidates[0]
             line = Line(text=p.text, tone=team_tone(m), card_title=self._title(p, m), sources=[p.agent],
                         proposal_ids=[p.id], concepts=[p.concept] if p.concept else [])
-            await ctx.yield_output(Decision(m, candidates, [line], [], f"Only the {p.agent} had something to add."))
+            await self._out(ctx, Decision(m, candidates, [line], [], f"Only the {p.agent} had something to add."))
         else:
-            await ctx.yield_output(await self._judge(m, candidates))
+            await m.report("producer", "thinking")
+            await self._out(ctx, await self._judge(m, candidates))
+
+    @staticmethod
+    async def _out(ctx: WorkflowContext[Never, Decision], decision: Decision) -> None:
+        await decision.moment.report("producer", "done", [decision.reasoning])
+        await ctx.yield_output(decision)
 
     async def _judge(self, m: Moment, candidates: list[Proposal]) -> Decision:
         by_id = {p.id: p for p in candidates}
@@ -112,7 +125,8 @@ class Producer(Executor):
             "team_the_viewer_supports": self.describer.club(m.profile.team) if m.profile.team else "none (neutral viewer)",
             **({"voice": FAN_VOICE.format(team=self.describer.club(m.profile.team))} if m.profile.team else {}),
             "event": m.event_text,
-            "importance": ["routine", "a chance", "a stoppage worth explaining", "a big moment"][m.salience],
+            "importance": ("the introduction before kick-off" if m.update.event.type == EventType.PRE_MATCH
+                           else ["routine", "a chance", "a stoppage worth explaining", "a big moment"][m.salience]),
             "recently_said": m.recent_lines[-4:],
             "proposals": [{"id": p.id, "from": p.agent, "priority": p.priority, "kind": p.kind, "text": p.text,
                            "first_explanation": p.agent == "teacher" and p.priority >= 8}
