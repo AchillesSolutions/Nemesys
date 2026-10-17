@@ -284,7 +284,8 @@ class MatchReader:
                             "players": {cid: len(t.on_pitch) for cid, t in self.teams.items()}})
         if ev.type == EventType.GOAL:
             scored, conceded = self.teams[ev.team].score, self.teams[self._other(ev.team)].score
-            kind = "equaliser" if scored == conceded else "takes_the_lead" if scored == conceded + 1 else "extends_lead"
+            kind = ("equaliser" if scored == conceded else "takes_the_lead" if scored == conceded + 1
+                    else "extends_lead" if scored > conceded else "pulls_one_back")
             signals.append({"kind": kind, "team": ev.team, "score": dict(ev.detail["score"])})
         return signals
 

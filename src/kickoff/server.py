@@ -119,7 +119,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.get("/api/match")
     def get_match() -> dict:
         return {"id": match.id, "home": match.home, "away": match.away, "venue": match.venue,
-                "matchweek": match.matchweek, "duration": match.events[-1].elapsed,
+                "matchweek": match.matchweek, "duration": match.events[-1].elapsed, "lineup": match.events[0].frame,
                 "chapters": [c.model_dump(mode="json") for c in chapters]}
 
     @app.websocket("/ws")
@@ -208,6 +208,30 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.get("/api/rival/{session_id}/state")
     def rival_state(session_id: str) -> dict:
         return rival_for(session_id).state()
+
+    @app.websocket("/api/rival/{session_id}/stream")
+    async def rival_stream(ws: WebSocket, session_id: str) -> None:
+        """The match as it plays (events with the live snapshot) and what the rival is being told."""
+        await ws.accept()
+        session = rival.sessions.get(session_id)
+        if session is None:
+            await ws.close(code=4404)
+            return
+        queue: asyncio.Queue = asyncio.Queue()
+        session.listeners.add(queue)
+        try:
+            await ws.send_json({"type": "state", **session.state()})
+            if session.last_event:
+                await ws.send_json(session.last_event)
+            while session_id in rival.sessions:
+                with suppress(TimeoutError):
+                    await ws.send_json(await asyncio.wait_for(queue.get(), timeout=5))
+        except WebSocketDisconnect:
+            pass
+        finally:
+            session.listeners.discard(queue)
+            with suppress(Exception):
+                await ws.close()
 
     @app.post("/api/rival/{session_id}/side")
     async def rival_side(session_id: str, req: RivalSide) -> dict:

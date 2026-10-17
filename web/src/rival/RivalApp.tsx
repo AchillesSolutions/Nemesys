@@ -1,30 +1,32 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Directory, loadStatic } from "../api";
+import { Fixture, Score } from "../components/Fixture";
+import { LeagueTable } from "../components/Panels";
+import { Pitch } from "../components/Pitch";
+import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { LiveCall, type Speaker } from "./live";
 
 /**
- * Test bench for the Rival. The rival asks who you're backing; once you've picked (by voice, or with the
- * buttons if it didn't catch it) a short countdown starts, then the build-up and the match, with the real
- * events sped up. The real product has no screen; this page exists to prove the conversation works.
+ * The Rival on the matchday screen. The rival asks who you're backing; once you've picked (by voice, or
+ * with the buttons if it didn't catch it) a short countdown starts, then the build-up and the match, with
+ * the real events sped up. The real product has no screen: this is the demo view of what's going on.
  */
 
-interface Club { id: string; name: string; short_name: string; colours: [string, string] }
 interface Line { who: Speaker; text: string; at: number }
 interface FeedItem { kind: string; text: string; minute: string }
-interface MatchState {
-  phase: string; minute: string; score: Record<string, number>; user_team: string | null;
-  countdown: number; feed: FeedItem[];
-}
+interface RivalState { phase: string; minute: string; user_team: string | null; countdown: number; speed: number; feed: FeedItem[] }
+interface Play { event: MatchEvent | null; snapshot: Snapshot | null; recent: MatchEvent[]; arrivedAt: number; nextGap: number | null }
 type Status = "idle" | "connecting" | "live" | "ended";
 
 const PAUSE_MS = 1800; // a fragment after this much quiet from the same speaker starts a new line
+const SHOWN_LINES = 6; // the conversation window: roughly the last few exchanges
+const TRAIL = 6;
 const COST_PER_S = 0.0008; // third-party listing for gpt-live-1; not yet on Azure's price list
 const SOUNDS: Record<string, string> = { laugh: "laughs", laughs: "laughs", sigh: "sighs", groan: "groans",
   gasp: "gasps", scoff: "scoffs", chuckle: "chuckles", cheer: "cheers", boo: "boos" };
-const PHASES: Record<string, string> = { setup: "Who are you backing?", countdown: "Build-up starts in",
-  prematch: "Pre-match", first_half: "First half", half_time: "Half-time", second_half: "Second half",
-  full_time: "Full-time" };
 const FEED_LABELS: Record<string, string> = { setup: "Opening", side: "Sides", prematch: "Build-up", nudge: "Ammo",
   event: "Match", delegation: "Answered", manual: "Test" };
+const NO_PLAY: Play = { event: null, snapshot: null, recent: [], arrivedAt: 0, nextGap: null };
 
 /** Transcript text with sound tags like [laugh] shown as stage directions; a half-arrived tag is hidden. */
 function render(text: string): ReactNode[] {
@@ -42,36 +44,30 @@ function render(text: string): ReactNode[] {
 }
 
 export default function RivalApp() {
-  const [clubs, setClubs] = useState<Club[]>([]);
+  const [data, setData] = useState<{ dir: Directory; match: MatchInfo & { lineup?: Record<string, number[]> } } | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [lines, setLines] = useState<Line[]>([]);
   const [muted, setMuted] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [state, setState] = useState<MatchState | null>(null);
+  const [rival, setRival] = useState<RivalState | null>(null);
+  const [play, setPlay] = useState<Play>(NO_PLAY);
   const [error, setError] = useState<string | null>(null);
   const call = useRef<LiveCall | null>(null);
+  const stream = useRef<WebSocket | null>(null);
   const open = useRef<Partial<Record<Speaker, number>>>({}); // each speaker's line still being spoken
   const started = useRef(0);
 
   useEffect(() => {
-    Promise.all([fetch("/api/world").then((r) => r.json()), fetch("/api/match").then((r) => r.json())])
-      .then(([world, match]) => {
-        const byId = (id: string) => world.clubs.find((c: Club) => c.id === id);
-        setClubs([byId(match.home), byId(match.away)]);
-      })
+    loadStatic()
+      .then(({ world, match }) => setData({ dir: new Directory(world), match }))
       .catch(() => setError("Couldn't reach the server"));
-    return () => call.current?.close();
+    return () => { call.current?.close(); stream.current?.close(); };
   }, []);
 
-  // While live: count billed seconds locally between the service's usage updates, and follow the match.
+  // Billing runs while the session is open: count it locally between the service's usage updates.
   useEffect(() => {
     if (status !== "live") return;
-    const timer = setInterval(async () => {
-      setSeconds((s) => Math.max(s, (Date.now() - started.current) / 1000));
-      if (!call.current) return;
-      const resp = await fetch(`/api/rival/${call.current.sessionId}/state`).catch(() => null);
-      if (resp?.ok) setState(await resp.json());
-    }, 1000);
+    const timer = setInterval(() => setSeconds((s) => Math.max(s, (Date.now() - started.current) / 1000)), 1000);
     return () => clearInterval(timer);
   }, [status]);
 
@@ -90,10 +86,29 @@ export default function RivalApp() {
     });
   }
 
+  function follow(sessionId: string) {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/api/rival/${sessionId}/stream`);
+    stream.current = ws;
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "state") {
+        const { type: _type, ...state } = msg;
+        setRival(state);
+      } else if (msg.type === "event") {
+        setPlay((p) => ({
+          event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
+          recent: [...p.recent, msg.event].slice(-TRAIL),
+        }));
+      }
+    };
+  }
+
   async function start() {
     setError(null);
     setLines([]);
-    setState(null);
+    setRival(null);
+    setPlay(NO_PLAY);
     setSeconds(0);
     open.current = {};
     setStatus("connecting");
@@ -102,12 +117,13 @@ export default function RivalApp() {
         {
           onTranscript: addFragment,
           onUsage: (s) => setSeconds((prev) => Math.max(prev, s)),
-          onClosed: () => setStatus("ended"),
+          onClosed: () => { setStatus("ended"); stream.current?.close(); },
           onError: setError,
         },
         async (c) => {
           started.current = Date.now();
           setStatus("live");
+          follow(c.sessionId);
           await fetch(`/api/rival/${c.sessionId}/kickoff`, { method: "POST" });
         },
       );
@@ -119,6 +135,7 @@ export default function RivalApp() {
 
   function stop() {
     call.current?.close();
+    stream.current?.close();
     setStatus("ended");
   }
 
@@ -137,92 +154,105 @@ export default function RivalApp() {
     setMuted(!muted);
   }
 
-  const [home, away] = clubs;
+  const shown = useMemo(() => lines.slice(-SHOWN_LINES), [lines]);
+  if (!data) return <p className="boot">{error ?? "Loading…"}</p>;
+  const { dir, match } = data;
+  const home = dir.club(match.home)!, away = dir.club(match.away)!;
   const live = status === "live";
-  const score = state?.score ?? {};
-  const club = (id: string | null | undefined) => clubs.find((c) => c.id === id);
-  const phase = state?.phase ?? "setup";
+  const phase = rival?.phase ?? "setup";
+  const speed = rival?.speed ?? 12;
+  const userClub = dir.club(rival?.user_team), rivalClub = userClub ? (userClub.id === home.id ? away : home) : null;
 
   return (
-    <main className="rival">
-      <header className="rival-head">
-        <p className="rival-kicker">Kick-Off · Rival test bench</p>
-        {home && away && (
-          <h1 className="rival-fixture">
-            <span style={{ color: home.colours[0] }}>{home.short_name}</span>
-            <span className="rival-score">{score[home.id] ?? 0}–{score[away.id] ?? 0}</span>
-            <span style={{ color: away.colours[0] }}>{away.short_name}</span>
-          </h1>
-        )}
-        {live && (
-          <p className="rival-phase">
-            {PHASES[phase] ?? phase}
-            {phase === "countdown" && ` ${state?.countdown}`}
-            {(phase === "first_half" || phase === "second_half") && state?.minute && ` · ${state.minute}'`}
-            {state?.user_team && ` · You: ${club(state.user_team)?.short_name}, rival: ${
-              club(clubs.find((c) => c.id !== state.user_team)?.id)?.short_name}`}
-          </p>
-        )}
-      </header>
+    <div className="live rival-live">
+      <div className="screen">
+        <Fixture dir={dir} match={match} home={play.snapshot?.home} away={play.snapshot?.away} lang="en">
+          {play.event ? (
+            <Score snapshot={play.snapshot} lang="en"
+                   clock={{ event: play.event, arrivedAt: play.arrivedAt, nextGap: play.nextGap, speed, paused: false }} />
+          ) : (
+            <>
+              <div className="score kickoff-time">{phase === "countdown" ? `0:0${rival?.countdown ?? 0}` : "20:00"}</div>
+              <p className="match-clock">
+                {!live ? `Kick-off · ${match.venue}`
+                  : phase === "setup" ? "Who are you backing?"
+                  : phase === "countdown" ? "Build-up starts in a moment"
+                  : "Teams are out · kick-off soon"}
+              </p>
+            </>
+          )}
+        </Fixture>
 
-      <section className="rival-controls">
-        {status === "live" || status === "connecting" ? (
-          <>
-            <button className="rival-primary" onClick={stop}>End</button>
-            <button onClick={toggleMute} disabled={!live}>{muted ? "Unmute mic" : "Mute mic"}</button>
-          </>
-        ) : (
-          <button className="rival-primary" onClick={start}>{status === "ended" ? "Start again" : "Start"}</button>
-        )}
-        <span className="rival-meter">
-          {status === "connecting" ? "Connecting…" : `${Math.round(seconds)}s · ~$${(seconds * COST_PER_S).toFixed(2)}`}
-        </span>
-      </section>
-      <p className="rival-hint">Use headphones. Tell the rival who you're backing and the match starts five seconds later.</p>
+        <main className="stage">
+          <div className="stage-pitch">
+            <Pitch dir={dir} match={match} snapshot={play.snapshot} recent={play.recent}
+                   nextGap={play.nextGap} speed={speed} lang="en" lineup={match.lineup ?? null} />
+          </div>
 
-      {live && phase === "setup" && home && away && (
-        <section className="rival-side">
-          <span>Didn't catch it? I'm backing</span>
-          {[home, away].map((c) => (
-            <button key={c.id} onClick={() => post("side", { team: c.id })}>{c.short_name}</button>
-          ))}
-        </section>
-      )}
+          <aside className="rail left">
+            <section className="panel glass rival-session">
+              <h2>The Rival <span className="sub">{live ? `${Math.round(seconds)}s · ~$${(seconds * COST_PER_S).toFixed(2)}` : ""}</span></h2>
+              <div className="rival-buttons">
+                {status === "live" || status === "connecting" ? (
+                  <>
+                    <button className="btn rival-primary" onClick={stop}>End</button>
+                    <button className="btn" onClick={toggleMute} disabled={!live}>{muted ? "Unmute mic" : "Mute mic"}</button>
+                  </>
+                ) : (
+                  <button className="btn rival-primary" onClick={start}>{status === "ended" ? "Start again" : "Start"}</button>
+                )}
+              </div>
+              {status === "connecting" && <p className="empty">Connecting…</p>}
+              {userClub && rivalClub ? (
+                <p className="rival-sides">You're backing <b style={{ color: dir.colour(userClub.id) }}>{userClub.short_name}</b>.
+                  {" "}The rival's <b style={{ color: dir.colour(rivalClub.id) }}>{rivalClub.short_name}</b> through and through.</p>
+              ) : live ? (
+                <div className="rival-side-pick">
+                  <span className="empty">Didn't catch it? I'm backing</span>
+                  {[home, away].map((c) => (
+                    <button key={c.id} className="btn" onClick={() => post("side", { team: c.id })}>{c.short_name}</button>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty">Headphones on. Tell the rival who you're backing and the match starts five seconds later.</p>
+              )}
+              {error && <p className="rival-error" role="alert">{error}</p>}
+            </section>
+            <LeagueTable dir={dir} match={match} snapshot={play.snapshot} lang="en" />
+          </aside>
 
-      {error && <p className="rival-error" role="alert">{error}</p>}
-
-      <section className="rival-transcript" aria-live="polite">
-        {lines.map((line, i) => (
-          <p key={i} className={`rival-line rival-line-${line.who}`}>
-            <span className="rival-who">{line.who === "user" ? "You" : "Rival"}</span>
-            {render(line.text)}
-          </p>
-        ))}
-        {!lines.length && <p className="rival-empty">The conversation shows up here as it happens.</p>}
-      </section>
-
-      {state && state.feed.length > 0 && (
-        <section className="rival-sent">
-          <h2>What the server told the rival</h2>
-          {state.feed.slice().reverse().map((f, i) => (
-            <p key={i}><span className="rival-tag">{FEED_LABELS[f.kind] ?? f.kind}</span>{f.text}</p>
-          ))}
-        </section>
-      )}
-
-      {home && away && (
-        <details className="rival-manual">
-          <summary>Test moments (made up, outside the match script)</summary>
-          {[home, away].map((c) => (
-            <div key={c.id} className="rival-event-row">
-              <span className="rival-club" style={{ borderColor: c.colours[0] }}>{c.short_name}</span>
-              <button disabled={!live} onClick={() => post("event", { kind: "goal", team: c.id })}>Goal</button>
-              <button disabled={!live} onClick={() => post("event", { kind: "miss", team: c.id })}>Big miss</button>
-              <button disabled={!live} onClick={() => post("event", { kind: "save", team: c.id })}>Saved</button>
-            </div>
-          ))}
-        </details>
-      )}
-    </main>
+          <aside className="rail right">
+            <section className="panel glass rival-feed">
+              <h2>Feeding the rival</h2>
+              {rival?.feed.length ? (
+                rival.feed.slice(-4).reverse().map((f, i) => (
+                  <p key={rival.feed.length - i} className="rival-feed-item">
+                    <span className="rival-tag">{FEED_LABELS[f.kind] ?? f.kind}{f.minute && ` · ${f.minute}'`}</span>
+                    {f.text}
+                  </p>
+                ))
+              ) : <p className="empty">Match moments and talking points appear here as they're sent.</p>}
+            </section>
+            <section className="panel glass rival-chat" aria-live="polite">
+              <h2>Conversation</h2>
+              <div className="rival-chat-lines">
+                {shown.map((line, i) => (
+                  <p key={lines.length - shown.length + i}
+                     className={`rival-line rival-line-${line.who}`}
+                     style={{ opacity: 0.35 + 0.65 * ((i + 1) / shown.length) }}>
+                    <span className="rival-who" style={{ color: line.who === "rival" && rivalClub ? dir.colour(rivalClub.id)
+                      : line.who === "user" && userClub ? dir.colour(userClub.id) : undefined }}>
+                      {line.who === "user" ? "You" : "Rival"}
+                    </span>
+                    {render(line.text)}
+                  </p>
+                ))}
+                {!shown.length && <p className="empty">The conversation shows up here as it happens.</p>}
+              </div>
+            </section>
+          </aside>
+        </main>
+      </div>
+    </div>
   );
 }

@@ -33,7 +33,9 @@ from urllib.parse import urlsplit
 import httpx
 import websockets
 
-from .models import Club, EventType, MatchEvent, Match, Position, World
+from .match_reader import MatchReader
+from .models import Club, EventType, Match, MatchEvent, Position, World
+from .player import event_message
 
 log = logging.getLogger(__name__)
 
@@ -188,16 +190,29 @@ class RivalSession:
     last_nudge: float = 0.0
     watcher: asyncio.Task | None = None
     director: asyncio.Task | None = None
+    listeners: set[asyncio.Queue] = field(default_factory=set)  # the browser's match stream
+    last_event: dict | None = None  # so a stream that (re)connects mid-match can draw the pitch at once
 
     async def send(self, event: dict) -> None:
         await self.sideband.send(json.dumps(event))
 
+    def publish(self, message: dict) -> None:
+        if message.get("type") == "event":
+            self.last_event = message
+        for queue in self.listeners:
+            queue.put_nowait(message)
+
+    def publish_state(self) -> None:
+        self.publish({"type": "state", **self.state()})
+
     async def commentary(self, text: str, kind: str = "event", delegation_id: str | None = None) -> None:
         self.feed.append({"kind": kind, "text": text, "minute": self.minute})
+        self.publish_state()
         await self.send({"type": "session.commentary.append", "delegation_id": delegation_id, "content": text})
 
     async def thinking(self, text: str, kind: str = "context", delegation_id: str | None = None) -> None:
         self.feed.append({"kind": kind, "text": text, "minute": self.minute})
+        self.publish_state()
         await self.send({"type": "session.thinking.append", "delegation_id": delegation_id, "content": text})
 
     async def close(self) -> None:
@@ -207,7 +222,7 @@ class RivalSession:
     def state(self) -> dict:
         return {"phase": self.phase, "minute": self.minute, "score": self.score, "user_team": self.user_team,
                 "countdown": max(0, round(self.countdown_ends - time.monotonic())) if self.phase == "countdown" else 0,
-                "feed": self.feed[-30:]}
+                "speed": MATCH_SPEED, "feed": self.feed[-30:]}
 
 
 class Rival:
@@ -301,7 +316,9 @@ class Rival:
         """Run the countdown, the build-up and the match, and keep the rival talking in the lulls."""
         try:
             session.phase, session.countdown_ends = "countdown", time.monotonic() + COUNTDOWN_S
-            await asyncio.sleep(COUNTDOWN_S)
+            for _ in range(COUNTDOWN_S):
+                session.publish_state()
+                await asyncio.sleep(1)
             session.phase = "prematch"
             await session.commentary(
                 "The teams are walking out. Pre-match build-up: take the lead now and keep it. "
@@ -310,22 +327,30 @@ class Rival:
             await self._fill(session, PREMATCH_S)
 
             session.phase, previous = "first_half", 0
-            for ev in self.match.events:
+            reader = MatchReader(self.world, self.match.home, self.match.away)
+            events = self.match.events
+            for i, ev in enumerate(events):
                 await self._fill(session, (ev.elapsed - previous) / MATCH_SPEED)
                 previous = ev.elapsed
+                update = reader.apply(ev)
                 session.minute = ev.minute
+                session.score = {t.id: t.score for t in (update.snapshot.home, update.snapshot.away)}
                 if ev.type is EventType.HALF_TIME:
                     session.phase = "half_time"
                 elif ev.type is EventType.KICK_OFF and ev.period == 2 and session.phase == "half_time":
                     session.phase = "second_half"
-                if score := ev.detail.get("score"):
-                    session.score = dict(score)
+                next_gap = events[i + 1].elapsed - ev.elapsed if i + 1 < len(events) else None
+                if ev.type is EventType.HALF_TIME:
+                    next_gap = None  # the clock stops for the break
+                session.publish(event_message(update, next_gap))
                 if ev.type in REACTS_TO and (text := describe(self.world, ev)):
                     session.last_nudge = time.monotonic()  # an event is as good as a nudge
                     await session.commentary(text)
                 if ev.type is EventType.HALF_TIME:
+                    session.publish_state()
                     await self._fill(session, HALF_TIME_S)
             session.phase = "full_time"
+            session.publish_state()
         except (websockets.ConnectionClosed, asyncio.CancelledError):
             pass
 

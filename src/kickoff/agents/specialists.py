@@ -165,7 +165,7 @@ unless you are illustrating "possession" or "counter_attack".
 Before kick-off, give the build-up in one or two sentences from "fixture_notes" and the two clubs' styles:
 why this match is worth watching. Priority 6.
 """
-    TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
+    TRIGGERS = {"possession_dominance", "numerical_advantage", "equaliser", "takes_the_lead", "extends_lead", "pulls_one_back", "bridge"}
     EVENTS = {EventType.HALF_TIME, EventType.FULL_TIME, EventType.SUBSTITUTION, EventType.VAR_DECISION,
               EventType.GOAL_DISALLOWED, EventType.PENALTY}
 
@@ -195,7 +195,7 @@ One or two sentences. Priority 3-6; up to 7 at full-time. Leave "concept" empty.
 Before kick-off, say where both clubs stand, that both are chasing a European place (the top four), and what a
 win would do for each, using "if_home_win", "if_draw" and "if_away_win". Priority 7.
 """
-    TRIGGERS = {"quiet_spell", "equaliser", "takes_the_lead", "extends_lead", "bridge"}
+    TRIGGERS = {"quiet_spell", "equaliser", "takes_the_lead", "extends_lead", "pulls_one_back", "bridge"}
 
     def brief(self, m: Moment) -> dict | None:
         ev = m.update.event

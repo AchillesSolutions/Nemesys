@@ -64,8 +64,9 @@ def test_big_moments_have_top_salience(world, match):
 def test_goal_signals_describe_the_scoreline(world, match):
     _, updates = _run(world, match.events)
     kinds = [s["kind"] for u in updates if u.event.type == EventType.GOAL for s in u.signals]
-    # 0-1, 1-1, 1-2, 2-2, 3-2 (ruled out), 3-2
-    assert kinds == ["takes_the_lead", "equaliser", "takes_the_lead", "equaliser", "takes_the_lead", "takes_the_lead"]
+    # 0-1, 0-2, 1-2, 2-2, 3-2 (ruled out), 3-2
+    assert kinds == ["takes_the_lead", "extends_lead", "pulls_one_back", "equaliser", "takes_the_lead",
+                     "takes_the_lead"]
 
 
 def test_red_card_signals_numerical_advantage(world, match):

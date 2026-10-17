@@ -1,46 +1,31 @@
-/* Rival test bench: one narrow column on the stadium dark, reusing the main app's tokens. */
-.rival { max-width: 720px; margin: 0 auto; padding: 2rem 16px 4rem; display: grid; gap: 1.25rem; }
-.rival-kicker { color: var(--muted); font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
-.rival-fixture {
-  font-family: var(--display); font-stretch: 75%; font-weight: 800; font-size: clamp(2rem, 8vw, 3.4rem);
-  display: flex; gap: .6em; align-items: baseline; flex-wrap: wrap; line-height: 1.05; margin-top: .3rem;
-}
-.rival-score { color: var(--text); font-variant-numeric: tabular-nums; }
-
-.rival button {
+/* The Rival on the matchday screen: the main app's stage, with the session and table on the left and
+   what's feeding the rival above a fixed conversation window on the right. */
+.rival-live .btn {
   background: var(--glass-strong); border: 1px solid var(--faint); border-radius: 999px;
-  padding: .55rem 1.1rem; cursor: pointer;
+  padding: .45rem 1rem; cursor: pointer;
 }
-.rival button:hover:not(:disabled) { border-color: var(--muted); }
-.rival button:disabled { opacity: .4; cursor: default; }
-.rival .rival-primary { background: var(--accent); color: var(--night); border-color: var(--accent); font-weight: 600; }
+.rival-live .btn:hover:not(:disabled) { border-color: var(--muted); }
+.rival-live .btn:disabled { opacity: .4; cursor: default; }
+.rival-live .rival-primary { background: var(--accent); color: var(--night); border-color: var(--accent); font-weight: 600; }
 
-.rival-controls { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-.rival-meter { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9rem; }
-.rival-hint { color: var(--muted); font-size: .9rem; margin-top: -.5rem; }
+.rival-session { display: grid; gap: 10px; }
+.rival-buttons, .rival-side-pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rival-sides { font-size: .92rem; line-height: 1.45; }
+.rival-error { color: var(--danger); font-size: .88rem; }
 
-.rival-phase { color: var(--muted); margin-top: .4rem; font-variant-numeric: tabular-nums; }
-.rival-side { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; color: var(--muted); }
-.rival-sound { color: var(--warn); font-style: italic; }
-.rival-tag { display: inline-block; min-width: 5.2rem; font-size: .72rem; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--accent); }
-.rival-manual summary { color: var(--muted); cursor: pointer; margin-bottom: .6rem; }
-.rival-manual { display: grid; gap: .5rem; }
-.rival-event-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-.rival-club { min-width: 7.5rem; border-left: 4px solid; padding-left: .6rem; font-weight: 600; }
+.rival-feed-item { font-size: .84rem; line-height: 1.4; color: var(--muted); margin: 0 0 .5rem; }
+.rival-feed-item:first-of-type { color: var(--text); }
+.rival-tag { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin-bottom: .1rem; }
 
-.rival-error { color: var(--danger); }
-
-.rival-transcript {
-  background: var(--glass); border: 1px solid var(--faint); border-radius: var(--radius);
-  padding: 1rem 1.1rem; min-height: 14rem; display: grid; gap: .6rem; align-content: start;
-}
-.rival-line { line-height: 1.45; }
-.rival-who { display: inline-block; min-width: 3.4rem; font-weight: 600; font-size: .8rem; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--muted); }
+/* A fixed window: the newest lines sit at the bottom and older ones fade and drop off the top. */
+.rail .rival-chat { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; overflow: hidden; }
+.rival-chat-lines { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: .55rem; }
+.rival-line { line-height: 1.42; font-size: .95rem; transition: opacity .4s; }
+.rival-who { display: block; font-weight: 600; font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 .rival-line-rival .rival-who { color: var(--warn); }
 .rival-line-user .rival-who { color: var(--accent); }
-.rival-empty { color: var(--muted); }
+.rival-sound { color: var(--warn); font-style: italic; }
 
-.rival-sent h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .4rem; }
-.rival-sent p { color: var(--muted); font-size: .9rem; margin: .2rem 0; }
+@media (max-width: 900px) {
+  .rail .rival-chat { height: 300px; flex: none; }
+}

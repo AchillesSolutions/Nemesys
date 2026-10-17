@@ -110,7 +110,7 @@ def test_big_moments_get_an_instant_headline_in_the_viewers_language(world, matc
     first_ev, first = goals[0]
     assert first.text.startswith("Harbour City进球了")
     assert first.tone == "disappointed", "a Kilburn fan should not sound happy about a Harbour City goal"
-    assert goals[1][1].tone == "excited"
+    assert goals[2][1].tone == "excited", "Kilburn's first goal, the penalty"
 
 
 def test_neutral_viewer_hears_goals_excitedly(world, match):
@@ -157,7 +157,7 @@ def test_supporters_hear_we_in_headlines(world, match):
     _, out, _ = run_match(world, match, ViewerProfile(team=HOME_ID))
     goals = [line.text for ev, line in lines(out) if line.headline and ev.type == EventType.GOAL]
     assert goals[0].startswith("Harbour City have scored"), "the other side is named"
-    assert goals[1].startswith("Goal! We've scored!"), "our goal is ours"
+    assert goals[2].startswith("Goal! We've scored!"), "our goal is ours"
     _, neutral, _ = run_match(world, match, ViewerProfile(), until_minute=60)
     assert all("We've" not in line.text for _, line in lines(neutral)), "neutral viewers hear team names"
 

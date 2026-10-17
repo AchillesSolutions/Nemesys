@@ -560,7 +560,10 @@ STORY: list[_Beat] = [
     _Beat(1, _m(33, 30), _counter_goal(
         "kil-8", [("hbr-8", 30, 55), ("hbr-10", 48, 50), ("hbr-7", 70, 80), ("hbr-9", 88, 55)],
         (88, 55), assist="hbr-7")),
-    _Beat(1, _m(40, 15), _offside("kil", "kil-5", "kil-8", "kil-7")),
+    _Beat(1, _m(37, 45), _offside("kil", "kil-5", "kil-8", "kil-7")),
+    # Two down at the break: the rival is unbearable, and the comeback has somewhere to come back from.
+    _Beat(1, _m(41, 50), _counter_goal(
+        "kil-5", [("hbr-8", 35, 40), ("hbr-10", 55, 45), ("hbr-7", 86, 62)], (86, 62), assist="hbr-10")),
     _Beat(1, HALF + FIRST_HALF_ADDED - 10, _half_time),
     _Beat(2, _m(52, 40), _var_penalty),
     _Beat(2, _m(48, 5), _offside("hbr", "hbr-6", "hbr-8", "hbr-9")),
@@ -568,8 +571,6 @@ STORY: list[_Beat] = [
                                        "A defensive midfielder to sit in front of the defence and spring counters")),
     _Beat(2, _m(61, 10), _substitution("kil", "kil-11", "kil-17",
                                        "Fresh pace on the wing against a tiring full-back")),
-    _Beat(2, _m(67, 20), _counter_goal(
-        "kil-5", [("hbr-15", 35, 40), ("hbr-10", 55, 45), ("hbr-7", 86, 62)], (86, 62), assist="hbr-10")),
     _Beat(2, _m(73, 50), _second_yellow),
     _Beat(2, _m(81, 40), _equaliser),
     _Beat(2, _m(87, 30), _disallowed_goal),
