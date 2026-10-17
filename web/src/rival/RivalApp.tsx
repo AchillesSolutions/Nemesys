@@ -11,15 +11,18 @@ import { hostSay, listen } from "./lobby";
 import { highlight, nameMatcher, type NameMatcher } from "./names";
 
 /**
- * The Rival on the matchday screen. A lobby host (not the rival) asks who you support; the lobby matches you
- * with a fan of the other club; then the rival joins, greets you and the match plays: by default the
- * highlights, so the whole thing fits in under two minutes. The real product has no screen: this is the demo
- * view, with the agents at work under the pitch.
+ * The Rival on the matchday screen. A lobby host (not the rival) asks, by voice, who you support and which
+ * rival you'd like: the one you watched with last time, or someone new. Then the rival joins, greets you and
+ * the match plays, fast-forwarding quiet play so the whole thing fits in about two minutes. The real product
+ * is voice only, with no screen: this is the demo view, with the agents at work under the pitch. The lobby's
+ * crests and rival cards can be tapped, for testing only.
  */
 
 interface Line { who: Speaker; text: string; at: number }
 interface Moment { minute: string; text: string; big: boolean }
-interface RivalCard { name: string; club: string; rematch: boolean; last: string | null }
+interface RivalCard { id: string; name: string; home: string; club: string; watched: boolean; last: string | null }
+interface Lobby { stage: "side" | "rival" | "done"; team: string | null; say: string | null; online: RivalCard[];
+  offered: string[]; rival: RivalCard | null }
 interface Play {
   event: MatchEvent | null; snapshot: Snapshot | null; recent: MatchEvent[]; arrivedAt: number; nextGap: number | null;
   pace: number; // match seconds per real second for the stretch after this event
@@ -34,17 +37,8 @@ const COST_PER_S = 0.0008; // third-party listing for gpt-live-1; not yet on Azu
 const SOUNDS: Record<string, string> = { laugh: "laughs", laughs: "laughs", sigh: "sighs", groan: "groans",
   gasp: "gasps", scoff: "scoffs", chuckle: "chuckles", cheer: "cheers", boo: "boos" };
 const NO_PLAY: Play = { event: null, snapshot: null, recent: [], arrivedAt: 0, nextGap: null, pace: 40 };
-const VOICES = ["cedar", "ash", "ballad", "echo", "verse", "sage", "alloy", "marin", "coral", "shimmer"];
-const ACCENTS: Record<string, string> = { london: "London", northern: "Northern English", none: "No accent asked for" };
 const MAX_RECONNECTS = 4;
-const MODE = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "highlights";
-
-function remembered(key: string, fallback: string): string {
-  try { return localStorage.getItem(`rival.${key}`) ?? fallback; } catch { return fallback; }
-}
-function remember(key: string, value: string) {
-  try { localStorage.setItem(`rival.${key}`, value); } catch { /* private window: fine */ }
-}
+const MODE = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "short";
 
 /** Transcript text: sound tags like [laugh] as stage directions (a half-arrived tag is hidden), names coloured. */
 function render(text: string, names: NameMatcher | null): ReactNode[] {
@@ -69,8 +63,7 @@ export default function RivalApp() {
   const [muted, setMuted] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [phase, setPhase] = useState("lobby");
-  const [userTeam, setUserTeam] = useState<string | null>(null);
-  const [card, setCard] = useState<RivalCard | null>(null);
+  const [lobby, setLobby] = useState<Lobby | null>(null);
   const [reports, setReports] = useState<Record<string, AgentReport>>({});
   const [host, setHost] = useState<{ working: boolean; text: string } | undefined>(undefined);
   const [heard, setHeard] = useState("");
@@ -78,13 +71,12 @@ export default function RivalApp() {
   const [now, setNow] = useState(() => Date.now() / 1000);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [voice, setVoice] = useState(() => remembered("voice", "cedar"));
-  const [accent, setAccent] = useState(() => remembered("accent", "london"));
   const call = useRef<LiveCall | null>(null);
   const stream = useRef<WebSocket | null>(null);
   const watchId = useRef<string | null>(null);
   const stopListening = useRef<(() => void) | null>(null);
-  const picked = useRef(false);
+  const hostTalking = useRef(false);
+  const joining = useRef(false);
   const stopping = useRef(false);
   const reconnects = useRef(0);
   const open = useRef<Partial<Record<Speaker, number>>>({}); // each speaker's line still being spoken
@@ -157,65 +149,70 @@ export default function RivalApp() {
     setMoments([]);
     setPlay(NO_PLAY);
     setReports({});
-    setUserTeam(null);
-    setCard(null);
+    setLobby(null);
     setHeard("");
     setSeconds(0);
     setPhase("lobby");
     open.current = {};
-    picked.current = false;
+    joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
     started.current = 0;
     stream.current?.close();
+    let first: Lobby & { id: string };
     try {
-      const resp = await fetch(`/api/rival/watch?mode=${MODE}`, { method: "POST" });
-      watchId.current = (await resp.json()).id;
+      first = await fetch(`/api/rival/watch?mode=${MODE}`, { method: "POST" }).then((r) => r.json());
     } catch {
       setError("Couldn't reach the server");
       return;
     }
-    follow(watchId.current!);
+    watchId.current = first.id;
+    follow(first.id);
     setStatus("lobby");
-    const home = data.dir.club(data.match.home)!, away = data.dir.club(data.match.away)!;
-    const question = `Welcome to Kick-Off. ${home.name} against ${away.name} is about to kick off. Who are you supporting?`;
-    setHost({ working: true, text: "Asking who you support" });
-    await hostSay(question);
-    if (picked.current) return;
-    setHost({ working: true, text: "Listening for your club" });
-    stopListening.current = await listen(
-      async (text) => {
-        setHeard(text);
-        const r = await fetch(`/api/rival/${watchId.current}/heard`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
-        }).then((x) => x.json()).catch(() => null);
-        if (r?.team) void matched(r.team, r.rival);
-      },
-      setHeard,
-    );
-    if (!stopListening.current) setHost({ working: false, text: "Tap your club's crest" });
+    void update(first);
+    stopListening.current = await listen((text) => {
+      if (hostTalking.current || joining.current) return; // the host's own voice, or too late
+      setHeard(text);
+      void post("heard", { text });
+    }, (text) => { if (!hostTalking.current) setHeard(text); });
+    if (!stopListening.current) setNotice("Speech recognition isn't available here; tap to choose (testing only).");
   }
 
-  async function pick(team: string) {
-    const r = await fetch(`/api/rival/${watchId.current}/side`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ team }),
-    }).then((x) => x.json()).catch(() => null);
-    if (r?.team) void matched(r.team, r.rival);
+  /** Testing only (the product is voice only): tap a crest or a rival card. */
+  async function post(path: string, body: object) {
+    const next = await fetch(`/api/rival/${watchId.current}/${path}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (next) void update(next);
   }
 
-  /** The viewer has picked: show the matchmaking, and bring the rival in. */
-  async function matched(team: string, rival: RivalCard) {
-    if (picked.current || !data) return;
-    picked.current = true;
-    stopListening.current?.();
-    stopListening.current = null;
-    setUserTeam(team);
-    setCard(rival);
+  /** The lobby moved on: show it, have the host say what's next, and bring the rival in once chosen. */
+  async function update(next: Lobby) {
+    setLobby(next);
+    if (next.stage === "done" && next.rival && !joining.current) {
+      joining.current = true;
+      stopListening.current?.();
+      stopListening.current = null;
+      void join(next.rival, next.say);
+      return;
+    }
+    if (next.say) await speak(next.say, next.stage === "side" ? "Asking who you support" : "Offering you a rival");
+    setHost({ working: true, text: "Listening" });
+  }
+
+  async function speak(line: string, what: string) {
+    hostTalking.current = true;
+    setHost({ working: true, text: what });
+    setHeard("");
+    await hostSay(line);
+    hostTalking.current = false;
+  }
+
+  /** The rival is chosen: show the connection, and bring them in. */
+  async function join(rival: RivalCard, say: string | null) {
     setStatus("matching");
-    const club = data.dir.club(team)!, theirs = data.dir.club(rival.club)!;
-    setHost({ working: true, text: `Matching you with a ${theirs.short_name} fan` });
     const shown = Date.now();
-    void hostSay(`${club.short_name}. Finding you a ${theirs.name} fan to watch with.`);
+    if (say) void speak(say, `Connecting you to ${rival.name}`);
     try {
       await connect(watchId.current!, async () => {
         await new Promise((r) => setTimeout(r, Math.max(0, MATCHING_MIN_MS - (Date.now() - shown))));
@@ -231,7 +228,7 @@ export default function RivalApp() {
   /** Connect the rival's voice to the watch: the first time, or again after a drop. */
   async function connect(watch: string, beforeJoin?: () => Promise<void>) {
     call.current = await LiveCall.start(
-      { watch, voice, accent },
+      { watch },
       {
         onTranscript: addFragment,
         onUsage: (s) => setSeconds((prev) => Math.max(prev, s)),
@@ -243,7 +240,7 @@ export default function RivalApp() {
       async (c) => {
         await beforeJoin?.();
         if (!started.current) started.current = Date.now();
-        setHost({ working: false, text: "You're matched. Enjoy the game" });
+        setHost({ working: false, text: "Matched" });
         setStatus("live");
         setNotice(c.resumed ? "Reconnected. The rival's picking up where it left off." : null);
         await fetch(`/api/rival/${c.watchId}/opened?resumed=${c.resumed}`, { method: "POST" });
@@ -296,8 +293,8 @@ export default function RivalApp() {
   const home = dir.club(match.home)!, away = dir.club(match.away)!;
   const live = status === "live" || status === "reconnecting";
   const inLobby = status === "lobby" || status === "matching";
-  const userClub = dir.club(userTeam);
-  const rivalClub = card ? dir.club(card.club) : null;
+  const userClub = dir.club(lobby?.team);
+  const rival = lobby?.rival ?? null;
   const rivalSpeaking = Date.now() - lastRivalWord.current < 1500;
 
   return (
@@ -321,33 +318,48 @@ export default function RivalApp() {
           <div className="stage-pitch">
             <Pitch dir={dir} match={match} snapshot={play.snapshot} recent={play.recent}
                    nextGap={play.nextGap} speed={play.pace} lang="en" lineup={match.lineup ?? null} />
-            {inLobby && (
+            {inLobby && lobby && (
               <div className="lobby-overlay">
-                {status === "lobby" ? (
+                {lobby.stage === "side" ? (
                   <div className="lobby-box glass">
                     <p className="lobby-kicker">Kick-Off lobby</p>
                     <h2>Who are you supporting?</h2>
                     <div className="lobby-crests">
                       {[home, away].map((c) => (
-                        <button key={c.id} className="lobby-crest" onClick={() => void pick(c.id)}>
+                        <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
                           <Crest club={c} className="crest-big" />
                           <span>{c.name}</span>
                         </button>
                       ))}
                     </div>
-                    <p className="lobby-heard">{heard ? `“${heard}”` : "Say it, or tap your crest"}</p>
+                    <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
+                  </div>
+                ) : lobby.stage === "rival" ? (
+                  <div className="lobby-box glass">
+                    <p className="lobby-kicker">Kick-Off lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
+                    <h2>Who do you fancy?</h2>
+                    <div className="lobby-rivals">
+                      {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
+                        <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
+                          <span className="lobby-rival-name">{r.name}</span>
+                          <span className="lobby-rival-home">{r.home}</span>
+                          <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : lobby.offered.length === 1 ? "\u201cRematch\u201d or \u201csomeone new\u201d" : "Say a name"}</p>
                   </div>
                 ) : (
                   <div className="lobby-box glass matching">
                     <p className="lobby-kicker">Kick-Off lobby</p>
-                    <h2>Connecting you to a rival<span className="dots" aria-hidden><i /><i /><i /></span></h2>
-                    {card && rivalClub && (
+                    <h2>Connecting you to {rival?.name ?? "your rival"}<span className="dots" aria-hidden><i /><i /><i /></span></h2>
+                    {rival && dir.club(rival.club) && (
                       <div className="rival-card">
-                        <Crest club={rivalClub} className="crest-big" />
+                        <Crest club={dir.club(rival.club)!} className="crest-big" />
                         <div>
-                          <p className="rival-card-name">{card.name}</p>
-                          <p className="rival-card-club">{rivalClub.name} fan</p>
-                          {card.rematch && card.last && <p className="rival-card-last">You've met before: {card.last}</p>}
+                          <p className="rival-card-name">{rival.name}</p>
+                          <p className="rival-card-club">{dir.club(rival.club)!.name} fan · {rival.home}</p>
+                          {rival.watched && rival.last && <p className="rival-card-last">Last time: {rival.last}</p>}
                         </div>
                       </div>
                     )}
@@ -358,9 +370,9 @@ export default function RivalApp() {
           </div>
 
           <div className="stage-agents">
-            <AgentsStrip reports={reports} now={now} live={{
-              host,
-              rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening" } : undefined,
+            <AgentsStrip reports={reports} now={now} active={{
+              host: host?.working ?? false,
+              rival: live && rivalSpeaking,
             }} />
           </div>
 
@@ -380,20 +392,7 @@ export default function RivalApp() {
               {userClub && <p className="rival-sides">Supporting: <b style={{ color: dir.colour(userClub.id) }}>{userClub.short_name}</b></p>}
               {notice && <p className="rival-notice">{notice}</p>}
               {error && <p className="rival-error" role="alert">{error}</p>}
-              {(status === "idle" || status === "ended") && (
-                <div className="rival-voice-pick">
-                  <label>Voice
-                    <select value={voice} onChange={(e) => { setVoice(e.target.value); remember("voice", e.target.value); }}>
-                      {VOICES.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </label>
-                  <label>Accent
-                    <select value={accent} onChange={(e) => { setAccent(e.target.value); remember("accent", e.target.value); }}>
-                      {Object.entries(ACCENTS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </label>
-                </div>
-              )}
+              {rival && <p className="rival-sides">Watching with: <b>{rival.name}</b> <span className="empty">from {rival.home}</span></p>}
             </section>
             <LeagueTable dir={dir} match={match} snapshot={play.snapshot} lang="en" />
           </aside>
@@ -414,7 +413,7 @@ export default function RivalApp() {
                   <p key={lines.length - shown.length + i}
                      className={`rival-line rival-line-${line.who}`}
                      style={{ opacity: 0.35 + 0.65 * ((i + 1) / shown.length) }}>
-                    <span className="rival-who">{line.who === "user" ? "You" : card?.name ?? "Rival"}</span>
+                    <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
                     {render(line.text, names)}
                   </p>
                 ))}

@@ -66,6 +66,10 @@ class RivalSide(BaseModel):
     team: str
 
 
+class RivalPick(BaseModel):
+    id: str
+
+
 class Heard(BaseModel):
     text: str = Field(max_length=500)
 
@@ -191,9 +195,10 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             await player.close()
 
     @app.post("/api/rival/watch")
-    async def rival_watch(mode: str = "highlights") -> dict:
-        """The viewer has opened the lobby: a new watch, and the News agent starts writing."""
-        return {"id": rival.new_watch(mode).id}
+    async def rival_watch(mode: str = "short") -> dict:
+        """The viewer has opened the lobby: a new watch, the News agent starts writing, and the host's welcome."""
+        w = rival.new_watch(mode)
+        return {"id": w.id, **rival.lobby_state(w, rival.welcome())}
 
     @app.post("/api/rival/host")
     async def rival_host(req: HostLine) -> Response:
@@ -264,23 +269,22 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             with suppress(Exception):
                 await ws.close()
 
-    @app.post("/api/rival/{watch_id}/side")
-    async def rival_side(watch_id: str, req: RivalSide) -> dict:
-        """The viewer tapped a crest in the lobby. Returns who they've been matched with."""
-        if req.team not in (match.home, match.away):
-            raise HTTPException(400, "Unknown team")
-        w = watch_for(watch_id)
-        rival.choose_side(w, req.team)
-        return {"team": w.user_team, "rival": rival.rival_card(w)}
-
     @app.post("/api/rival/{watch_id}/heard")
     async def rival_heard(watch_id: str, req: Heard) -> dict:
-        """What the viewer said to the lobby host. If it names a club, that's their side."""
-        w = watch_for(watch_id)
-        team = rival.side_from(req.text.lower())
-        if team and not w.user_team:
-            rival.choose_side(w, team)
-        return {"team": w.user_team, "rival": rival.rival_card(w) if w.user_team else None}
+        """What the viewer said to the lobby host: their club, then which rival. Returns what the host says next."""
+        return rival.heard(watch_for(watch_id), req.text)
+
+    @app.post("/api/rival/{watch_id}/side")
+    async def rival_side(watch_id: str, req: RivalSide) -> dict:
+        """Testing only: pick the club by tapping (the product is voice only)."""
+        if req.team not in (match.home, match.away):
+            raise HTTPException(400, "Unknown team")
+        return rival.choose_side(watch_for(watch_id), req.team)
+
+    @app.post("/api/rival/{watch_id}/rival")
+    async def rival_pick(watch_id: str, req: RivalPick) -> dict:
+        """Testing only: pick the rival by tapping."""
+        return rival.choose_rival(watch_for(watch_id), req.id)
 
     @app.post("/api/rival/{watch_id}/event")
     async def rival_event(watch_id: str, req: RivalEvent) -> dict:

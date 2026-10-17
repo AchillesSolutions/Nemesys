@@ -15,9 +15,9 @@ export interface LiveHandlers {
 }
 
 export interface LiveOptions {
-  watch?: string; // reconnect the voice to a match already under way
-  voice: string;
-  accent: string;
+  watch: string; // the viewer's watch; the same call reconnects the voice to a match already under way
+  voice?: string; // overrides the chosen rival's own voice and accent (for trying voices out)
+  accent?: string;
 }
 
 export class LiveCall {
@@ -49,8 +49,9 @@ export class LiveCall {
     const channel = pc.createDataChannel("oai-events");
 
     await pc.setLocalDescription(await pc.createOffer());
-    const query = new URLSearchParams({ voice: options.voice, accent: options.accent });
-    if (options.watch) query.set("watch", options.watch);
+    const query = new URLSearchParams({ watch: options.watch });
+    if (options.voice) query.set("voice", options.voice);
+    if (options.accent) query.set("accent", options.accent);
     const resp = await fetch(`/api/rival/session?${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/sdp" },
