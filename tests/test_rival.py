@@ -416,3 +416,30 @@ def test_asking_for_someone_else(world, match, tmp_path, monkeypatch, said):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     rival.heard(watch, "Kilburn")
     assert rival.heard(watch, said)["say"].startswith("Also online:")
+
+
+@pytest.mark.parametrize("said, rival_id", [
+    ("Uh, let's, let's speak with Des again.", "dez"),  # how speech recognition spelt it on the day
+    ("yeah go on, same again", "dez"),
+    ("Kevin please", "kev"),
+    ("the Mandarin one", "chen"),
+])
+def test_picking_a_rival_by_how_people_actually_say_it(world, match, tmp_path, monkeypatch, said, rival_id):
+    rival, watch = lobby(world, match, tmp_path, monkeypatch)
+    rival.heard(watch, "Kilburn")
+    assert rival.heard(watch, said)["rival"]["id"] == rival_id
+
+
+def test_not_sure_is_not_a_yes(world, match, tmp_path, monkeypatch):
+    rival, watch = lobby(world, match, tmp_path, monkeypatch)
+    rival.heard(watch, "Kilburn")
+    step = rival.heard(watch, "hmm not sure really")
+    assert step["stage"] == "rival" and step["rival"] is None
+    assert step["say"] == "Sorry, I didn't catch that. Rematch with Dez, or someone new?", "the host asks again"
+
+
+def test_the_host_asks_again_rather_than_going_quiet(world, match, tmp_path, monkeypatch):
+    rival, watch = lobby(world, match, tmp_path, monkeypatch)
+    assert rival.heard(watch, "erm well I think")["say"].endswith("Kilburn Athletic, or Harbour City?")
+    assert rival.heard(watch, "um what")["say"] is None, "but not twice in a row"
+    assert rival.heard(watch, "uh")["say"] is None, "and not for a stray word"

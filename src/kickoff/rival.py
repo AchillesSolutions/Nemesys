@@ -97,17 +97,23 @@ class Persona:
 # Placeholder characters until the rival's personality is settled. The first for each club is the one the
 # seeded "last time" memory remembers.
 ROSTER = [
-    Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr"),
-    Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr"),
-    Persona("chen", "Chen", "Shanghai", "mandarin", "verse", "hbr", "Mandarin", ("chan", "chinese", "mandarin")),
-    Persona("carlos", "Carlos", "Mexico City", "spanish", "echo", "hbr", "Spanish", ("spanish", "mexico")),
-    Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil"),
-    Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil"),
-    Persona("lin", "Lin", "Beijing", "mandarin", "sage", "kil", "Mandarin", ("lynn", "linn", "chinese", "mandarin")),
+    # Aliases include how speech recognition tends to spell the names ("Des" for Dez).
+    Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr", aliases=("des", "daz", "dezz", "desmond", "bristol")),
+    Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr", aliases=("kevin", "kevvy", "manchester")),
+    Persona("chen", "Chen", "Shanghai", "mandarin", "verse", "hbr", "Mandarin",
+            ("chan", "chun", "shen", "chinese", "mandarin", "shanghai")),
+    Persona("carlos", "Carlos", "Mexico City", "spanish", "echo", "hbr", "Spanish",
+            ("carl", "karlos", "spanish", "mexico", "mexican")),
+    Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil", aliases=("robbie", "robert", "bob")),
+    Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil", aliases=("pria", "preya", "leicester")),
+    Persona("lin", "Lin", "Beijing", "mandarin", "sage", "kil", "Mandarin",
+            ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing")),
     Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "coral", "kil", "Spanish",
             ("sofia", "sophia", "spanish", "argentina")),
 ]
-YES = re.compile(r"\b(yes|yeah|yep|yup|go on|rematch|sure|ok|okay|why not|same|let'?s go|him|her)\b")
+YES = re.compile(r"\b(yes|yeah|yep|yup|ya|aye|go on|rematch|sure|ok|okay|why not|same|again|let'?s go|let'?s do it|"
+                 r"him|her|definitely|absolutely|go for it|please)\b")
+UNSURE = re.compile(r"\b(not sure|unsure|dunno|don'?t know|no idea|maybe|hmm+|not really)\b")
 NEW = re.compile(r"\b(new|some ?one else|some ?body else|else|no|nah|nope|different|other|another|next|"
                  r"not (him|her|them)|someone new)\b")
 
@@ -439,6 +445,7 @@ class Watch:
     persona: Persona | None = None
     lobby: str = "side"  # side (which club?) | rival (which rival?) | done
     offered: list[str] = field(default_factory=list)  # rivals the host has offered so far
+    reprompted: float = 0.0  # when the host last asked again after not understanding
     phase: str = "lobby"  # lobby | prematch | first_half | half_time | second_half | full_time
     user_team: str | None = None
     minute: str = ""
@@ -626,7 +633,10 @@ class Rival:
         text = text.lower()
         if watch.lobby == "side":
             team = self.side_from(text)
-            return self.choose_side(watch, team) if team else self.lobby_state(watch)
+            if team:
+                return self.choose_side(watch, team)
+            home, away = self.world.club(self.match.home), self.world.club(self.match.away)
+            return self._again(watch, text, f"{home.name}, or {away.name}?")
         if watch.lobby == "rival":
             online = self.online(watch)
             named = [p for p in online if p.heard_in(text)]
@@ -636,9 +646,21 @@ class Rival:
                 others = [p for p in online if p.id not in watch.offered]
                 watch.offered += [p.id for p in others]
                 return self.lobby_state(watch, f"Also online: {self._names(others)}. Who do you fancy?")
-            if YES.search(text) and len(watch.offered) == 1:
+            if YES.search(text) and not UNSURE.search(text) and len(watch.offered) == 1:
                 return self.choose_rival(watch, watch.offered[0])
+            offered = [p for p in online if p.id in watch.offered]
+            question = (f"Rematch with {offered[0].name}, or someone new?" if len(offered) == 1
+                        else f"Who would you like: {self._names(offered).replace(' and ', ' or ')}?")
+            return self._again(watch, text, question)
         return self.lobby_state(watch)
+
+    def _again(self, watch: Watch, text: str, question: str) -> dict:
+        """Not understood: the host asks again rather than leaving the viewer waiting. A stray word or a cough
+        doesn't count, and it never asks twice within a few seconds."""
+        if len(text.split()) < 2 or time.monotonic() - watch.reprompted < 6:
+            return self.lobby_state(watch)
+        watch.reprompted = time.monotonic()
+        return self.lobby_state(watch, f"Sorry, I didn't catch that. {question}")
 
     @staticmethod
     def _names(people: list[Persona]) -> str:
