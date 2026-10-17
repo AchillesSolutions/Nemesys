@@ -389,7 +389,7 @@ export default function RivalApp() {
         <Logo />
         {(status === "idle" || status === "ended") && (
           <div className="curtain-body">
-            <h1>Enjoy the match with a rival</h1>
+            <h1>Enjoy football with a rival</h1>
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
                 <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
