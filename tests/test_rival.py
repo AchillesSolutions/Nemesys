@@ -387,3 +387,32 @@ def test_the_rival_signs_off_at_full_time(world, match, monkeypatch, tmp_path):
     assert spoken[-1].startswith("Time to go. Sign off in character: sulk"), "Kilburn won, so the Harbour fan sulks"
     assert "same time next week" in spoken[-1]
     assert sent[-1]["type"] == "session.close", "and the session ends"
+
+
+def test_a_pause_stops_the_clock(world, match):
+    async def run():
+        rival = Rival(world, match, endpoint="https://example.invalid", key="test")
+        sideband = FakeSideband()
+        watch = Watch("w", {"kil": 0, "hbr": 0}, voice=Voice("v", sideband), last_voice=10**12)
+        rival.watches[watch.id] = watch
+        await rival.pause(watch, True)
+        started = asyncio.get_running_loop().time()
+        waiting = asyncio.create_task(rival._fill(watch, 0.2, lull=999))
+        await asyncio.sleep(0.6)
+        assert not waiting.done(), "paused: the match waits"
+        await rival.pause(watch, False)
+        await waiting
+        return asyncio.get_running_loop().time() - started, sideband.sent
+
+    took, sent = asyncio.run(run())
+    assert took >= 0.6, "nothing moved on while paused (the pause is checked every half second at most)"
+    kinds = [m["type"] for m in sent]
+    assert kinds[0] == "session.input_audio.mute" and "session.input_audio.unmute" in kinds
+    assert any("Stay completely quiet" in m.get("content", "") for m in sent)
+
+
+@pytest.mark.parametrize("said", ["someone else", "some one else please", "nah, someone new", "not him", "next"])
+def test_asking_for_someone_else(world, match, tmp_path, monkeypatch, said):
+    rival, watch = lobby(world, match, tmp_path, monkeypatch)
+    rival.heard(watch, "Kilburn")
+    assert rival.heard(watch, said)["say"].startswith("Also online:")

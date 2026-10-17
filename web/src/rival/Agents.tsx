@@ -36,8 +36,9 @@ export const DURING: AgentInfo[] = [
 
 const LIT_S = 2.5; // a report keeps its card lit this long
 
-export function AgentsFlow({ reports, active, now }: {
+export function AgentsFlow({ reports, active, now, beforeDone = false }: {
   reports: Record<string, AgentReport | undefined>;
+  beforeDone?: boolean; // once the match is on, the before-kick-off agents have done their part
   active: Record<string, { working: boolean; text?: string } | undefined>; // what the browser sees directly
   now: number;
 }) {
@@ -62,7 +63,7 @@ export function AgentsFlow({ reports, active, now }: {
     <section className="agents-flow" aria-label="The agents">
       <p className="agents-label before">Before kick-off</p>
       <p className="agents-label during">During the match</p>
-      {BEFORE.map((a) => <div key={a.id} className="agents-cell">{card(a)}</div>)}
+      {BEFORE.map((a) => <div key={a.id} className={`agents-cell ${beforeDone ? "done" : ""}`}>{card(a)}</div>)}
       {DURING.map((a, i) => (
         <div key={a.id} className={`agents-cell ${i > 0 ? "flows" : ""}`}>{card(a)}</div>
       ))}

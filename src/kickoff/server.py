@@ -39,6 +39,7 @@ from .models import Match, World
 from .player import MatchPlayer
 from .rival import Rival, RivalUnavailable, Watch
 from .speech import Speech, SpeechUnavailable
+from .translate import Translator, TranslatorUnavailable
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +75,11 @@ class Heard(BaseModel):
     text: str = Field(max_length=500)
 
 
+class Translation(BaseModel):
+    texts: list[str] = Field(max_length=20)
+    to: str = Field("en", pattern=r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
+
+
 class HostLine(BaseModel):
     text: str = Field(min_length=1, max_length=300)
 
@@ -85,6 +91,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     clients = clients or client_factory()
     speech = speech or Speech()
     rival = rival or Rival(world, match, clients)
+    translator = Translator()
     chapters = build_chapters(match)
     app = FastAPI(title="Kick-Off", description="Live football explained for first-time viewers.")
 
@@ -236,6 +243,22 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         """The voice is connected: open the conversation, or pick it back up after a reconnect."""
         await rival.opened(watch_for(watch_id), resumed)
         return {"ok": True}
+
+    @app.post("/api/rival/{watch_id}/pause")
+    async def rival_pause(watch_id: str, paused: bool = True) -> dict:
+        """Pause or restart the match: the clock stops and the rival stays quiet until the viewer is back."""
+        w = watch_for(watch_id)
+        await rival.pause(w, paused)
+        return {"paused": w.paused}
+
+    @app.post("/api/translate")
+    async def translate(req: Translation) -> dict:
+        """Azure AI Translator, for a rival who speaks another language: their lines in the viewer's."""
+        texts = [t[:1000] for t in req.texts]
+        try:
+            return {"texts": await translator.to(req.to, texts)}
+        except TranslatorUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
 
     @app.post("/api/rival/{watch_id}/end")
     async def rival_end(watch_id: str) -> dict:

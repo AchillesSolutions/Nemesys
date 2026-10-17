@@ -7,6 +7,16 @@ import { type AgentReport, AgentsFlow } from "./Agents";
 import { LiveCall, type Speaker } from "./live";
 import { hostSay, listen } from "./lobby";
 import { Logo } from "./Logo";
+
+const ECHO_MS = 1500; // without headphones the recogniser hears the host's voice for a moment after it stops
+const TRANSLATE_AFTER_MS = 1200; // a rival's line in another language is translated once it has settled
+
+/** Mostly the host's own words, heard back through the speakers? */
+function echoOf(heard: string, said: string): boolean {
+  const words = (t: string) => t.toLowerCase().match(/[a-z']+/g) ?? [];
+  const h = words(heard), s = new Set(words(said));
+  return h.length > 0 && h.filter((w) => s.has(w)).length / h.length >= 0.6;
+}
 import { highlight, nameMatcher, type NameMatcher } from "./names";
 import { Timeline, type TimelineMoment } from "./Timeline";
 
@@ -64,7 +74,12 @@ export default function RivalApp() {
   const [status, setStatus] = useState<Status>("idle");
   const [lines, setLines] = useState<Line[]>([]);
   const [moments, setMoments] = useState<Moment[]>([]);
-  const [muted, setMuted] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const pausedAt = useRef(0);
+  const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({});
+  const translating = useRef(new Set<number>());
+  const hostEndedAt = useRef(0);
+  const hostLine = useRef("");
   const [seconds, setSeconds] = useState(0);
   const [phase, setPhase] = useState("lobby");
   const [lobby, setLobby] = useState<Lobby | null>(null);
@@ -176,6 +191,7 @@ export default function RivalApp() {
     void update(first);
     stopListening.current = await listen((text) => {
       if (hostTalking.current || joining.current) return; // the host's own voice, or too late
+      if (Date.now() - hostEndedAt.current < ECHO_MS || echoOf(text, hostLine.current)) return;
       setHeard(text);
       void post("heard", { text });
     }, (text) => { if (!hostTalking.current) setHeard(text); });
@@ -206,10 +222,12 @@ export default function RivalApp() {
 
   async function speak(line: string, what: string) {
     hostTalking.current = true;
+    hostLine.current = line;
     setHost({ working: true, text: what });
     setHeard("");
     await hostSay(line);
     hostTalking.current = false;
+    hostEndedAt.current = Date.now();
   }
 
   /** The rival is chosen: show the connection, and bring them in. */
@@ -285,10 +303,37 @@ export default function RivalApp() {
     setStatus("ended");
   }
 
-  function toggleMute() {
-    call.current?.setMuted(!muted);
-    setMuted(!muted);
+  /** Pause to take a call or make a note: the clock stops, and neither of you hears the other. */
+  async function togglePause() {
+    const next = !paused;
+    setPaused(next);
+    call.current?.setPaused(next);
+    if (next) {
+      pausedAt.current = performance.now();
+    } else {
+      const away = performance.now() - pausedAt.current;
+      setPlay((p) => ({ ...p, arrivedAt: p.arrivedAt + away })); // the clock carries on from where it stopped
+    }
+    if (watchId.current) await fetch(`/api/rival/${watchId.current}/pause?paused=${next}`, { method: "POST" });
   }
+
+  // A rival who speaks another language: each of their lines in English too, once it has settled.
+  useEffect(() => {
+    const rivalLanguage = lobby?.rival?.language;
+    if (!rivalLanguage || rivalLanguage === "English") return;
+    lines.forEach((line, i) => {
+      const settled = Date.now() - line.at > TRANSLATE_AFTER_MS;
+      if (line.who !== "rival" || !settled || english[i]?.src === line.text || translating.current.has(i)) return;
+      const src = line.text;
+      translating.current.add(i);
+      fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texts: [src.replace(/\[[^\]]*\]/g, "")], to: "en" }) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => { if (r) setEnglish((e) => ({ ...e, [i]: { src, text: r.texts[0] } })); })
+        .catch(() => {})
+        .finally(() => translating.current.delete(i));
+    });
+  }, [lines, now, lobby?.rival?.language, english]);
 
   const names = useMemo(() => (data ? nameMatcher(data.dir, [data.match.home, data.match.away]) : null), [data]);
   const shown = useMemo(() => lines.slice(-SHOWN_LINES), [lines]);
@@ -316,11 +361,10 @@ export default function RivalApp() {
       </svg>
 
       <header className="rival-top">
-        <Logo size="small" />
         <Fixture dir={dir} match={match} home={play.snapshot?.home} away={play.snapshot?.away} lang="en">
           {play.event ? (
             <Score snapshot={play.snapshot} lang="en"
-                   clock={{ event: play.event, arrivedAt: play.arrivedAt, nextGap: play.nextGap, speed: play.pace, paused: false }} />
+                   clock={{ event: play.event, arrivedAt: play.arrivedAt, nextGap: play.nextGap, speed: play.pace, paused }} />
           ) : (
             <>
               <div className="score kickoff-time">20:00</div>
@@ -341,7 +385,12 @@ export default function RivalApp() {
                  className={`rival-line rival-line-${line.who}`}
                  style={{ opacity: 0.3 + 0.7 * ((i + 1) / shown.length) }}>
                 <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
-                {render(line.text, names)}
+                {line.who === "rival" && english[lines.length - shown.length + i] ? (
+                  <>
+                    {render(english[lines.length - shown.length + i].text, names)}
+                    <span className="rival-original">{render(line.text, null)}</span>
+                  </>
+                ) : render(line.text, names)}
               </p>
             ))}
             {!shown.length && status !== "idle" && !inLobby && <p className="empty">The conversation shows up here as it happens.</p>}
@@ -374,7 +423,7 @@ export default function RivalApp() {
             {status !== "idle" && status !== "ended" && (
               <div className="rival-buttons">
                 <button className="btn" onClick={stop}>End</button>
-                <button className="btn" onClick={toggleMute} disabled={!live}>{muted ? "Unmute mic" : "Mute mic"}</button>
+                <button className="btn" onClick={() => void togglePause()} disabled={!live}>{paused ? "Resume" : "Pause"}</button>
               </div>
             )}
             {started.current > 0 && <p className="rival-meter">{Math.round(seconds)}s · ~${(seconds * COST_PER_S).toFixed(2)}</p>}
@@ -447,7 +496,7 @@ export default function RivalApp() {
       </div>
 
       <footer className="rival-agents">
-        <AgentsFlow reports={reports} now={now} active={{
+        <AgentsFlow reports={reports} now={now} beforeDone={live && phase !== "lobby"} active={{
           host: host,
           match: lastMoment && reports.match === undefined ? { working: false, text: `${lastMoment.minute}\u2019 ${lastMoment.text}` } : undefined,
           rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening" } : undefined,

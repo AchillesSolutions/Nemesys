@@ -5,7 +5,7 @@
   --player: #8fd0ff;   /* player names in the conversation, and the agents' models */
   --club: #ffb15c;     /* club names and nicknames */
   position: relative; height: 100vh; min-height: 640px; overflow: hidden;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; padding: 0 20px 16px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px; padding: 0 20px 18px;
   background:
     radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(0, 0, 0, .55) 100%),
     repeating-linear-gradient(90deg, #17382a 0 6.25%, #1a3e2f 6.25% 12.5%);
@@ -55,6 +55,7 @@
 .rival-who { display: block; font-weight: 700; font-size: .62em; text-transform: uppercase; letter-spacing: .12em; color: var(--warn); }
 .rival-line-user .rival-who { color: var(--accent); }
 .rival-sound { color: var(--warn); font-style: italic; }
+.rival-original { display: block; margin-top: .25em; font-size: .62em; line-height: 1.4; color: var(--muted); }
 .name-player { color: var(--player); font-weight: 600; }
 .name-club { color: var(--club); font-weight: 600; }
 
@@ -151,7 +152,7 @@
   content: "→"; position: absolute; left: -17px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1rem;
 }
 .agent-card {
-  flex: 1; min-width: 0; height: 132px; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px;
+  flex: 1; min-width: 0; height: 168px; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
   background: rgba(8, 16, 13, .62); border: 1px solid var(--faint); border-radius: 12px;
   transition: border-color .35s, box-shadow .35s, background .35s;
 }
@@ -165,9 +166,11 @@
 .agent-model { font-size: .7rem; font-weight: 600; line-height: 1.2; color: var(--player); }
 .agent-role { font-size: .7rem; line-height: 1.3; color: var(--muted); }
 .agent-latest {
-  margin-top: auto; padding-top: 6px; border-top: 1px solid var(--faint); font-size: .74rem; line-height: 1.3;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em;
+  margin-top: auto; padding-top: 7px; border-top: 1px solid var(--faint); font-size: .76rem; line-height: 1.32;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; min-height: 3.96em;
 }
+.agents-cell.done .agent-card { opacity: .38; filter: grayscale(1); }
+.agents-cell.done .agent-latest { text-decoration: line-through; text-decoration-color: rgba(244, 246, 240, .4); }
 .agent-card.is-working {
   border-color: color-mix(in srgb, var(--accent) 65%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, rgba(8, 16, 13, .62));

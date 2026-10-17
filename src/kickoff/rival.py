@@ -108,7 +108,8 @@ ROSTER = [
             ("sofia", "sophia", "spanish", "argentina")),
 ]
 YES = re.compile(r"\b(yes|yeah|yep|yup|go on|rematch|sure|ok|okay|why not|same|let'?s go|him|her)\b")
-NEW = re.compile(r"\b(new|someone else|somebody else|no|nah|different|other|another)\b")
+NEW = re.compile(r"\b(new|some ?one else|some ?body else|else|no|nah|nope|different|other|another|next|"
+                 r"not (him|her|them)|someone new)\b")
 
 LOBBY_MAX_S = 10 * 60     # a watch that never gets past the lobby is dropped after this long
 NEWS_WAIT_S = 20          # how long the build-up waits for the News agent before using the last good stories
@@ -466,6 +467,7 @@ class Watch:
     dig_score: tuple = ()  # the score when that dig was prepared: a goal makes it stale
     refereeing: asyncio.Task | None = None
     reviewed_chars: int = 0
+    paused: bool = False  # the viewer has paused: the clock stops and the rival stays quiet
 
     def publish(self, message: dict) -> None:
         if message.get("type") == "event":
@@ -526,7 +528,7 @@ class Watch:
         return time.monotonic() - self.last_voice < TALKING_S
 
     def state(self) -> dict:
-        return {"phase": self.phase, "minute": self.minute, "score": self.score, "user_team": self.user_team,
+        return {"paused": self.paused, "phase": self.phase, "minute": self.minute, "score": self.score, "user_team": self.user_team,
                 "voice": self.voice is not None, "mode": self.mode, "agents": self.agents}
 
 
@@ -730,6 +732,21 @@ class Rival:
         watch.publish(event_message(update, events[watch.start].elapsed - update.event.elapsed, 1))
         watch.publish_state()
 
+    async def pause(self, watch: Watch, paused: bool) -> None:
+        """The viewer pauses (to take a call, or make a note): the clock stops and the rival goes quiet."""
+        if watch.paused == paused:
+            return
+        watch.paused = paused
+        watch.publish_state()
+        if paused:
+            await watch._send({"type": "session.input_audio.mute"})
+            await watch.thinking("The viewer has paused the match for a moment. Stay completely quiet until "
+                                 "they're back.", kind="pause")
+        else:
+            await watch._send({"type": "session.input_audio.unmute"})
+            await watch.commentary("They're back and the match is on again. Welcome them back in a few words, "
+                                   "in character, and carry on.", kind="pause")
+
     async def resume(self, watch: Watch) -> None:
         """A new voice session for a watch already under way: bring it up to speed, then carry on."""
         recent = " / ".join(f"{'User' if who == 'user' else 'You'}: {text.strip()}"
@@ -856,17 +873,17 @@ class Rival:
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
-                await asyncio.sleep(pacing.holds.get(ev.type, 0))
+                await self._fill(watch, pacing.holds.get(ev.type, 0), lull=999)
         elif watch.talking():
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
             await watch.thinking(f"(Just happened; mention it if there's a natural moment, or let it go.) {text}",
                                  kind="aside", shown=text)
-            await asyncio.sleep(pacing.small_hold)
+            await self._fill(watch, pacing.small_hold, lull=999)
         else:
             watch.last_nudge = time.monotonic()
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
             await watch.commentary(f"{text} {cue} Keep it short.", shown=text)
-            await asyncio.sleep(pacing.small_hold)
+            await self._fill(watch, pacing.small_hold, lull=999)
 
     async def _sign_off(self, watch: Watch, rival_team: str) -> None:
         """The rival says goodbye in character, and the watch ends, saved for next time."""
@@ -910,6 +927,10 @@ class Rival:
         end = time.monotonic() + seconds
         while (now := time.monotonic()) < end:
             await asyncio.sleep(min(0.5, end - now))
+            if watch.paused:  # the clock stops: the wait starts again from where it was
+                end += time.monotonic() - now
+                watch.last_nudge = time.monotonic()
+                continue
             now = time.monotonic()
             if watch.voice is None:
                 watch.voice_lost = watch.voice_lost or now
@@ -1036,7 +1057,7 @@ class Rival:
             while watch.id in self.watches:
                 await asyncio.sleep(REVIEW_EVERY_S)
                 said = sum(len(text) for who, text in watch.transcript if who == "rival")
-                if said - watch.reviewed_chars < REVIEW_MIN_CHARS or watch.voice is None:
+                if said - watch.reviewed_chars < REVIEW_MIN_CHARS or watch.voice is None or watch.paused:
                     continue
                 watch.reviewed_chars = said
                 lines = [{"who": "user" if who == "user" else "rival", "said": text.strip()[-400:]}

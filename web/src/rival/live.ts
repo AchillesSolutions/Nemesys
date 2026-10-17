@@ -93,8 +93,10 @@ export class LiveCall {
     return call;
   }
 
-  setMuted(muted: boolean) {
-    this.mic.enabled = !muted;
+  /** Paused: the rival can't hear you and you don't hear the rival. */
+  setPaused(paused: boolean) {
+    this.mic.enabled = !paused;
+    this.audio.muted = paused;
   }
 
   close() {
