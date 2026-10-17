@@ -389,9 +389,8 @@ export default function RivalApp() {
         <Logo />
         {(status === "idle" || status === "ended") && (
           <div className="curtain-body">
-            <h1>Watch the match with a rival</h1>
-            <p className="opening-sub">A fan of the other side, in your ear for the whole game. Voice only: the match is on your TV.</p>
-            <p className="curtain-fixture">{home.name} v {away.name} · {match.venue}</p>
+            <h1>Enjoy the match with a rival</h1>
+            <p className="opening-sub">A fan of the other side, in your ear for the whole game.</p>
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
                 <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
@@ -400,7 +399,6 @@ export default function RivalApp() {
                 <b>Listen in</b><span>Two fans, hands-free</span>
               </button>
             </div>
-            <p className="opening-note">Nemesys remembers what you say, so your rival can bring it up next time.</p>
             {error && <p className="rival-error" role="alert">{error}</p>}
           </div>
         )}
