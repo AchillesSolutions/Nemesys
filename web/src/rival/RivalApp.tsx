@@ -317,23 +317,24 @@ export default function RivalApp() {
     if (watchId.current) await fetch(`/api/rival/${watchId.current}/pause?paused=${next}`, { method: "POST" });
   }
 
-  // A rival who speaks another language: each of their lines in English too, once it has settled.
+  // Anything said in another language, by either of you, is shown in English too once the line has settled,
+  // so whoever is watching (a judge, a friend) can follow a match enjoyed in Mandarin or Spanish.
   useEffect(() => {
-    const rivalLanguage = lobby?.rival?.language;
-    if (!rivalLanguage || rivalLanguage === "English") return;
     lines.forEach((line, i) => {
       const settled = Date.now() - line.at > TRANSLATE_AFTER_MS;
-      if (line.who !== "rival" || !settled || english[i]?.src === line.text || translating.current.has(i)) return;
+      if (!settled || english[i]?.src === line.text || translating.current.has(i)) return;
       const src = line.text;
+      const plain = src.replace(/\[[^\]]*\]/g, "").trim();
+      if (!plain) return;
       translating.current.add(i);
       fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texts: [src.replace(/\[[^\]]*\]/g, "")], to: "en" }) })
+        body: JSON.stringify({ texts: [plain], to: "en" }) })
         .then((r) => (r.ok ? r.json() : null))
-        .then((r) => { if (r) setEnglish((e) => ({ ...e, [i]: { src, text: r.texts[0] } })); })
+        .then((r) => { if (r) setEnglish((e) => ({ ...e, [i]: { src, text: r.from[0] === "en" ? "" : r.texts[0] } })); })
         .catch(() => {})
         .finally(() => translating.current.delete(i));
     });
-  }, [lines, now, lobby?.rival?.language, english]);
+  }, [lines, now, english]);
 
   const names = useMemo(() => (data ? nameMatcher(data.dir, [data.match.home, data.match.away]) : null), [data]);
   const shown = useMemo(() => lines.slice(-SHOWN_LINES), [lines]);
@@ -385,7 +386,7 @@ export default function RivalApp() {
                  className={`rival-line rival-line-${line.who}`}
                  style={{ opacity: 0.3 + 0.7 * ((i + 1) / shown.length) }}>
                 <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
-                {line.who === "rival" && english[lines.length - shown.length + i] ? (
+                {english[lines.length - shown.length + i]?.text ? (
                   <>
                     {render(english[lines.length - shown.length + i].text, names)}
                     <span className="rival-original">{render(line.text, null)}</span>

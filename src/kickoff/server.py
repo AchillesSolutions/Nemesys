@@ -253,12 +253,14 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
 
     @app.post("/api/translate")
     async def translate(req: Translation) -> dict:
-        """Azure AI Translator, for a rival who speaks another language: their lines in the viewer's."""
+        """Azure AI Translator: lines said in another language, in English (or ``to``), with the language each
+        was detected as, so the page only shows a translation when there's something to translate."""
         texts = [t[:1000] for t in req.texts]
         try:
-            return {"texts": await translator.to(req.to, texts)}
+            done = await translator.to(req.to, texts)
         except TranslatorUnavailable as exc:
             raise HTTPException(503, str(exc)) from exc
+        return {"texts": [t for t, _ in done], "from": [lang for _, lang in done]}
 
     @app.post("/api/rival/{watch_id}/end")
     async def rival_end(watch_id: str) -> dict:
