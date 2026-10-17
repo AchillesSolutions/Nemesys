@@ -5,17 +5,18 @@ import { Fixture, Score } from "../components/Fixture";
 import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { type AgentReport, AgentsFlow } from "./Agents";
 import { LiveCall, type Speaker } from "./live";
-import { hostSay, listen } from "./lobby";
+import { hostSay, listen, prepare } from "./lobby";
 import { Logo } from "./Logo";
 
-const ECHO_MS = 1500; // without headphones the recogniser hears the host's voice for a moment after it stops
+const ECHO_MS = 900; // without headphones the recogniser hears the host's voice for a moment after it stops
 const TRANSLATE_AFTER_MS = 1200; // a rival's line in another language is translated once it has settled
 
 /** Mostly the host's own words, heard back through the speakers? */
 function echoOf(heard: string, said: string): boolean {
   const words = (t: string) => t.toLowerCase().match(/[a-z']+/g) ?? [];
   const h = words(heard), s = new Set(words(said));
-  return h.length > 0 && h.filter((w) => s.has(w)).length / h.length >= 0.6;
+  // A short answer is always the viewer's: "Kilburn" is in the host's question, but it's also the answer to it.
+  return h.length >= 4 && h.filter((w) => s.has(w)).length / h.length >= 0.7;
 }
 import { highlight, nameMatcher, type NameMatcher } from "./names";
 import { Timeline, type TimelineMoment } from "./Timeline";
@@ -80,6 +81,7 @@ export default function RivalApp() {
   const translating = useRef(new Set<number>());
   const hostEndedAt = useRef(0);
   const hostLine = useRef("");
+  const welcome = useRef("");
   const [seconds, setSeconds] = useState(0);
   const [phase, setPhase] = useState("lobby");
   const [lobby, setLobby] = useState<Lobby | null>(null);
@@ -106,6 +108,9 @@ export default function RivalApp() {
     loadStatic()
       .then(({ world, match }) => setData({ dir: new Directory(world), match }))
       .catch(() => setError("Couldn't reach the server"));
+    // The host's welcome is fetched and decoded while the page loads, so it plays the instant Start is pressed.
+    fetch("/api/rival/welcome").then((r) => r.json()).then((w) => { welcome.current = w.text; void prepare(w.text); })
+      .catch(() => {});
     return () => { call.current?.close(); stream.current?.close(); stopListening.current?.(); };
   }, []);
 
@@ -178,6 +183,9 @@ export default function RivalApp() {
     reconnects.current = 0;
     started.current = 0;
     stream.current?.close();
+    setStatus("lobby");
+    // The welcome starts the moment Start is pressed, while the watch is set up behind it.
+    const greeting = welcome.current ? speak(welcome.current, "Asking who you support") : null;
     let first: Lobby & { id: string };
     try {
       first = await fetch(`/api/rival/watch?mode=${MODE}&start=${FROM}`, { method: "POST" }).then((r) => r.json());
@@ -187,8 +195,7 @@ export default function RivalApp() {
     }
     watchId.current = first.id;
     follow(first.id);
-    setStatus("lobby");
-    void update(first);
+    void update(greeting ? { ...first, say: null } : first); // the welcome is already being said
     stopListening.current = await listen((text) => {
       if (hostTalking.current || joining.current) return; // the host's own voice, or too late
       if (Date.now() - hostEndedAt.current < ECHO_MS || echoOf(text, hostLine.current)) return;

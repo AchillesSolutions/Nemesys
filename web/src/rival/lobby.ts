@@ -5,18 +5,33 @@
  */
 
 let ctx: AudioContext | null = null;
+const prepared = new Map<string, Promise<AudioBuffer | null>>();
+
+/** Fetch and decode a line ahead of time (the welcome, while the page loads), so it plays the instant it's needed.
+ * Browsers only allow sound after the viewer has clicked, so the welcome can be ready, but not play, on load. */
+export function prepare(text: string): Promise<AudioBuffer | null> {
+  let line = prepared.get(text);
+  if (!line) {
+    ctx ??= new AudioContext(); // suspended until the first click; decoding works regardless
+    const context = ctx;
+    line = fetch("/api/rival/host", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .then((audio) => (audio ? context.decodeAudioData(audio) : null))
+      .catch(() => null);
+    prepared.set(text, line);
+  }
+  return line;
+}
 
 /** Say one line in the host's voice; resolves when it has finished (or straight away if speech is unavailable). */
 export async function hostSay(text: string): Promise<void> {
-  const resp = await fetch("/api/rival/host", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  }).catch(() => null);
-  if (!resp?.ok) return;
-  ctx ??= new AudioContext();
+  const buffer = await prepare(text);
+  if (!buffer || !ctx) return;
   await ctx.resume();
-  const buffer = await ctx.decodeAudioData(await resp.arrayBuffer());
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 

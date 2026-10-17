@@ -208,6 +208,11 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         w = rival.new_watch(mode, start)
         return {"id": w.id, **rival.lobby_state(w, rival.welcome())}
 
+    @app.get("/api/rival/welcome")
+    def rival_welcome() -> dict:
+        """The host's opening line, so the page can have it ready to play before Start is pressed."""
+        return {"text": rival.welcome()}
+
     @app.post("/api/rival/host")
     async def rival_host(req: HostLine) -> Response:
         """The lobby host's voice: Azure AI Speech, deliberately not the rival's."""
