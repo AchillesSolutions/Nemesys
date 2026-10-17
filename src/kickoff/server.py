@@ -66,6 +66,14 @@ class RivalSide(BaseModel):
     team: str
 
 
+class Heard(BaseModel):
+    text: str = Field(max_length=500)
+
+
+class HostLine(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+
+
 def create_app(world: World | None = None, match: Match | None = None, clients: ClientFactory | None = None,
                speech: Speech | None = None, rival: Rival | None = None) -> FastAPI:
     if world is None or match is None:
@@ -182,11 +190,25 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
                 await runner
             await player.close()
 
+    @app.post("/api/rival/watch")
+    async def rival_watch(mode: str = "highlights") -> dict:
+        """The viewer has opened the lobby: a new watch, and the News agent starts writing."""
+        return {"id": rival.new_watch(mode).id}
+
+    @app.post("/api/rival/host")
+    async def rival_host(req: HostLine) -> Response:
+        """The lobby host's voice: Azure AI Speech, deliberately not the rival's."""
+        try:
+            audio = await speech.synthesise(req.text, "host")
+        except SpeechUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=86400"})
+
     @app.post("/api/rival/session")
-    async def rival_session(request: Request, watch: str | None = None, voice: str | None = None,
+    async def rival_session(request: Request, watch: str, voice: str | None = None,
                             accent: str | None = None) -> Response:
-        """The browser's WebRTC offer in, GPT-Live's answer out. Pass ``watch`` to reconnect the voice to a
-        match already under way; the watch id comes back in a header either way."""
+        """The browser's WebRTC offer in, GPT-Live's answer out, joining the viewer's watch. The same call
+        reconnects the voice to a match already under way."""
         offer = (await request.body()).decode()
         if not offer.startswith("v="):
             raise HTTPException(400, "Expected an SDP offer")
@@ -206,8 +228,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.post("/api/rival/{watch_id}/opened")
     async def rival_opened(watch_id: str, resumed: bool = False) -> dict:
         """The voice is connected: open the conversation, or pick it back up after a reconnect."""
-        w = watch_for(watch_id)
-        await (rival.resume(w) if resumed else rival.opening(w))
+        await rival.opened(watch_for(watch_id), resumed)
         return {"ok": True}
 
     @app.post("/api/rival/{watch_id}/end")
@@ -245,12 +266,21 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
 
     @app.post("/api/rival/{watch_id}/side")
     async def rival_side(watch_id: str, req: RivalSide) -> dict:
-        """The on-screen fallback for 'who are you backing?' when speech doesn't catch it."""
+        """The viewer tapped a crest in the lobby. Returns who they've been matched with."""
         if req.team not in (match.home, match.away):
             raise HTTPException(400, "Unknown team")
         w = watch_for(watch_id)
-        await rival.choose_side(w, req.team)
-        return w.state()
+        rival.choose_side(w, req.team)
+        return {"team": w.user_team, "rival": rival.rival_card(w)}
+
+    @app.post("/api/rival/{watch_id}/heard")
+    async def rival_heard(watch_id: str, req: Heard) -> dict:
+        """What the viewer said to the lobby host. If it names a club, that's their side."""
+        w = watch_for(watch_id)
+        team = rival.side_from(req.text.lower())
+        if team and not w.user_team:
+            rival.choose_side(w, team)
+        return {"team": w.user_team, "rival": rival.rival_card(w) if w.user_team else None}
 
     @app.post("/api/rival/{watch_id}/event")
     async def rival_event(watch_id: str, req: RivalEvent) -> dict:

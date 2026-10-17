@@ -29,6 +29,8 @@ VOICES = {
     "en": ("en-US", "en-US-Olivia:MAI-Voice-2.1-Flash"),
     "zh": ("zh-CN", "zh-CN-YunjianNeural"),
     "es": ("es-MX", "es-MX-Valeria:MAI-Voice-2.1-Flash"),
+    # The Rival's lobby host: a crisp British system voice, deliberately not the rival's.
+    "host": ("en-GB", "en-GB-SoniaNeural"),
 }
 
 # For each tone, the styles to try in order; the first one the voice supports wins.

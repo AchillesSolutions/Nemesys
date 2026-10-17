@@ -9,8 +9,8 @@ from kickoff import news
 from kickoff import rival as rival_module
 from kickoff.generator import generate_match
 from kickoff.models import EventType
-from kickoff.rival import (BIG, Rival, Voice, Watch, ammo, describe, feeling, pace_plan, previous_meeting,
-                           rival_instructions)
+from kickoff.rival import (BIG, Rival, Voice, Watch, ammo, describe, feeling, highlight_windows, pace_plan,
+                           previous_meeting, rival_instructions)
 from kickoff.world import build_world
 
 
@@ -47,8 +47,8 @@ class FakeSideband:
 
 
 def fast(monkeypatch):
-    for name, value in {"COUNTDOWN_S": 1, "PREMATCH_S": 0, "HALF_TIME_S": 0, "QUIET_SPEED": 1e9, "BUILD_SPEED": 1e9,
-                        "HOLD_BIG_S": 0, "HOLD_SMALL_S": 0, "NEWS_WAIT_S": 0.01}.items():
+    for name, value in {"PREMATCH_S": 0, "HALF_TIME_S": 0, "QUIET_SPEED": 1e9, "BUILD_SPEED": 1e9,
+                        "HOLD_BIG_S": 0, "HOLD_SMALL_S": 0, "HIGHLIGHT_HOLD_S": 0, "NEWS_WAIT_S": 0.01}.items():
         monkeypatch.setattr(rival_module, name, value)
     monkeypatch.setattr(rival_module.Rival, "_fill", _no_wait)
 
@@ -65,6 +65,15 @@ def test_instructions_cover_both_clubs_the_boundaries_and_the_accent(world, matc
     assert "no violent metaphors" in text
     assert "a The" not in text and ".." not in text
     assert "London accent" not in rival_instructions(world, match, "none")
+
+
+def test_the_rival_knows_who_it_is_after_the_lobby(world, match):
+    rematch = {"when": "last season, at The Quay", "result": "Harbour City 2-1 Kilburn Athletic"}
+    text = rival_instructions(world, match, "london", user_team="kil", rematch=rematch)
+    assert "You are Dez, a lifelong Harbour City fan" in text
+    assert "matched you with a Kilburn Athletic fan" in text
+    assert "it's YOU again" in text and "Harbour City 2-1 Kilburn Athletic" in text
+    assert "asking who they are backing" not in text, "the lobby has already asked"
 
 
 def test_ammo_goes_beyond_the_match(world, match, dossier):
@@ -113,6 +122,18 @@ def test_every_big_moment_is_described(world, match):
     assert any("rules the" in d for d in described)
 
 
+def test_the_highlights_fit_a_two_minute_demo(match):
+    events, plan = match.events, pace_plan(match.events)
+    windows = highlight_windows(events)
+    shown = {events[i].type for start, end in windows for i in range(start, end + 1)}
+    assert {EventType.GOAL, EventType.RED_CARD, EventType.GOAL_DISALLOWED, EventType.HALF_TIME,
+            EventType.FULL_TIME} <= shown
+    assert all(a[1] < b[0] for a, b in zip(windows, windows[1:])), "passages don't overlap"
+    play = sum((events[i + 1].elapsed - events[i].elapsed) / plan[i] for s, e in windows for i in range(s, e))
+    holds = sum(rival_module.HIGHLIGHT_HOLD_S for s, e in windows for i in range(s, e + 1) if events[i].type in BIG)
+    assert play + holds + rival_module.HIGHLIGHT_GREETING_S < 95, "with the lobby, the demo stays under two minutes"
+
+
 def test_play_slows_before_big_moments_and_runs_quickly_otherwise(match, monkeypatch):
     plan = pace_plan(match.events)
     assert len(plan) == len(match.events)
@@ -129,21 +150,22 @@ def test_play_slows_before_big_moments_and_runs_quickly_otherwise(match, monkeyp
     ("neither", None), ("kilburn not harbour", None),
 ])
 def test_side_comes_from_what_the_user_says(heard, team):
-    assert Rival._side_from(heard) == team
+    assert Rival.side_from(heard) == team
 
 
-def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None):
+def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None, mode: str = "full"):
     fast(monkeypatch)
     monkeypatch.setattr(rival_module, "SAVED", tmp_path)
 
     async def run():
         rival = Rival(world, match, endpoint="https://example.invalid", key="test")
         sideband = FakeSideband()
-        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband))
+        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband), mode=mode)
         rival.watches[watch.id] = watch
         stream: asyncio.Queue = asyncio.Queue()
         watch.listeners.add(stream)
-        await rival.choose_side(watch, "kil")
+        rival.choose_side(watch, "kil")
+        await rival.opened(watch, resumed=False)
         while not watch.director.done():
             await asyncio.sleep(0)
             if drop_voice_at and watch.minute == drop_voice_at:
@@ -166,18 +188,29 @@ def test_the_match_streams_and_the_rival_hears_the_big_moments(world, match, mon
     assert events[-1]["snapshot"]["status"] == "full_time"
     assert {e["pace"] for e in events} >= {rival_module.QUIET_SPEED, rival_module.BUILD_SPEED}
 
-    assert sent[0]["type"] == "session.thinking.append" and "Kilburn" in sent[0]["content"], "sides first"
-    assert any(m["type"] == "session.thinking.append" and m["content"].startswith("News on") for m in sent)
+    assert sent[0]["type"] == "session.thinking.append" and sent[0]["content"].startswith("News on"), "news first"
     spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
-    assert spoken[0].startswith("The teams are walking out")
+    assert spoken[0].startswith("You've just joined. Greet them"), "the rival greets, with a dig"
     goals = [s for s in spoken if "GOAL for" in s]
     assert len(goals) == 6
     assert all(s.startswith(rival_module.BREAK_IN) for s in goals), "big moments break in"
     assert "Erupt" in goals[0] and "Gutted" in goals[2], "Harbour City's goal thrills the rival; Kilburn's doesn't"
-    states = [m for m in messages if m["type"] == "state"]
-    assert states[0]["user_team"] == "kil", "the screen shows the sides as soon as they're picked"
-    phases = [s["phase"] for s in states]
-    assert "countdown" in phases and "half_time" in phases and phases[-1] == "full_time"
+    phases = [m["phase"] for m in messages if m["type"] == "state"]
+    assert phases[0] == "lobby" and "prematch" in phases and "half_time" in phases and phases[-1] == "full_time"
+    moments = [m for m in messages if m["type"] == "moment"]
+    assert sum(m["big"] for m in moments) >= 12, "the match feed shows the big moments"
+    assert {m["id"] for m in messages if m["type"] == "agent"} >= {"ammo", "match"}, "agents report their work"
+
+
+def test_the_highlights_play_every_big_moment_and_finish(world, match, monkeypatch, tmp_path):
+    watch, sent, messages = run_match(world, match, monkeypatch, tmp_path, mode="highlights")
+    assert watch.phase == "full_time" and watch.score == {"kil": 3, "hbr": 2}
+    events = [m for m in messages if m["type"] == "event"]
+    assert len(events) < len(match.events) / 5, "only the passages around the big moments are shown"
+    assert events[-1]["snapshot"]["home"]["score"] == 3, "the score counts the play skipped between highlights"
+    spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
+    assert sum("GOAL for" in s for s in spoken) == 6
+    assert not any("big save" in s for s in spoken), "small moments stay off the highlights"
 
 
 def test_the_match_carries_on_when_the_voice_drops(world, match, monkeypatch, tmp_path):

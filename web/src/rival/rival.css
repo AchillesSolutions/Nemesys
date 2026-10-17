@@ -1,5 +1,15 @@
-/* The Rival on the matchday screen: the main app's stage, with the session and table on the left and
-   what's feeding the rival above a fixed conversation window on the right. */
+/* The Rival on the matchday screen: the main app's stage, with the session and table on the left, the match
+   feed above a fixed conversation window on the right, and the agents at work under the pitch. */
+.rival-live {
+  --player: #8fd0ff;   /* player names in the conversation */
+  --club: #ffb15c;     /* club names and nicknames */
+}
+.rival-live .stage {
+  /* A slightly smaller pitch leaves room for the agents underneath it. */
+  --ph: min(60cqh, calc(56cqw * 74 / 111));
+  --pw: calc(var(--ph) * 111 / 74);
+  --top: 2cqh;
+}
 .rival-live .btn {
   background: var(--glass-strong); border: 1px solid var(--faint); border-radius: 999px;
   padding: .45rem 1rem; cursor: pointer;
@@ -9,8 +19,8 @@
 .rival-live .rival-primary { background: var(--accent); color: var(--night); border-color: var(--accent); font-weight: 600; }
 
 .rival-session { display: grid; gap: 10px; }
-.rival-buttons, .rival-side-pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.rival-sides { font-size: .92rem; line-height: 1.45; }
+.rival-buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rival-sides { font-size: .95rem; }
 .rival-error { color: var(--danger); font-size: .88rem; }
 .rival-notice { color: var(--warn); font-size: .88rem; line-height: 1.4; }
 .rival-voice-pick { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -20,9 +30,60 @@
   text-transform: none; letter-spacing: 0; font-size: .9rem;
 }
 
-.rival-feed-item { font-size: .84rem; line-height: 1.4; color: var(--muted); margin: 0 0 .5rem; }
-.rival-feed-item:first-of-type { color: var(--text); }
-.rival-tag { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin-bottom: .1rem; }
+/* ---------- The lobby, over the pitch ---------- */
+.lobby-overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 5;
+  background: rgba(8, 14, 12, .55); backdrop-filter: blur(3px); border-radius: 12px;
+}
+.lobby-box { padding: 26px 30px; border-radius: 18px; text-align: center; display: grid; gap: 14px; max-width: min(560px, 90%); }
+.lobby-kicker { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+.lobby-box h2 { font-family: var(--display); font-stretch: 78%; font-weight: 800; text-transform: uppercase;
+  font-size: clamp(22px, 2.4vw, 34px); line-height: 1; }
+.lobby-crests { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.lobby-crest {
+  display: grid; justify-items: center; gap: 8px; padding: 14px 18px; min-width: 150px; cursor: pointer;
+  background: var(--glass-strong); border: 1px solid var(--faint); border-radius: 14px; font-weight: 600;
+}
+.lobby-crest:hover { border-color: var(--accent); }
+.lobby-heard { color: var(--muted); font-style: italic; min-height: 1.4em; }
+.dots { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: dot 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes dot { 0%, 80%, 100% { opacity: .2; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.rival-card { display: flex; gap: 14px; align-items: center; justify-content: center; text-align: left;
+  animation: arrive .5s ease-out both .9s; }
+.rival-card-name { font-family: var(--display); font-stretch: 78%; font-weight: 800; font-size: 1.6rem; text-transform: uppercase; }
+.rival-card-club { color: var(--club); font-weight: 600; }
+.rival-card-last { color: var(--muted); font-size: .88rem; margin-top: 2px; }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- The agents, under the pitch ---------- */
+.stage-agents {
+  /* Between the two side panels, which are as wide as the main app makes them. */
+  --rail: min(340px, calc((100cqw - var(--pw)) / 2 - 2.6cqw));
+  position: absolute; top: calc(var(--top) + var(--ph) + 1.6cqh); bottom: 2cqh;
+  left: calc(1.4cqw + var(--rail) + 14px); right: calc(1.4cqw + var(--rail) + 14px); min-height: 0;
+}
+.agents { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; height: 100%; }
+.agent-card {
+  background: var(--glass); border: 1px solid var(--faint); border-radius: 12px; padding: 9px 10px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow: hidden; transition: border-color .3s, box-shadow .3s;
+}
+.agent-card header { display: flex; align-items: center; gap: 6px; }
+.agent-card h3 { font-size: .8rem; font-weight: 700; letter-spacing: .02em; line-height: 1.15; }
+.agent-role { font-size: .7rem; line-height: 1.3; color: var(--muted); }
+.agent-model { font-size: .66rem; color: var(--accent); letter-spacing: .02em; }
+.agent-now { margin-top: auto; font-size: .74rem; line-height: 1.3; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.agent-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.agent-card.is-working { border-color: color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 0 18px -6px var(--accent); }
+.agent-card.is-working .agent-pulse { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+
+/* ---------- Match feed and conversation ---------- */
+.feed-moment { font-size: .84rem; line-height: 1.4; color: var(--muted); margin: 0 0 .45rem; }
+.feed-moment.big { color: var(--text); }
+.feed-moment:first-of-type { font-weight: 600; }
+.feed-minute { display: inline-block; min-width: 2.6rem; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 /* A fixed window: the newest lines sit at the bottom and older ones fade and drop off the top. */
 .rail .rival-chat { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; overflow: hidden; }
@@ -32,7 +93,11 @@
 .rival-line-rival .rival-who { color: var(--warn); }
 .rival-line-user .rival-who { color: var(--accent); }
 .rival-sound { color: var(--warn); font-style: italic; }
+.name-player { color: var(--player); font-weight: 600; }
+.name-club { color: var(--club); font-weight: 600; }
 
 @media (max-width: 900px) {
   .rail .rival-chat { height: 300px; flex: none; }
+  .stage-agents { position: static; transform: none; width: auto; }
+  .agents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
