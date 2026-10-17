@@ -73,10 +73,12 @@
 /* ---------- Nemesys ---------- */
 .logo { display: flex; align-items: center; gap: .45em; }
 .logo-mark { width: 2.6em; height: auto; overflow: visible; }
-.logo-mark circle { fill: none; stroke-width: 2.4; }
+.logo-mark .ball { fill: #f4f6f0; }
+.logo-mark .patches polygon { fill: #0b1110; }
+.logo-mark .patches line { stroke: #0b1110; stroke-width: .7; }
+.logo-mark .ring { fill: none; stroke-width: 2.2; }
 .logo-mark .ring-a { stroke: var(--accent); }
 .logo-mark .ring-b { stroke: var(--club); }
-.logo-mark .lens { fill: #f4f6f0; }
 .logo-word { font-family: var(--display); font-stretch: 85%; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; }
 .logo-large { font-size: clamp(34px, 4.4vw, 60px); }
 .logo-small { font-size: 15px; position: absolute; top: 16px; left: 20px; opacity: .9; }
@@ -96,7 +98,8 @@
 }
 .opening-choice b { font-family: var(--display); font-stretch: 80%; font-size: 1.5rem; text-transform: uppercase; }
 .opening-choice span { color: var(--muted); font-size: .88rem; }
-.opening-choice.primary { background: var(--accent); border-color: var(--accent); color: var(--night); }
+/* Off-white, so Start doesn't borrow either side's colour from the logo. */
+.opening-choice.primary { background: #f4f6f0; border-color: #f4f6f0; color: var(--night); }
 .opening-choice.primary span { color: rgba(11, 17, 16, .7); }
 .opening-choice:disabled { opacity: .45; cursor: default; }
 .opening-note { color: var(--muted); font-size: .78rem; }
