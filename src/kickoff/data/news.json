@@ -1,0 +1,100 @@
+{
+  "stories": [
+    {
+      "club": "home",
+      "kind": "form",
+      "headline": "Otters stretch unbeaten run to four",
+      "detail": "Kilburn Athletic have taken 8 points from the last 12, with 3 straight draws after one win. They still keep the ball neatly, but just 8 goals in 8 games is leaving fans wanting more."
+    },
+    {
+      "club": "home",
+      "kind": "transfer",
+      "headline": "Rios fee already looks like value",
+      "detail": "Mateo Rios cost £1.4 million from a regional rival in the summer, and he has hardly misplaced a pass since. The midfielder's calm control has been central to Kilburn's patient style."
+    },
+    {
+      "club": "home",
+      "kind": "injury",
+      "headline": "Visser misses out again",
+      "detail": "Back-up defender Arno Visser is still not ready, so the Otters have no extra cover if Elias Varga or Jun-ho Park need a rest. The manager says he is close, but not close enough for this week."
+    },
+    {
+      "club": "home",
+      "kind": "manager",
+      "headline": "Madsen rejects 'too safe' criticism",
+      "detail": "Manager Henrik Madsen snapped back after another draw, saying Kilburn are building attacks the right way. He pointed to their 12 points and 8th place as proof the side is progressing, not stalling."
+    },
+    {
+      "club": "home",
+      "kind": "fans",
+      "headline": "Lockside crowd turns on ticket hike",
+      "detail": "A new matchday price increase has angered regulars at Lockside Park. One banner in the home end read, 'Keep the passing, cut the prices'."
+    },
+    {
+      "club": "home",
+      "kind": "transfer",
+      "headline": "Castellanos deal almost collapsed",
+      "detail": "Leo Castellanos was due to leave on loan in August, but the paperwork came back late and the move fell through. Kilburn now call the 19-year-old super-sub a bargain they nearly lost for nothing."
+    },
+    {
+      "club": "home",
+      "kind": "form",
+      "headline": "Whitcombe keeps finding the right spots",
+      "detail": "Ollie Whitcombe has scored 4 of Kilburn's 8 league goals and remains their main penalty-box threat. His movement has given Rafa Quintero and Dario Kessler more room around him."
+    },
+    {
+      "club": "home",
+      "kind": "finance",
+      "headline": "Lockside Park expansion hits delay",
+      "detail": "The club's small stadium upgrade is now running weeks behind schedule, which has annoyed supporters expecting better facilities. Kilburn say the extra seating should still be ready later in the season."
+    },
+    {
+      "club": "away",
+      "kind": "form",
+      "headline": "Gulls fly after back-to-back wins",
+      "detail": "Harbour City arrive on a 5-match run of W D L W W, and the two latest wins have pushed them to 5th. They have scored 8 and conceded only 7, which suits their quick-break style."
+    },
+    {
+      "club": "away",
+      "kind": "transfer",
+      "headline": "Mwangi looks a bargain at £2 million",
+      "detail": "Isaac Mwangi cost £2 million and already has the league scouts talking. His sharp runs in behind have turned several half-chances into clean finishes for the Gulls."
+    },
+    {
+      "club": "away",
+      "kind": "injury",
+      "headline": "Novak and Grant remain sidelined",
+      "detail": "Back-up goalkeeper Pavel Novak and midfielder Elijah Grant are both still out, but neither was in the starting XI anyway. Harbour City's first choice has not been disturbed, which keeps their setup steady."
+    },
+    {
+      "club": "away",
+      "kind": "manager",
+      "headline": "Silva praises discipline after clean sheets",
+      "detail": "Manager Rafael Silva said his side are 'finally looking like Harbour City again' after two composed wins. He also warned his full-backs not to get dragged out too early against Kilburn."
+    },
+    {
+      "club": "away",
+      "kind": "fans",
+      "headline": "Gulls unveil a banner for Halloran",
+      "detail": "Away fans have been singing for Viktor Halloran after his latest save-heavy display. A travelling banner called him 'The Quay wall' after his recent form."
+    },
+    {
+      "club": "away",
+      "kind": "transfer",
+      "headline": "Ferraro loan bid turned down",
+      "detail": "Harbour City's late bid to loan Nico Ferraro to a lower-league side was rejected because the squad needed depth. The 20-year-old remains an exciting option, even if minutes are still hard to come by."
+    },
+    {
+      "club": "away",
+      "kind": "finance",
+      "headline": "New sponsor boosts Harbour City's budget",
+      "detail": "A fresh front-of-shirt sponsor has given the club a welcome lift in revenue. Harbour City say the extra money should help keep their counter-attacking core together."
+    },
+    {
+      "club": "both",
+      "kind": "history",
+      "headline": "Three recent meetings, one familiar sting",
+      "detail": "Last three meetings: Harbour City 2-1 Kilburn Athletic, last season, at The Quay — Mwangi's late winner after Whitcombe levelled it. Kilburn Athletic 1-1 Harbour City, at Lockside Park — Varga headed in before Halloran saved the day with a late stop. Harbour City 0-0 Kilburn Athletic, at The Quay — the memorable moment was Brennan's double save from Marsh and Petrovic."
+    }
+  ]
+}

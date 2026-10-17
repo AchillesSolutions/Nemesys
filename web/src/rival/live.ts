@@ -11,22 +11,32 @@ export interface LiveHandlers {
   onTranscript: (who: Speaker, text: string) => void;
   onUsage: (seconds: number) => void;
   onClosed: (reason: string) => void;
-  onError: (message: string) => void;
+  onError: (message: string, code?: string) => void;
+}
+
+export interface LiveOptions {
+  watch?: string; // reconnect the voice to a match already under way
+  voice: string;
+  accent: string;
 }
 
 export class LiveCall {
-  readonly sessionId: string;
+  /** The match this voice belongs to; it outlives the call if the connection drops. */
+  readonly watchId: string;
+  readonly resumed: boolean;
   private constructor(
-    sessionId: string,
+    watchId: string,
+    resumed: boolean,
     private pc: RTCPeerConnection,
     private channel: RTCDataChannel,
     private mic: MediaStreamTrack,
     private audio: HTMLAudioElement,
   ) {
-    this.sessionId = sessionId;
+    this.watchId = watchId;
+    this.resumed = resumed;
   }
 
-  static async start(handlers: LiveHandlers, onOpen: (call: LiveCall) => void): Promise<LiveCall> {
+  static async start(options: LiveOptions, handlers: LiveHandlers, onOpen: (call: LiveCall) => void): Promise<LiveCall> {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
@@ -39,7 +49,9 @@ export class LiveCall {
     const channel = pc.createDataChannel("oai-events");
 
     await pc.setLocalDescription(await pc.createOffer());
-    const resp = await fetch("/api/rival/session", {
+    const query = new URLSearchParams({ voice: options.voice, accent: options.accent });
+    if (options.watch) query.set("watch", options.watch);
+    const resp = await fetch(`/api/rival/session?${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/sdp" },
       body: pc.localDescription!.sdp,
@@ -50,23 +62,32 @@ export class LiveCall {
       const detail = await resp.json().catch(() => ({ detail: resp.statusText }));
       throw new Error(detail.detail ?? "Couldn't start the session");
     }
-    const sessionId = resp.headers.get("X-Session-Id")!;
+    const watchId = resp.headers.get("X-Watch-Id")!;
+    const resumed = resp.headers.get("X-Resumed") === "1";
     await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
 
-    const call = new LiveCall(sessionId, pc, channel, mic, audio);
+    const call = new LiveCall(watchId, resumed, pc, channel, mic, audio);
+    let closed = false;
+    const finish = (reason: string) => {
+      if (closed) return;
+      closed = true;
+      handlers.onClosed(reason);
+      call.end();
+    };
     channel.onopen = () => onOpen(call);
+    channel.onclose = () => finish("connection_lost");
     channel.onmessage = ({ data }) => {
       const ev = JSON.parse(data);
       switch (ev.type) {
         case "session.input_transcript.delta": handlers.onTranscript("user", ev.delta); break;
         case "session.output_transcript.delta": handlers.onTranscript("rival", ev.delta); break;
         case "session.usage.updated": handlers.onUsage(ev.usage?.seconds ?? 0); break;
-        case "session.closed": handlers.onUsage(ev.usage?.seconds ?? 0); handlers.onClosed(ev.reason); call.end(); break;
-        case "error": handlers.onError(ev.error?.message ?? "GPT-Live error"); break;
+        case "session.closed": handlers.onUsage(ev.usage?.seconds ?? 0); finish(ev.reason ?? "closed"); break;
+        case "error": handlers.onError(ev.error?.message ?? "GPT-Live error", ev.error?.code); break;
       }
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") handlers.onClosed("connection_lost");
+      if (pc.connectionState === "failed") finish("connection_lost");
     };
     return call;
   }
@@ -80,7 +101,7 @@ export class LiveCall {
     else this.end();
   }
 
-  private end() {
+  end() {
     this.mic.stop();
     this.audio.srcObject = null;
     this.pc.close();

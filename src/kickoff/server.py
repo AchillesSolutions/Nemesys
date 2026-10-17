@@ -37,7 +37,7 @@ from .chapters import build_chapters
 from .data_store import load
 from .models import Match, World
 from .player import MatchPlayer
-from .rival import Rival, RivalSession, RivalUnavailable
+from .rival import Rival, RivalUnavailable, Watch
 from .speech import Speech, SpeechUnavailable
 
 log = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         world, match = load()
     clients = clients or client_factory()
     speech = speech or Speech()
-    rival = rival or Rival(world, match)
+    rival = rival or Rival(world, match, clients)
     chapters = build_chapters(match)
     app = FastAPI(title="Kick-Off", description="Live football explained for first-time viewers.")
 
@@ -183,72 +183,82 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             await player.close()
 
     @app.post("/api/rival/session")
-    async def rival_session(request: Request) -> Response:
-        """The browser's WebRTC offer in, GPT-Live's answer out; the session id comes back in a header."""
+    async def rival_session(request: Request, watch: str | None = None, voice: str | None = None,
+                            accent: str | None = None) -> Response:
+        """The browser's WebRTC offer in, GPT-Live's answer out. Pass ``watch`` to reconnect the voice to a
+        match already under way; the watch id comes back in a header either way."""
         offer = (await request.body()).decode()
         if not offer.startswith("v="):
             raise HTTPException(400, "Expected an SDP offer")
         try:
-            session_id, answer = await rival.create(offer)
+            w, answer, resumed = await rival.connect(offer, watch, voice, accent)
         except RivalUnavailable as exc:
             raise HTTPException(503, str(exc)) from exc
-        return Response(answer, media_type="application/sdp", headers={"X-Session-Id": session_id})
+        return Response(answer, media_type="application/sdp",
+                        headers={"X-Watch-Id": w.id, "X-Resumed": "1" if resumed else "0"})
 
-    def rival_for(session_id: str) -> RivalSession:
+    def watch_for(watch_id: str) -> Watch:
         try:
-            return rival.get(session_id)
+            return rival.get(watch_id)
         except KeyError:
-            raise HTTPException(404, "No such rival session") from None
+            raise HTTPException(404, "No such watch") from None
 
-    @app.post("/api/rival/{session_id}/kickoff")
-    async def rival_kickoff(session_id: str) -> dict:
-        await rival.kick_off(rival_for(session_id))
+    @app.post("/api/rival/{watch_id}/opened")
+    async def rival_opened(watch_id: str, resumed: bool = False) -> dict:
+        """The voice is connected: open the conversation, or pick it back up after a reconnect."""
+        w = watch_for(watch_id)
+        await (rival.resume(w) if resumed else rival.opening(w))
         return {"ok": True}
 
-    @app.get("/api/rival/{session_id}/state")
-    def rival_state(session_id: str) -> dict:
-        return rival_for(session_id).state()
+    @app.post("/api/rival/{watch_id}/end")
+    async def rival_end(watch_id: str) -> dict:
+        await rival.end(watch_for(watch_id))
+        return {"ok": True}
 
-    @app.websocket("/api/rival/{session_id}/stream")
-    async def rival_stream(ws: WebSocket, session_id: str) -> None:
+    @app.get("/api/rival/{watch_id}/state")
+    def rival_state(watch_id: str) -> dict:
+        return watch_for(watch_id).state()
+
+    @app.websocket("/api/rival/{watch_id}/stream")
+    async def rival_stream(ws: WebSocket, watch_id: str) -> None:
         """The match as it plays (events with the live snapshot) and what the rival is being told."""
         await ws.accept()
-        session = rival.sessions.get(session_id)
-        if session is None:
+        w = rival.watches.get(watch_id)
+        if w is None:
             await ws.close(code=4404)
             return
         queue: asyncio.Queue = asyncio.Queue()
-        session.listeners.add(queue)
+        w.listeners.add(queue)
         try:
-            await ws.send_json({"type": "state", **session.state()})
-            if session.last_event:
-                await ws.send_json(session.last_event)
-            while session_id in rival.sessions:
+            await ws.send_json({"type": "state", **w.state()})
+            if w.last_event:
+                await ws.send_json(w.last_event)
+            while watch_id in rival.watches:
                 with suppress(TimeoutError):
                     await ws.send_json(await asyncio.wait_for(queue.get(), timeout=5))
         except WebSocketDisconnect:
             pass
         finally:
-            session.listeners.discard(queue)
+            w.listeners.discard(queue)
             with suppress(Exception):
                 await ws.close()
 
-    @app.post("/api/rival/{session_id}/side")
-    async def rival_side(session_id: str, req: RivalSide) -> dict:
+    @app.post("/api/rival/{watch_id}/side")
+    async def rival_side(watch_id: str, req: RivalSide) -> dict:
         """The on-screen fallback for 'who are you backing?' when speech doesn't catch it."""
         if req.team not in (match.home, match.away):
             raise HTTPException(400, "Unknown team")
-        session = rival_for(session_id)
-        await rival.choose_side(session, req.team)
-        return session.state()
+        w = watch_for(watch_id)
+        await rival.choose_side(w, req.team)
+        return w.state()
 
-    @app.post("/api/rival/{session_id}/event")
-    async def rival_event(session_id: str, req: RivalEvent) -> dict:
+    @app.post("/api/rival/{watch_id}/event")
+    async def rival_event(watch_id: str, req: RivalEvent) -> dict:
         if req.team not in (match.home, match.away):
             raise HTTPException(400, "Unknown team")
-        session = rival_for(session_id)
-        text = await rival.event(session, req.kind, req.team)
-        return {"sent": text, "score": session.score}
+        w = watch_for(watch_id)
+        text = await rival.event(w, req.kind, req.team)
+        return {"sent": text, "score": w.score}
 
     if WEB_DIST.exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

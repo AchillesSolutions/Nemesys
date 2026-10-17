@@ -1,0 +1,12 @@
+{
+  "_note": "Seed memory for the demo: the last time this viewer and the rival watched the fixture together. Fictional, like the rest of the world. Real sessions are saved to var/rival/ and quoted in preference to this.",
+  "when": "last season, at The Quay",
+  "result": "Harbour City 2-1 Kilburn Athletic",
+  "user_backed": "kil",
+  "user_said": [
+    "Whitcombe is going to bag a hat-trick, just watch.",
+    "Your keeper Halloran couldn't catch a cold.",
+    "We'll finish above you this season, guaranteed.",
+    "Patient football always wins in the end."
+  ]
+}

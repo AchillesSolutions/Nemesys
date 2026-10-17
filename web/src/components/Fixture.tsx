@@ -39,12 +39,25 @@ function Side({ dir, club, snap, lang, away = false }: {
         <h1>{club.name}</h1>
         <p className="scorers">
           {scorers(dir, snap, lang).map((s) => <span key={s}>{s}</span>)}
-          {Array.from({ length: snap?.red_cards ?? 0 }, (_, i) => <span key={`r${i}`} className="red-card" title="Red card" />)}
         </p>
+        {snap && (snap.booked.length > 0 || snap.sent_off.length > 0) && (
+          <p className="scorers cards">
+            {snap.booked.filter((id) => !snap.sent_off.includes(id)).map((id) => (
+              <span key={id} className="card-entry"><span className="yellow-card" title="Yellow card" />{surname(dir, id)}</span>
+            ))}
+            {snap.sent_off.map((id) => (
+              <span key={id} className="card-entry"><span className="red-card" title="Red card" />{surname(dir, id)}</span>
+            ))}
+          </p>
+        )}
       </div>
       <Crest club={club} className="crest-big" />
     </div>
   );
+}
+
+function surname(dir: Directory, id: string): string {
+  return dir.player(id)?.name.split(" ").slice(-1)[0] ?? "";
 }
 
 /** "Whitcombe 56' (pen), 83'": one entry per scorer, in the order they first scored. */

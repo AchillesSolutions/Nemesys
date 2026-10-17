@@ -72,7 +72,10 @@ h1, h2, p { margin: 0; }
 .scorers { margin-top: .45em; color: var(--muted); font-size: clamp(11px, .95vw, 14px); min-height: 1.3em;
   display: flex; flex-wrap: wrap; gap: .2em .9em; align-items: center; }
 .fixture-side.home .scorers { justify-content: flex-end; }
-.red-card { width: 9px; height: 13px; background: var(--danger); border-radius: 2px; display: inline-block; }
+.red-card, .yellow-card { width: 9px; height: 13px; background: var(--danger); border-radius: 2px; display: inline-block; flex: none; }
+.yellow-card { background: var(--warn); }
+.scorers.cards { margin-top: .25em; }
+.card-entry { display: inline-flex; align-items: center; gap: .35em; }
 .fixture-centre { text-align: center; display: grid; justify-items: center; }
 .score {
   font-family: var(--display); font-stretch: 70%; font-weight: 700; font-size: clamp(44px, 6.6vw, 100px);

@@ -12,6 +12,13 @@
 .rival-buttons, .rival-side-pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .rival-sides { font-size: .92rem; line-height: 1.45; }
 .rival-error { color: var(--danger); font-size: .88rem; }
+.rival-notice { color: var(--warn); font-size: .88rem; line-height: 1.4; }
+.rival-voice-pick { display: flex; gap: 10px; flex-wrap: wrap; }
+.rival-voice-pick label { display: grid; gap: 4px; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.rival-voice-pick select {
+  background: var(--glass-strong); border: 1px solid var(--faint); border-radius: 8px; padding: .35rem .5rem;
+  text-transform: none; letter-spacing: 0; font-size: .9rem;
+}
 
 .rival-feed-item { font-size: .84rem; line-height: 1.4; color: var(--muted); margin: 0 0 .5rem; }
 .rival-feed-item:first-of-type { color: var(--text); }
