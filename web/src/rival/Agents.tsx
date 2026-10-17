@@ -44,12 +44,12 @@ export function AgentsStrip({ reports, active, now }: {
         return (
           <article key={a.id} className={`agent-card agent-${a.id} ${working ? "is-working" : ""}`}
                    aria-label={`${a.name}: ${a.role}${working ? " (working)" : ""}`}>
-            <header>
+            <h3>{a.name}</h3>
+            <div className="agent-tech">
               <span className="agent-icon" aria-hidden>{ICONS[a.id]}</span>
-              <h3>{a.name}</h3>
-            </header>
+              <span className="agent-model">{a.model}</span>
+            </div>
             <p className="agent-role">{a.role}</p>
-            <p className="agent-model">{a.model}</p>
           </article>
         );
       })}

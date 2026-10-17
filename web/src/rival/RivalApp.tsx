@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Directory, loadStatic } from "../api";
 import { Crest } from "../components/Crest";
 import { Fixture, Score } from "../components/Fixture";
@@ -20,7 +20,7 @@ import { highlight, nameMatcher, type NameMatcher } from "./names";
 
 interface Line { who: Speaker; text: string; at: number }
 interface Moment { minute: string; text: string; big: boolean }
-interface RivalCard { id: string; name: string; home: string; club: string; watched: boolean; last: string | null }
+interface RivalCard { id: string; name: string; home: string; club: string; language: string; watched: boolean; last: string | null }
 interface Lobby { stage: "side" | "rival" | "done"; team: string | null; say: string | null; online: RivalCard[];
   offered: string[]; rival: RivalCard | null }
 interface Play {
@@ -38,6 +38,9 @@ const SOUNDS: Record<string, string> = { laugh: "laughs", laughs: "laughs", sigh
   gasp: "gasps", scoff: "scoffs", chuckle: "chuckles", cheer: "cheers", boo: "boos" };
 const NO_PLAY: Play = { event: null, snapshot: null, recent: [], arrivedAt: 0, nextGap: null, pace: 40 };
 const MAX_RECONNECTS = 4;
+// The pitch and the table only redraw when the match moves, not on every word of the conversation.
+const MatchPitch = memo(Pitch);
+const Table = memo(LeagueTable);
 const MODE = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "short";
 
 /** Transcript text: sound tags like [laugh] as stage directions (a half-arrived tag is hidden), names coloured. */
@@ -316,7 +319,7 @@ export default function RivalApp() {
 
         <main className="stage">
           <div className="stage-pitch">
-            <Pitch dir={dir} match={match} snapshot={play.snapshot} recent={play.recent}
+            <MatchPitch dir={dir} match={match} snapshot={play.snapshot} recent={play.recent}
                    nextGap={play.nextGap} speed={play.pace} lang="en" lineup={match.lineup ?? null} />
             {inLobby && lobby && (
               <div className="lobby-overlay">
@@ -342,7 +345,7 @@ export default function RivalApp() {
                       {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
                         <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
                           <span className="lobby-rival-name">{r.name}</span>
-                          <span className="lobby-rival-home">{r.home}</span>
+                          <span className="lobby-rival-home">{r.home}{r.language !== "English" && ` · speaks ${r.language}`}</span>
                           <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
                         </button>
                       ))}
@@ -394,7 +397,7 @@ export default function RivalApp() {
               {error && <p className="rival-error" role="alert">{error}</p>}
               {rival && <p className="rival-sides">Watching with: <b>{rival.name}</b> <span className="empty">from {rival.home}</span></p>}
             </section>
-            <LeagueTable dir={dir} match={match} snapshot={play.snapshot} lang="en" />
+            <Table dir={dir} match={match} snapshot={play.snapshot} lang="en" />
           </aside>
 
           <aside className="rail right">

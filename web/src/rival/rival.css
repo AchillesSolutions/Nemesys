@@ -76,22 +76,21 @@
   background: var(--glass); border: 1px solid var(--faint); border-radius: 12px;
   transition: border-color .35s, box-shadow .35s, background .35s;
 }
-.agent-card header { display: flex; align-items: center; gap: 8px; }
+.agent-card h3 { font-size: .8rem; font-weight: 700; line-height: 1.15; }
+.agent-tech { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .agent-icon {
   flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   color: var(--muted); background: rgba(255, 255, 255, .05); transition: color .35s, background .35s;
 }
-.agent-icon svg { width: 17px; height: 17px; }
-.agent-card h3 { font-size: .78rem; font-weight: 700; line-height: 1.15; }
-.agent-role { font-size: .68rem; line-height: 1.25; color: var(--muted); }
-.agent-model { margin-top: auto; font-size: .64rem; color: var(--muted); opacity: .8; letter-spacing: .02em; }
+.agent-icon svg { width: 16px; height: 16px; }
+.agent-model { font-size: .7rem; font-weight: 600; line-height: 1.2; color: var(--player); }
+.agent-role { font-size: .68rem; line-height: 1.3; color: var(--muted); }
 .agent-card.is-working {
   border-color: color-mix(in srgb, var(--accent) 65%, transparent);
   background: color-mix(in srgb, var(--accent) 9%, var(--glass));
   box-shadow: 0 0 22px -8px var(--accent);
 }
 .agent-card.is-working .agent-icon { color: var(--night); background: var(--accent); animation: glow 1.1s ease-in-out infinite; }
-.agent-card.is-working .agent-model { color: var(--accent); opacity: 1; }
 @keyframes glow { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); } }
 
 /* ---------- Match feed and conversation ---------- */

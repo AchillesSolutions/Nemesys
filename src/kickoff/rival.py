@@ -63,8 +63,15 @@ ACCENTS = {
     "london": "Speak with a natural London accent: British English, words like 'mate', 'gutted', 'proper', 'having a mare'.",
     "northern": "Speak with a natural Manchester accent: British English, words like 'mate', 'gutted', 'our kid', 'proper'.",
     "west": "Speak with a natural Bristol, West Country accent: British English, words like 'mate', 'gert', 'gutted', 'proper'.",
-    "irish": "Speak with a natural Dublin accent: Irish English, words like 'grand', 'gas', 'yer man', 'gutted'.",
-    "scottish": "Speak with a natural Glasgow accent: Scottish English, words like 'pal', 'gutted', 'aye', 'dead good'.",
+    "mandarin": "Speak Mandarin Chinese (普通话) the whole time, like a lifelong fan from Shanghai or Beijing, with "
+                "natural football slang. The user may talk to you in English: you understand them perfectly, but "
+                "you always answer in Mandarin.",
+    "spanish": "Speak Spanish the whole time, like a lifelong fan from Mexico City, with natural football slang "
+               "('¡golazo!', '¡qué bárbaro!'). The user may talk to you in English: you understand them perfectly, "
+               "but you always answer in Spanish.",
+    "rioplatense": "Speak Spanish the whole time, like a lifelong fan from Buenos Aires, with natural football slang "
+                   "('¡golazo!', 'che'). The user may talk to you in English: you understand them perfectly, but you "
+                   "always answer in Spanish.",
     "midlands": "Speak with a natural East Midlands accent, from Leicester: British English, words like 'mate', 'me duck', 'gutted'.",
     "none": "",
 }
@@ -79,17 +86,25 @@ class Persona:
     accent: str
     voice: str
     club: str
+    language: str = "English"  # rivals who speak another language say so in the lobby, and only speak it
+    aliases: tuple[str, ...] = ()  # other things a viewer might say to pick them ("the Spanish one")
+
+    def heard_in(self, text: str) -> bool:
+        return any(re.search(rf"\b{w}\b", text) for w in (self.name.lower(), *self.aliases))
 
 
 # Placeholder characters until the rival's personality is settled. The first for each club is the one the
 # seeded "last time" memory remembers.
 ROSTER = [
     Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr"),
-    Persona("siobhan", "Siobhan", "Dublin", "irish", "coral", "hbr"),
     Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr"),
+    Persona("chen", "Chen", "Shanghai", "mandarin", "verse", "hbr", "Mandarin", ("chan", "chinese", "mandarin")),
+    Persona("carlos", "Carlos", "Mexico City", "spanish", "echo", "hbr", "Spanish", ("spanish", "mexico")),
     Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil"),
     Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil"),
-    Persona("callum", "Callum", "Glasgow", "scottish", "echo", "kil"),
+    Persona("lin", "Lin", "Beijing", "mandarin", "sage", "kil", "Mandarin", ("lynn", "linn", "chinese", "mandarin")),
+    Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "coral", "kil", "Spanish",
+            ("sofia", "sophia", "spanish", "argentina")),
 ]
 YES = re.compile(r"\b(yes|yeah|yep|yup|go on|rematch|sure|ok|okay|why not|same|let'?s go|him|her)\b")
 NEW = re.compile(r"\b(new|someone else|somebody else|no|nah|different|other|another)\b")
@@ -175,6 +190,10 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
         setup = ("Setup: open by saying the match is about to kick off and asking who they are backing. Whichever club "
                  "they pick, you support the other one, passionately, for the whole match. Never be neutral and never "
                  "switch sides. If they say they support neither, pick one yourself and insist they take the other.")
+    language = ("Language: speak whatever language the user speaks, and switch straight away if they switch."
+                if persona is None or persona.language == "English" else
+                f"Language: you always speak {persona.language}, whatever language the user uses. You understand "
+                f"English perfectly. Club and player names stay as they are.")
     return f"""{who} It's a {league} match. This is a live, spoken, full-duplex conversation: talk over each other, interrupt, react while they are still talking, laugh at them. Never sound like an assistant or a commentator. {ACCENTS.get(accent, "")}
 
 You lead the build-up: before kick-off you drive the conversation with digs, predictions and stories. Once the match is on, you're both watching: it's fine to go quiet for a bit, like real fans do, and let either of you break the silence.
@@ -193,7 +212,7 @@ Sounds: use real non-verbal sounds the way a fan would: laughing, groaning, gasp
 
 Match events arrive as commentary. You are watching the same screen as the user, so you always know the score, the minute and what just happened. You already know everything you need: never say you'll check something or look something up.
 
-Language: speak whatever language the user speaks, and switch straight away if they switch.
+{language}
 
 Boundaries, always: banter is about football only: clubs, results, the table, players' football, fees, managers. Nothing about the user's appearance, background, or anyone's race, religion, gender, sexuality or disability. No swearing, no threats, nothing cruel, and no violent metaphors (say "beat", "outplay", "embarrass", never "destroy", "kill", "batter" or "murder"). If the user gets genuinely upset, ease off and be a good sport. Every club and player here is fictional; never mention real clubs, real players or the Premier League.
 
@@ -357,6 +376,30 @@ def match_seconds(events: list[MatchEvent], pacing: Pacing) -> float:
     return play + holds + small + pacing.half_time
 
 
+MIN_FRAME_S = 0.25  # in fast play the pitch gets a new picture at most this often
+ROUTINE = {EventType.PASS, EventType.INTERCEPTION, EventType.TACKLE, EventType.THROW_IN}
+
+
+def frame_plan(events: list[MatchEvent], plan: list[float]) -> dict[int, tuple[int | None, float]]:
+    """Which events the browser is sent, each with the match seconds to the next one sent and the pace in
+    between. Fast-forwarded play would otherwise send dozens of passes a second, more than a browser can
+    draw while it also plays the rival's voice; routine play is thinned to a few pictures a second, and
+    anything that isn't routine is always sent. The Match reader still sees every event."""
+    sent, waited = [0], 0.0
+    for i in range(1, len(events)):
+        waited += (events[i].elapsed - events[i - 1].elapsed) / plan[i - 1]
+        if events[i].type not in ROUTINE or waited >= MIN_FRAME_S or i == len(events) - 1:
+            sent.append(i)
+            waited = 0.0
+    frames: dict[int, tuple[int | None, float]] = {}
+    for a, b in zip(sent, sent[1:]):
+        gap = events[b].elapsed - events[a].elapsed
+        real = sum((events[k + 1].elapsed - events[k].elapsed) / plan[k] for k in range(a, b))
+        frames[a] = (gap, gap / real if real > 0 else plan[a])
+    frames[sent[-1]] = (None, plan[sent[-1]])
+    return frames
+
+
 @dataclass
 class Voice:
     """One GPT-Live session; a watch can go through several if the connection drops."""
@@ -494,6 +537,7 @@ class Rival:
     def card(self, watch: Watch, persona: Persona) -> dict:
         last = previous_meeting(watch.user_team, persona.id)
         return {"id": persona.id, "name": persona.name, "home": persona.home, "club": persona.club,
+                "language": persona.language,
                 "watched": bool(last), "last": last.get("result") if last else None}
 
     def lobby_state(self, watch: Watch, say: str | None = None) -> dict:
@@ -541,7 +585,7 @@ class Rival:
             return self.choose_side(watch, team) if team else self.lobby_state(watch)
         if watch.lobby == "rival":
             online = self.online(watch)
-            named = [p for p in online if re.search(rf"\b{p.name.lower()}\b", text)]
+            named = [p for p in online if p.heard_in(text)]
             if len(named) == 1:
                 return self.choose_rival(watch, named[0].id)
             if NEW.search(text) and len(watch.offered) < len(online):
@@ -554,8 +598,11 @@ class Rival:
 
     @staticmethod
     def _names(people: list[Persona]) -> str:
-        names = [f"{p.name} from {p.home}" for p in people]
-        return ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else names[0]
+        names = [f"{p.name} from {p.home}" + (f", who speaks {p.language}" if p.language != "English" else "")
+                 for p in people]
+        if len(names) == 1:
+            return names[0]
+        return ", ".join(names[:-1]) + ("," if len(names) > 2 else "") + f" and {names[-1]}"
 
     async def connect(self, offer_sdp: str, watch_id: str, voice: str | None = None,
                       accent: str | None = None) -> tuple[Watch, str, bool]:
@@ -683,12 +730,13 @@ class Rival:
             reader = MatchReader(self.world, self.match.home, self.match.away)
             events = self.match.events
             plan = pace_plan(events, pacing)
+            frames = frame_plan(events, plan)
             rival_team = self.other(watch.user_team)
             watch.phase = "first_half"
             for i, ev in enumerate(events):
                 if i:
                     await self._fill(watch, (ev.elapsed - events[i - 1].elapsed) / plan[i - 1])
-                await self._play(watch, reader.apply(ev), i, plan, rival_team, pacing)
+                await self._play(watch, reader.apply(ev), frames.get(i), rival_team, pacing)
             watch.phase = "full_time"
             watch.publish_state()
             await self._fill(watch, pacing.after)  # some post-match banter, then the watch winds down
@@ -697,17 +745,19 @@ class Rival:
         except Exception:
             log.exception("Match director failed in %s", watch.id)
 
-    async def _play(self, watch: Watch, update, i: int, plan: list[float], rival_team: str, pacing: Pacing) -> None:
+    async def _play(self, watch: Watch, update, frame: tuple[int | None, float] | None, rival_team: str,
+                    pacing: Pacing) -> None:
         """One event: on the pitch, on the match feed, and to the rival if it's worth saying."""
-        events, ev = self.match.events, update.event
+        ev = update.event
         watch.minute = ev.minute
         watch.score = {t.id: t.score for t in (update.snapshot.home, update.snapshot.away)}
         if ev.type is EventType.HALF_TIME:
             watch.phase = "half_time"
         elif ev.type is EventType.KICK_OFF and ev.period == 2 and watch.phase == "half_time":
             watch.phase = "second_half"
-        next_gap = events[i + 1].elapsed - ev.elapsed if i + 1 < len(events) else None
-        watch.publish(event_message(update, None if ev.type is EventType.HALF_TIME else next_gap, plan[i]))
+        if frame:  # thinned in fast play: see frame_plan
+            next_gap, pace = frame
+            watch.publish(event_message(update, None if ev.type is EventType.HALF_TIME else next_gap, pace))
         if ev.type in BIG or (ev.type in SMALL and pacing.tells_small):
             if text := describe(self.world, ev):
                 watch.moment(ev, text)

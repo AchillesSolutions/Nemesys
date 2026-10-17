@@ -9,8 +9,8 @@ from kickoff import news
 from kickoff import rival as rival_module
 from kickoff.generator import generate_match
 from kickoff.models import EventType
-from kickoff.rival import (BIG, FULL, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe, feeling,
-                           match_seconds, pace_plan, previous_meeting, rival_instructions)
+from kickoff.rival import (BIG, FULL, MIN_FRAME_S, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe,
+                           feeling, frame_plan, match_seconds, pace_plan, previous_meeting, rival_instructions)
 from kickoff.world import build_world
 
 
@@ -133,6 +133,25 @@ def test_the_short_match_fits_a_two_minute_demo(match):
     assert 4 * 60 < match_seconds(match.events, FULL) < 6 * 60
 
 
+def test_fast_play_sends_the_browser_a_few_pictures_a_second(match):
+    """Sending every pass at fast-forward pace (40-70 a second) made the pitch and the voice stutter."""
+    plan = pace_plan(match.events, SHORT)
+    frames = frame_plan(match.events, plan)
+    assert len(frames) < len(match.events) / 4
+    shown = {match.events[i].type for i in frames}
+    assert {EventType.GOAL, EventType.SAVE, EventType.RED_CARD, EventType.HALF_TIME} <= shown, "moments always shown"
+    clock, sent = 0.0, []
+    for i in range(len(match.events)):
+        if i:
+            clock += (match.events[i].elapsed - match.events[i - 1].elapsed) / plan[i - 1]
+        if i in frames:
+            sent.append(clock)
+    busiest = max(sum(1 for t in sent if s <= t < s + 1) for s in range(int(clock) + 1))
+    assert busiest <= 12, f"{busiest} pictures in one second"
+    gaps = [frames[i][0] for i in frames if frames[i][0] is not None]
+    assert sum(gaps) == match.events[-1].elapsed - match.events[0].elapsed, "the clock still covers the whole match"
+
+
 def test_play_slows_before_big_moments_and_runs_quickly_otherwise(match, monkeypatch):
     plan = pace_plan(match.events, SHORT)
     assert len(plan) == len(match.events)
@@ -172,18 +191,29 @@ def test_someone_new_then_by_name(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     rival.heard(watch, "Kilburn")
     step = rival.heard(watch, "nah, someone new")
-    assert "Also online: Siobhan from Dublin and Kev from Manchester" in step["say"]
-    step = rival.heard(watch, "Siobhan please")
-    assert step["rival"]["id"] == "siobhan" and not step["rival"]["watched"]
+    assert step["say"] == ("Also online: Kev from Manchester, Chen from Shanghai, who speaks Mandarin, and Carlos "
+                           "from Mexico City, who speaks Spanish. Who do you fancy?")
+    step = rival.heard(watch, "the Spanish one")
+    assert step["rival"]["id"] == "carlos" and not step["rival"]["watched"]
+    assert watch.persona.voice == "echo"
     assert watch.rematch is None, "never met: no 'last time' to quote"
+
+
+def test_a_rival_who_speaks_another_language_only_speaks_it(world, match):
+    chen = next(p for p in ROSTER if p.id == "chen")
+    text = rival_instructions(world, match, chen.accent, user_team="kil", persona=chen)
+    assert "you always speak Mandarin, whatever language the user uses" in text
+    assert "Mandarin Chinese" in text
+    english = rival_instructions(world, match, "west", user_team="kil", persona=ROSTER[0])
+    assert "speak whatever language the user speaks" in english
 
 
 def test_a_harbour_fan_meets_new_kilburn_rivals(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     step = rival.heard(watch, "the gulls")
-    assert step["offered"] == ["rob", "priya", "callum"], "nobody to rematch: all three are offered"
+    assert step["offered"] == ["rob", "priya", "lin", "sofia"], "nobody to rematch: everyone online is offered"
     assert step["say"].endswith("Who do you fancy?")
-    assert rival.heard(watch, "Callum")["rival"]["home"] == "Glasgow"
+    assert rival.heard(watch, "sophia")["rival"]["home"] == "Buenos Aires"
 
 
 def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None, mode: str = "full"):
@@ -218,7 +248,7 @@ def test_the_match_streams_and_the_rival_hears_the_big_moments(world, match, mon
     assert watch.score == {"kil": 3, "hbr": 2}
 
     events = [m for m in messages if m["type"] == "event"]
-    assert len(events) == len(match.events), "every event reaches the pitch"
+    assert len(events) < len(match.events) / 2, "routine play is thinned for the browser"
     assert events[-1]["snapshot"]["status"] == "full_time"
 
     assert sent[0]["type"] == "session.thinking.append" and sent[0]["content"].startswith("News on"), "news first"
@@ -238,7 +268,8 @@ def test_the_match_streams_and_the_rival_hears_the_big_moments(world, match, mon
 def test_the_short_match_tells_only_the_big_moments(world, match, monkeypatch, tmp_path):
     watch, sent, messages = run_match(world, match, monkeypatch, tmp_path, mode="short")
     assert watch.phase == "full_time" and watch.score == {"kil": 3, "hbr": 2}
-    assert len([m for m in messages if m["type"] == "event"]) == len(match.events), "the clock never jumps"
+    events = [m for m in messages if m["type"] == "event"]
+    assert sum(e["next_gap"] or 0 for e in events) >= match.events[-1].elapsed - 200, "the clock never jumps"
     spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
     assert sum("GOAL for" in s for s in spoken) == 6
     assert not any("big save" in s for s in spoken), "small moments stay off the short match"
@@ -248,7 +279,7 @@ def test_the_match_carries_on_when_the_voice_drops(world, match, monkeypatch, tm
     watch, sent, messages = run_match(world, match, monkeypatch, tmp_path, drop_voice_at="56")
     assert watch.phase == "full_time", "a live game never stops"
     assert watch.score == {"kil": 3, "hbr": 2}
-    assert len([m for m in messages if m["type"] == "event"]) == len(match.events)
+    assert [m for m in messages if m["type"] == "event"][-1]["snapshot"]["status"] == "full_time"
     spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
     assert not any("90+4'" in s for s in spoken), "nothing is sent while there's no voice"
     assert any("90+4'" in f["text"] for f in watch.feed), "but the feed still shows what happened"
