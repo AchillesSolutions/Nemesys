@@ -98,9 +98,10 @@
 }
 .opening-choice b { font-family: var(--display); font-stretch: 80%; font-size: 1.5rem; text-transform: uppercase; }
 .opening-choice span { color: var(--muted); font-size: .88rem; }
-/* Off-white, so Start doesn't borrow either side's colour from the logo. */
-.opening-choice.primary { background: #f4f6f0; border-color: #f4f6f0; color: var(--night); }
-.opening-choice.primary span { color: rgba(11, 17, 16, .7); }
+/* Violet: its own colour, so Start doesn't borrow either side's from the logo. */
+.opening-choice.primary { background: #7a6cff; border-color: #7a6cff; color: #fff; }
+.opening-choice.primary:hover { background: #8b7fff; }
+.opening-choice.primary span { color: rgba(255, 255, 255, .78); }
 .opening-choice:disabled { opacity: .45; cursor: default; }
 .opening-note { color: var(--muted); font-size: .78rem; }
 .lobby-crests, .lobby-rivals { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
