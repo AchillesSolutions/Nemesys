@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react";
 // In development the Python server runs on :8000; Vite proxies API and WebSocket calls to it.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: { input: { main: "index.html", rival: "rival.html" } },
+  },
   server: {
     port: 5173,
     proxy: {

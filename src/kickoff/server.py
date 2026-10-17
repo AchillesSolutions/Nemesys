@@ -24,8 +24,9 @@ import asyncio
 import logging
 from contextlib import suppress
 from pathlib import Path
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
@@ -36,6 +37,7 @@ from .chapters import build_chapters
 from .data_store import load
 from .models import Match, World
 from .player import MatchPlayer
+from .rival import Rival, RivalSession, RivalUnavailable
 from .speech import Speech, SpeechUnavailable
 
 log = logging.getLogger(__name__)
@@ -55,12 +57,22 @@ class SpeechRequest(BaseModel):
     tone: str = "neutral"
 
 
+class RivalEvent(BaseModel):
+    kind: Literal["goal", "miss", "save"]
+    team: str
+
+
+class RivalSide(BaseModel):
+    team: str
+
+
 def create_app(world: World | None = None, match: Match | None = None, clients: ClientFactory | None = None,
-               speech: Speech | None = None) -> FastAPI:
+               speech: Speech | None = None, rival: Rival | None = None) -> FastAPI:
     if world is None or match is None:
         world, match = load()
     clients = clients or client_factory()
     speech = speech or Speech()
+    rival = rival or Rival(world, match)
     chapters = build_chapters(match)
     app = FastAPI(title="Kick-Off", description="Live football explained for first-time viewers.")
 
@@ -169,6 +181,50 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             with suppress(asyncio.CancelledError):
                 await runner
             await player.close()
+
+    @app.post("/api/rival/session")
+    async def rival_session(request: Request) -> Response:
+        """The browser's WebRTC offer in, GPT-Live's answer out; the session id comes back in a header."""
+        offer = (await request.body()).decode()
+        if not offer.startswith("v="):
+            raise HTTPException(400, "Expected an SDP offer")
+        try:
+            session_id, answer = await rival.create(offer)
+        except RivalUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return Response(answer, media_type="application/sdp", headers={"X-Session-Id": session_id})
+
+    def rival_for(session_id: str) -> RivalSession:
+        try:
+            return rival.get(session_id)
+        except KeyError:
+            raise HTTPException(404, "No such rival session") from None
+
+    @app.post("/api/rival/{session_id}/kickoff")
+    async def rival_kickoff(session_id: str) -> dict:
+        await rival.kick_off(rival_for(session_id))
+        return {"ok": True}
+
+    @app.get("/api/rival/{session_id}/state")
+    def rival_state(session_id: str) -> dict:
+        return rival_for(session_id).state()
+
+    @app.post("/api/rival/{session_id}/side")
+    async def rival_side(session_id: str, req: RivalSide) -> dict:
+        """The on-screen fallback for 'who are you backing?' when speech doesn't catch it."""
+        if req.team not in (match.home, match.away):
+            raise HTTPException(400, "Unknown team")
+        session = rival_for(session_id)
+        await rival.choose_side(session, req.team)
+        return session.state()
+
+    @app.post("/api/rival/{session_id}/event")
+    async def rival_event(session_id: str, req: RivalEvent) -> dict:
+        if req.team not in (match.home, match.away):
+            raise HTTPException(400, "Unknown team")
+        session = rival_for(session_id)
+        text = await rival.event(session, req.kind, req.team)
+        return {"sent": text, "score": session.score}
 
     if WEB_DIST.exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
