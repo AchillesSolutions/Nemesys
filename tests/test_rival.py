@@ -187,7 +187,7 @@ def lobby(world, match, tmp_path, monkeypatch):
 
 def test_the_lobby_offers_a_rematch_first(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
-    assert rival.heard(watch, "erm, not sure")["say"] is None, "nothing named, nothing said"
+    assert rival.heard(watch, "erm, not sure")["say"].startswith("Sorry, I didn't catch that"), "nothing named: ask again"
     step = rival.heard(watch, "Kilburn, obviously")
     assert step["stage"] == "rival" and step["offered"] == ["dez"]
     assert "Dez from Bristol" in step["say"] and "Rematch, or someone new?" in step["say"]
