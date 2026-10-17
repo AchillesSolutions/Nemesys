@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /**
  * The agents behind the rival, full width along the bottom of the screen, in the order work flows through
@@ -24,14 +24,14 @@ const ICONS: Record<string, ReactNode> = {
 interface AgentInfo { id: string; name: string; role: string; model: string; idle: string }
 
 export const BEFORE: AgentInfo[] = [
-  { id: "host", name: "Lobby host", role: "Asks who you support, finds you a rival", model: "Azure AI Speech", idle: "Waiting in the lobby" },
-  { id: "news", name: "News agent", role: "Writes the fortnight's club news", model: "gpt-5.4-mini", idle: "Waiting for match day" },
+  { id: "host", name: "Lobby Host", role: "Asks who you support, finds you a rival", model: "Azure AI Speech", idle: "Waiting in the lobby" },
+  { id: "news", name: "News Agent", role: "Writes the fortnight's club news", model: "gpt-5.4-mini", idle: "Waiting for match day" },
 ];
 export const DURING: AgentInfo[] = [
-  { id: "match", name: "Match agent", role: "Reads the game, spots the storylines", model: "gpt-5.4-mini", idle: "Watching the match" },
-  { id: "ammo", name: "Ammo agent", role: "Picks the next dig", model: "gpt-5.4-mini", idle: "Digs in reserve" },
+  { id: "match", name: "Match Agent", role: "Reads the game, spots the storylines", model: "gpt-5.4-mini", idle: "Watching the match" },
+  { id: "ammo", name: "Ammo Agent", role: "Picks the next dig", model: "gpt-5.4-mini", idle: "Digs in reserve" },
   { id: "referee", name: "Referee", role: "Checks digs, keeps it good-natured", model: "gpt-5.4-mini + Azure AI Content Safety", idle: "All good-natured so far" },
-  { id: "rival", name: "The rival", role: "Watches with you, talks back", model: "GPT-Live", idle: "Listening" },
+  { id: "rival", name: "The Rival", role: "Watches with you, talks back", model: "GPT-Live", idle: "Listening" },
 ];
 
 const LIT_S = 2.5; // a report keeps its card lit this long
@@ -57,23 +57,15 @@ export function AgentsFlow({ reports, active, now }: {
       </article>
     );
   };
+  // One grid of six equal columns: the labels above their groups, an arrow in each gap during the match.
   return (
     <section className="agents-flow" aria-label="The agents">
-      <div className="agents-group before">
-        <p className="agents-label">Before kick-off</p>
-        <div className="agents-row">{BEFORE.map(card)}</div>
-      </div>
-      <div className="agents-group during">
-        <p className="agents-label">During the match</p>
-        <div className="agents-row">
-          {DURING.map((a, i) => (
-            <Fragment key={a.id}>
-              {i > 0 && <span className="agents-arrow" aria-hidden>→</span>}
-              {card(a)}
-            </Fragment>
-          ))}
-        </div>
-      </div>
+      <p className="agents-label before">Before kick-off</p>
+      <p className="agents-label during">During the match</p>
+      {BEFORE.map((a) => <div key={a.id} className="agents-cell">{card(a)}</div>)}
+      {DURING.map((a, i) => (
+        <div key={a.id} className={`agents-cell ${i > 0 ? "flows" : ""}`}>{card(a)}</div>
+      ))}
     </section>
   );
 }

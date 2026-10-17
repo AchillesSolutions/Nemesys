@@ -195,9 +195,10 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
             await player.close()
 
     @app.post("/api/rival/watch")
-    async def rival_watch(mode: str = "short") -> dict:
-        """The viewer has opened the lobby: a new watch, the News agent starts writing, and the host's welcome."""
-        w = rival.new_watch(mode)
+    async def rival_watch(mode: str = "match", start: int = 0) -> dict:
+        """The viewer has opened the lobby: a new watch, the News agent starts writing, and the host's welcome.
+        ``start`` joins the match at that minute (for recording a particular scene)."""
+        w = rival.new_watch(mode, start)
         return {"id": w.id, **rival.lobby_state(w, rival.welcome())}
 
     @app.post("/api/rival/host")

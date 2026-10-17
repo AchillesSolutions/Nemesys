@@ -110,7 +110,7 @@ ROSTER = [
 YES = re.compile(r"\b(yes|yeah|yep|yup|go on|rematch|sure|ok|okay|why not|same|let'?s go|him|her)\b")
 NEW = re.compile(r"\b(new|someone else|somebody else|no|nah|different|other|another)\b")
 
-MAX_WATCH_S = 25 * 60     # a safety net for spend
+LOBBY_MAX_S = 10 * 60     # a watch that never gets past the lobby is dropped after this long
 NEWS_WAIT_S = 20          # how long the build-up waits for the News agent before using the last good stories
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
 READ_EVERY_S = 15 * 60     # the Match agent also reads the game every this many match seconds
@@ -136,15 +136,22 @@ class Pacing:
     half_time: float        # real seconds of half-time
     greeting: float         # the rival's greeting and first dig, before kick-off
     after: float            # post-match banter before the watch winds down
+    max_s: float            # the longest a watch at this pace may run, a safety net for spend
 
 
+# The match in about ten minutes: quiet play at 12x leaves 30-60 seconds of real conversation between big
+# moments, which is what banter needs. The default, and what judges get.
+MATCH = Pacing(quiet=12, build=2, build_s=10, small_hold=1.5, tells_small=True, half_time=20, greeting=25, after=45,
+               max_s=20 * 60, holds={EventType.GOAL: 8, EventType.GOAL_DISALLOWED: 8, EventType.RED_CARD: 6,
+                                     EventType.VAR_CHECK: 5, EventType.PENALTY: 3})
+# Real time, as the product would run alongside a live broadcast.
+LIVE = Pacing(quiet=1, build=1, build_s=0, small_hold=0, tells_small=True, half_time=15 * 60, greeting=45, after=120,
+              max_s=120 * 60, holds={})
+# About two and a half minutes, for quick testing only: far too fast for real banter.
 SHORT = Pacing(quiet=240, build=3, build_s=6, small_hold=0, tells_small=False, half_time=3, greeting=10, after=20,
-               holds={EventType.GOAL: 4, EventType.GOAL_DISALLOWED: 4, EventType.RED_CARD: 4,
-                      EventType.VAR_CHECK: 2.5, EventType.PENALTY: 1.5, EventType.HALF_TIME: 3})
-FULL = Pacing(quiet=40, build=3, build_s=12, small_hold=1.5, tells_small=True, half_time=12, greeting=45, after=60,
-              holds={t: 7 for t in (EventType.GOAL, EventType.GOAL_DISALLOWED, EventType.PENALTY,
-                                    EventType.RED_CARD, EventType.VAR_CHECK, EventType.HALF_TIME)})
-PACING = {"short": SHORT, "full": FULL}
+               max_s=8 * 60, holds={EventType.GOAL: 4, EventType.GOAL_DISALLOWED: 4, EventType.RED_CARD: 4,
+                                    EventType.VAR_CHECK: 2.5, EventType.PENALTY: 1.5})
+PACING = {"match": MATCH, "live": LIVE, "short": SHORT}
 
 # Words that tell us which club the viewer picked.
 SIDE_WORDS = {"kil": ("kilburn", "otters"), "hbr": ("harbour", "harbor", "gulls")}
@@ -184,7 +191,7 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
         name = f"{persona.name} from {persona.home}" if persona else "a fan"
         met = (f" You've watched with this person before: {rematch['when']} ({rematch['result']}), so greet them "
                "like an old rival: 'oh, it's YOU again'." if rematch else " You've never met.")
-        who = (f"You are {name}, a lifelong {mine.name} fan. Kick-Off's rival lobby has just matched you with a "
+        who = (f"You are {name}, a lifelong {mine.name} fan. The Nemesys lobby has just matched you with a "
                f"{world.club(user_team).name} fan to watch the match together, as rivals.{met} You support "
                f"{mine.name} passionately for the whole match; never be neutral and never switch sides.")
         setup = ("Setup: when you join, greet them in character straight away and get the first dig in. "
@@ -356,7 +363,7 @@ def feeling(ev: MatchEvent, rival_team: str) -> str:
     return "React briefly."
 
 
-def pace_plan(events: list[MatchEvent], pacing: Pacing = FULL) -> list[float]:
+def pace_plan(events: list[MatchEvent], pacing: Pacing = MATCH) -> list[float]:
     """Match seconds per real second for each stretch between events: quick in quiet play, slow in the
     run-up to a big moment so the move can be seen and the reaction lands as it happens."""
     big_at = [ev.elapsed for ev in events if ev.type in BIG]
@@ -369,6 +376,15 @@ def pace_plan(events: list[MatchEvent], pacing: Pacing = FULL) -> list[float]:
                     and events[i + 1].elapsed - events[i].elapsed <= 20)
         plan.append(pacing.build if building else pacing.quiet)
     return plan + [pacing.quiet]
+
+
+def start_index(events: list[MatchEvent], minute: int) -> int:
+    """The first event at or after a match minute (a minute past 45 is in the second half)."""
+    period = 1 if minute <= 45 else 2
+    for i, ev in enumerate(events):
+        if (ev.period, ev.clock) >= (period, minute * 60):
+            return i
+    return len(events) - 1
 
 
 def match_seconds(events: list[MatchEvent], pacing: Pacing) -> float:
@@ -417,7 +433,8 @@ class Watch:
     id: str
     score: dict[str, int]
     voice: Voice | None = None
-    mode: str = "short"  # short (the match in about a minute and a half) | full
+    mode: str = "match"  # the pace: match (about ten minutes) | live (real time) | short (testing)
+    start: int = 0  # the event the match starts from: a later one to join a match already under way
     persona: Persona | None = None
     lobby: str = "side"  # side (which club?) | rival (which rival?) | done
     offered: list[str] = field(default_factory=list)  # rivals the host has offered so far
@@ -538,19 +555,21 @@ class Rival:
     def other(self, team: str) -> str:
         return self.match.away if team == self.match.home else self.match.home
 
-    def new_watch(self, mode: str = "short") -> Watch:
-        """The viewer has opened the lobby. The News agent starts at once, so its stories are ready by kick-off."""
-        for stale in [w for w in self.watches.values() if w.voice is None and time.monotonic() - w.started > MAX_WATCH_S]:
+    def new_watch(self, mode: str = "match", minute: int = 0) -> Watch:
+        """The viewer has opened the lobby. The News agent starts at once, so its stories are ready by kick-off.
+        ``minute`` joins the match already under way (for recording a particular scene)."""
+        for stale in [w for w in self.watches.values() if w.voice is None and time.monotonic() - w.started > LOBBY_MAX_S]:
             self.watches.pop(stale.id, None)
         watch = Watch(uuid.uuid4().hex[:12], {self.match.home: 0, self.match.away: 0},
-                      mode=mode if mode in PACING else "short")
+                      mode=mode if mode in PACING else "match",
+                      start=start_index(self.match.events, minute) if 0 < minute <= 95 else 0)
         self.watches[watch.id] = watch
         watch.news_task = asyncio.create_task(self._news(watch))
         return watch
 
     def welcome(self) -> str:
         home, away = self.world.club(self.match.home), self.world.club(self.match.away)
-        return f"Welcome to Kick-Off. {home.name} against {away.name} is about to kick off. Who are you supporting?"
+        return f"Welcome to Nemesys. {home.name} against {away.name} is about to kick off. Who are you supporting?"
 
     def online(self, watch: Watch) -> list[Persona]:
         """The rivals online for this viewer: fans of the other club, the one they watched with last time first."""
@@ -677,13 +696,39 @@ class Rival:
                                    "Open the conversation: say so, and ask who they're backing.", kind="setup")
             return
         await self._brief(watch, wait=4 if watch.mode == "short" else NEWS_WAIT_S)
-        watch.phase = "prematch"
+        reader = MatchReader(self.world, self.match.home, self.match.away)
+        if watch.start:
+            self._catch_up(watch, reader)
+            await watch.commentary("You've just joined, and the match is already under way. "
+                                   f"{self._situation(watch)} Greet them in character and get a dig in about how "
+                                   "it's going.", kind="prematch")
+        else:
+            watch.phase = "prematch"
+            watch.publish_state()
+            dig = watch.talking_points.pop(0)
+            watch.agent("ammo", "Opening dig: " + dig[:90])
+            await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
+                                   + " Kick-off is seconds away; keep it short.", kind="prematch")
+        watch.director = asyncio.create_task(self._direct(watch, reader))
+
+    def _catch_up(self, watch: Watch, reader: MatchReader) -> None:
+        """Joining a match under way: the reader takes in everything before the start, the screen gets the score,
+        the clock and the moments so far, and the agents get the story so far."""
+        events = self.match.events
+        update = None
+        for ev in events[:watch.start]:
+            update = reader.apply(ev)
+            if ev.type in BIG and (text := describe(self.world, ev)):
+                watch.moment(ev, text)
+        if update is None:
+            return
+        watch.minute, watch.snapshot = update.event.minute, update.snapshot
+        watch.score = {t.id: t.score for t in (update.snapshot.home, update.snapshot.away)}
+        watch.phase = "second_half" if update.event.period == 2 else "first_half"
+        watch.last_read = update.event.elapsed
+        watch.dig_score = ()  # the next dig is prepared for the score as it now stands
+        watch.publish(event_message(update, events[watch.start].elapsed - update.event.elapsed, 1))
         watch.publish_state()
-        dig = watch.talking_points.pop(0)
-        watch.agent("ammo", "Opening dig: " + dig[:90])
-        await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
-                               + " Kick-off is seconds away; keep it short.", kind="prematch")
-        watch.director = asyncio.create_task(self._direct(watch))
 
     async def resume(self, watch: Watch) -> None:
         """A new voice session for a watch already under way: bring it up to speed, then carry on."""
@@ -746,24 +791,27 @@ class Rival:
         watch.agent("news", f"{len(dossier.stories)} stories, e.g. “{lead.headline}”", working=False)
         return dossier
 
-    async def _direct(self, watch: Watch) -> None:
+    async def _direct(self, watch: Watch, reader: MatchReader) -> None:
         """Play the match alongside the conversation. The clock always runs; only its speed changes."""
         try:
             pacing = PACING[watch.mode]
-            await self._fill(watch, pacing.greeting, lull=5 if watch.mode == "full" else 99, gap=10)
-            reader = MatchReader(self.world, self.match.home, self.match.away)
+            await self._fill(watch, pacing.greeting, lull=99 if watch.mode == "short" else 5, gap=10)
             events = self.match.events
             plan = pace_plan(events, pacing)
             frames = frame_plan(events, plan)
             rival_team = self.other(watch.user_team)
-            watch.phase = "first_half"
-            for i, ev in enumerate(events):
-                if i:
+            if not watch.start:
+                watch.phase = "first_half"
+            for i in range(watch.start, len(events)):
+                ev = events[i]
+                if i > watch.start:
                     await self._fill(watch, (ev.elapsed - events[i - 1].elapsed) / plan[i - 1])
-                await self._play(watch, reader.apply(ev), frames.get(i), rival_team, pacing)
+                frame = frames.get(i) or (frame_plan(events[i:], plan[i:]).get(0) if i == watch.start else None)
+                await self._play(watch, reader.apply(ev), frame, rival_team, pacing)
             watch.phase = "full_time"
             watch.publish_state()
-            await self._fill(watch, pacing.after)  # some post-match banter, then the watch winds down
+            await self._fill(watch, pacing.after)  # post-match banter
+            await self._sign_off(watch, rival_team)
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -820,6 +868,18 @@ class Rival:
             await watch.commentary(f"{text} {cue} Keep it short.", shown=text)
             await asyncio.sleep(pacing.small_hold)
 
+    async def _sign_off(self, watch: Watch, rival_team: str) -> None:
+        """The rival says goodbye in character, and the watch ends, saved for next time."""
+        won = watch.score[rival_team] > watch.score[self.other(rival_team)]
+        lost = watch.score[rival_team] < watch.score[self.other(rival_team)]
+        mood = ("gloat one last time" if won else "sulk, blame the referee, and concede through gritted teeth" if lost
+                else "call it a fair result, just about")
+        await watch.commentary(f"Time to go. Sign off in character: {mood}, then ask if it's the same time next "
+                               "week. Two or three sentences, then say goodbye.", kind="sign_off")
+        watch.agent("rival", "Signing off: same time next week?", working=False)
+        await asyncio.sleep(15)  # let the goodbye be said
+        await self.end(watch)
+
     def _goal_follows(self, ev: MatchEvent) -> bool:
         return ev.type is EventType.PENALTY and any(
             e.type is EventType.GOAL and 0 <= e.elapsed - ev.elapsed <= 30 for e in self.match.events)
@@ -853,11 +913,11 @@ class Rival:
             now = time.monotonic()
             if watch.voice is None:
                 watch.voice_lost = watch.voice_lost or now
-                if now - watch.voice_lost > VOICE_GRACE_S or now - watch.started > MAX_WATCH_S:
+                if now - watch.voice_lost > VOICE_GRACE_S or now - watch.started > PACING[watch.mode].max_s:
                     await self.end(watch)  # the viewer has gone: stop the match
                     raise asyncio.CancelledError
                 continue
-            if now - watch.started > MAX_WATCH_S:
+            if now - watch.started > PACING[watch.mode].max_s:
                 await self.end(watch)
                 raise asyncio.CancelledError
             if now - watch.last_voice > lull and now - watch.last_nudge > gap:

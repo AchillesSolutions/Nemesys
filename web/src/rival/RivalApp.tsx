@@ -6,6 +6,7 @@ import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { type AgentReport, AgentsFlow } from "./Agents";
 import { LiveCall, type Speaker } from "./live";
 import { hostSay, listen } from "./lobby";
+import { Logo } from "./Logo";
 import { highlight, nameMatcher, type NameMatcher } from "./names";
 import { Timeline, type TimelineMoment } from "./Timeline";
 
@@ -37,7 +38,11 @@ const SOUNDS: Record<string, string> = { laugh: "laughs", laughs: "laughs", sigh
   gasp: "gasps", scoff: "scoffs", chuckle: "chuckles", cheer: "cheers", boo: "boos" };
 const NO_PLAY: Play = { event: null, snapshot: null, arrivedAt: 0, nextGap: null, pace: 40 };
 const MAX_RECONNECTS = 4;
-const MODE = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "short";
+// ?mode=live (real time) or ?mode=short (testing); the default is the ten-minute match.
+// ?from=80 joins the match at the 80th minute, for recording a particular scene.
+const QUERY = new URLSearchParams(location.search);
+const MODE = ["live", "short"].includes(QUERY.get("mode") ?? "") ? QUERY.get("mode")! : "match";
+const FROM = Number(QUERY.get("from") ?? 0) || 0;
 
 /** Transcript text: sound tags like [laugh] as stage directions (a half-arrived tag is hidden), names coloured. */
 function render(text: string, names: NameMatcher | null): ReactNode[] {
@@ -160,7 +165,7 @@ export default function RivalApp() {
     stream.current?.close();
     let first: Lobby & { id: string };
     try {
-      first = await fetch(`/api/rival/watch?mode=${MODE}`, { method: "POST" }).then((r) => r.json());
+      first = await fetch(`/api/rival/watch?mode=${MODE}&start=${FROM}`, { method: "POST" }).then((r) => r.json());
     } catch {
       setError("Couldn't reach the server");
       return;
@@ -311,6 +316,7 @@ export default function RivalApp() {
       </svg>
 
       <header className="rival-top">
+        <Logo size="small" />
         <Fixture dir={dir} match={match} home={play.snapshot?.home} away={play.snapshot?.away} lang="en">
           {play.event ? (
             <Score snapshot={play.snapshot} lang="en"
@@ -341,64 +347,6 @@ export default function RivalApp() {
             {!shown.length && status !== "idle" && !inLobby && <p className="empty">The conversation shows up here as it happens.</p>}
           </div>
 
-          {(status === "idle" || status === "ended") && (
-            <div className="opening">
-              <p className="lobby-kicker">Kick-Off · {home.short_name} v {away.short_name}</p>
-              <h1>Watch the match with a rival</h1>
-              <p className="opening-sub">A fan of the other side, in your ear for the whole game. Voice only: the match is on your TV.</p>
-              <div className="opening-choices">
-                <button className="opening-choice primary" onClick={() => void start()}>
-                  <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
-                </button>
-                <button className="opening-choice" disabled title="Coming next">
-                  <b>Listen in</b><span>Two fans, hands-free</span>
-                </button>
-              </div>
-              <p className="opening-note">Kick-Off remembers what you say, so your rival can bring it up next time.</p>
-              {error && <p className="rival-error" role="alert">{error}</p>}
-            </div>
-          )}
-
-          {inLobby && lobby && (
-            <div className="lobby-box">
-              {lobby.stage === "side" ? (
-                <>
-                  <p className="lobby-kicker">Kick-Off lobby</p>
-                  <h2>Who are you supporting?</h2>
-                  <div className="lobby-crests">
-                    {[home, away].map((c) => (
-                      <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
-                        <Crest club={c} className="crest-big" />
-                        <span>{c.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
-                </>
-              ) : lobby.stage === "rival" ? (
-                <>
-                  <p className="lobby-kicker">Kick-Off lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
-                  <h2>Who do you fancy?</h2>
-                  <div className="lobby-rivals">
-                    {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
-                      <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
-                        <span className="lobby-rival-name">{r.name}</span>
-                        <span className="lobby-rival-home">{r.home}{r.language !== "English" && ` · speaks ${r.language}`}</span>
-                        <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : lobby.offered.length === 1 ? "\u201cRematch\u201d or \u201csomeone new\u201d" : "Say a name"}</p>
-                </>
-              ) : (
-                <>
-                  <p className="lobby-kicker">Kick-Off lobby</p>
-                  <h2>Connecting you to {rival?.name ?? "your rival"}<span className="dots" aria-hidden><i /><i /><i /></span></h2>
-                </>
-              )}
-              {notice && <p className="rival-notice">{notice}</p>}
-            </div>
-          )}
         </section>
 
         <aside className="rival-side">
@@ -434,6 +382,72 @@ export default function RivalApp() {
           </section>}
         </aside>
       </main>
+
+      {/* Until the rival connects, the screen is a black curtain: the welcome, then the lobby. It lifts to
+          reveal the match once the rival is with you, and comes back down when the match is over. */}
+      <div className={`curtain ${inLobby || status === "idle" || status === "ended" ? "down" : "up"}`}>
+        <Logo />
+        {(status === "idle" || status === "ended") && (
+          <div className="curtain-body">
+            <h1>Watch the match with a rival</h1>
+            <p className="opening-sub">A fan of the other side, in your ear for the whole game. Voice only: the match is on your TV.</p>
+            <p className="curtain-fixture">{home.name} v {away.name} · {match.venue}</p>
+            <div className="opening-choices">
+              <button className="opening-choice primary" onClick={() => void start()}>
+                <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
+              </button>
+              <button className="opening-choice" disabled title="Coming next">
+                <b>Listen in</b><span>Two fans, hands-free</span>
+              </button>
+            </div>
+            <p className="opening-note">Nemesys remembers what you say, so your rival can bring it up next time.</p>
+            {error && <p className="rival-error" role="alert">{error}</p>}
+          </div>
+        )}
+        {inLobby && lobby && (
+          <div className="curtain-body">
+            {lobby.stage === "side" ? (
+              <>
+                <p className="lobby-kicker">The lobby</p>
+                <h2>Who are you supporting?</h2>
+                <div className="lobby-crests">
+                  {[home, away].map((c) => (
+                    <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
+                      <Crest club={c} className="crest-big" />
+                      <span>{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
+              </>
+            ) : lobby.stage === "rival" ? (
+              <>
+                <p className="lobby-kicker">The lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
+                <h2>Who do you fancy?</h2>
+                <div className="lobby-rivals">
+                  {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
+                    <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
+                      <span className="lobby-rival-name">{r.name}</span>
+                      <span className="lobby-rival-home">{r.home}{r.language !== "English" && ` · speaks ${r.language}`}</span>
+                      <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : lobby.offered.length === 1 ? "\u201cRematch\u201d or \u201csomeone new\u201d" : "Say a name"}</p>
+              </>
+            ) : (
+              <>
+                <p className="lobby-kicker">The lobby</p>
+                <h2>Connecting you to {rival?.name ?? "your rival"}<span className="dots" aria-hidden><i /><i /><i /></span></h2>
+                {rival && dir.club(rival.club) && (
+                  <p className="curtain-fixture">{dir.club(rival.club)!.name} fan · {rival.home}{rival.language !== "English" ? ` · speaks ${rival.language}` : ""}</p>
+                )}
+              </>
+            )}
+            {notice && <p className="rival-notice">{notice}</p>}
+          </div>
+        )}
+      </div>
 
       <footer className="rival-agents">
         <AgentsFlow reports={reports} now={now} active={{

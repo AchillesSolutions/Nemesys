@@ -9,7 +9,7 @@ from kickoff import news
 from kickoff import rival as rival_module
 from kickoff.generator import generate_match
 from kickoff.models import EventType
-from kickoff.rival import (BIG, FULL, MIN_FRAME_S, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe,
+from kickoff.rival import (BIG, LIVE, MATCH, MIN_FRAME_S, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe,
                            feeling, frame_plan, match_seconds, pace_plan, previous_meeting, rival_instructions)
 from kickoff.world import build_world
 
@@ -46,19 +46,27 @@ class FakeSideband:
         pass
 
 
-INSTANT = {"quiet": 1e9, "build": 1e9, "holds": {}, "small_hold": 0, "half_time": 0, "greeting": 0, "after": 0}
+INSTANT = {"quiet": 1e9, "build": 1e9, "holds": {}, "small_hold": 0, "half_time": 0, "greeting": 0, "after": 0,
+           "max_s": 60}
 
 
 def fast(monkeypatch):
     monkeypatch.setattr(rival_module, "NEWS_WAIT_S", 0.01)
     monkeypatch.setattr(rival_module, "PACING", {
         "short": Pacing(build_s=SHORT.build_s, tells_small=False, **INSTANT),
-        "full": Pacing(build_s=FULL.build_s, tells_small=True, **INSTANT)})
+        "match": Pacing(build_s=MATCH.build_s, tells_small=True, **INSTANT)})
+    monkeypatch.setattr(asyncio, "sleep", _quick(asyncio.sleep))
     monkeypatch.setattr(rival_module.Rival, "_fill", _no_wait)
 
 
 async def _no_wait(self, watch, seconds, lull=0, gap=0):
     await asyncio.sleep(0)
+
+
+def _quick(sleep):
+    async def quick(seconds, *args, **kwargs):  # the sign-off's pause, among others
+        return await sleep(min(seconds, 0.001), *args, **kwargs)
+    return quick
 
 
 def test_instructions_cover_both_clubs_the_boundaries_and_the_accent(world, match):
@@ -130,7 +138,8 @@ def test_every_big_moment_is_described(world, match):
 
 def test_the_short_match_fits_a_two_minute_demo(match):
     assert match_seconds(match.events, SHORT) + SHORT.greeting < 105, "with the lobby, about two minutes"
-    assert 4 * 60 < match_seconds(match.events, FULL) < 6 * 60
+    assert 9 * 60 < match_seconds(match.events, MATCH) < 12 * 60, "about ten minutes, with room to talk"
+    assert match_seconds(match.events, LIVE) > 100 * 60, "real time"
 
 
 def test_fast_play_sends_the_browser_a_few_pictures_a_second(match):
@@ -216,7 +225,8 @@ def test_a_harbour_fan_meets_new_kilburn_rivals(world, match, tmp_path, monkeypa
     assert rival.heard(watch, "sophia")["rival"]["home"] == "Buenos Aires"
 
 
-def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None, mode: str = "full"):
+def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None, mode: str = "match",
+              start: int = 0):
     persona = next(p for p in ROSTER if p.id == "dez")
     fast(monkeypatch)
     monkeypatch.setattr(rival_module, "SAVED", tmp_path)
@@ -224,7 +234,8 @@ def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = N
     async def run():
         rival = Rival(world, match, endpoint="https://example.invalid", key="test")
         sideband = FakeSideband()
-        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband), mode=mode, persona=persona)
+        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband), mode=mode, persona=persona,
+                      start=start)
         rival.watches[watch.id] = watch
         stream: asyncio.Queue = asyncio.Queue()
         watch.listeners.add(stream)
@@ -355,3 +366,24 @@ def test_a_dig_goes_stale_when_the_score_changes():
         return rival._take_dig(watch)
 
     assert asyncio.run(run()) is None, "a dig written at 0-0 can't be used at 1-0"
+
+
+def test_joining_a_match_under_way(world, match, monkeypatch, tmp_path):
+    from kickoff.rival import start_index
+    start = start_index(match.events, 80)
+    watch, sent, messages = run_match(world, match, monkeypatch, tmp_path, start=start)
+    spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
+    assert spoken[0].startswith("You've just joined, and the match is already under way")
+    assert "minute 80" in spoken[0] and "Kilburn 1-2 Harbour City" in spoken[0], "the rival knows where it's up to"
+    assert sum("GOAL for" in s for s in spoken) == 3, "only the goals from the 80th minute on are new"
+    moments = [m for m in messages if m["type"] == "moment"]
+    assert sum(m["kind"] == "goal" for m in moments) == 6, "the timeline still shows every goal"
+    assert watch.score == {"kil": 3, "hbr": 2}
+
+
+def test_the_rival_signs_off_at_full_time(world, match, monkeypatch, tmp_path):
+    watch, sent, messages = run_match(world, match, monkeypatch, tmp_path)
+    spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
+    assert spoken[-1].startswith("Time to go. Sign off in character: sulk"), "Kilburn won, so the Harbour fan sulks"
+    assert "same time next week" in spoken[-1]
+    assert sent[-1]["type"] == "session.close", "and the session ends"
