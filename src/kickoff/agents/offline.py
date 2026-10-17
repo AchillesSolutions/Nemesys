@@ -149,6 +149,16 @@ class OfflineChatClient(FunctionInvocationLayer, BaseChatClient):
                 body = _league_guide(brief)
             case "producer":
                 body = _producer(brief, messages[-1].text)
+            case "match":
+                body = {"storyline": f"Offline read: {brief.get('score', '')} after {brief.get('minute', '?')} minutes."}
+            case "ammo":
+                used = set(brief.get("used", []))
+                fresh = [c for c in brief.get("candidates", []) if c not in used]
+                body = {"dig": fresh[0] if fresh else "Ask them for a score prediction.", "source": "news"}
+            case "referee" if brief.get("task") == "check":
+                body = {"ok": True, "line": brief["line"], "reason": "offline: passed"}
+            case "referee":
+                body = {"verdict": "fine", "instruction": ""}
             case _:
                 body = {"proposals": []}
         return ChatResponse(messages=[Message("assistant", [json.dumps(body)])])

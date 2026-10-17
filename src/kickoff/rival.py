@@ -54,6 +54,7 @@ from .data_store import DATA_DIR
 from .match_reader import MatchReader
 from .models import Club, EventType, Match, MatchEvent, Position, World
 from .player import event_message
+from .rival_agents import RivalAgents
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +113,9 @@ NEW = re.compile(r"\b(new|someone else|somebody else|no|nah|different|other|anot
 MAX_WATCH_S = 25 * 60     # a safety net for spend
 NEWS_WAIT_S = 20          # how long the build-up waits for the News agent before using the last good stories
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
+READ_EVERY_S = 15 * 60     # the Match agent also reads the game every this many match seconds
+REVIEW_EVERY_S = 10        # the Referee reviews the conversation at most this often (real seconds)
+REVIEW_MIN_CHARS = 60      # ...once the rival has said at least this much more
 VOICE_GRACE_S = 90        # the voice has been gone this long: the viewer has left, stop the match
 
 # Big moments break into the conversation; small ones wait for a natural gap. Passes and throw-ins pass silently.
@@ -435,6 +439,16 @@ class Watch:
     voices: int = 0  # voice sessions so far: the first one greets, later ones pick up where the last left off
     agents: dict[str, dict] = field(default_factory=dict)  # what each agent last did, for the screen
     rematch: dict | None = None
+    snapshot: object | None = None  # the Match reader's latest view of the match
+    moments: list[str] = field(default_factory=list)  # big moments so far, for the Match agent
+    storyline: str = ""  # the Match agent's latest read
+    last_read: int = 0  # match second of the Match agent's last read
+    reading: asyncio.Task | None = None
+    used_digs: list[str] = field(default_factory=list)
+    next_dig: asyncio.Task | None = None  # the Ammo agent's next dig, prepared (and refereed) in advance
+    dig_score: tuple = ()  # the score when that dig was prepared: a goal makes it stale
+    refereeing: asyncio.Task | None = None
+    reviewed_chars: int = 0
 
     def publish(self, message: dict) -> None:
         if message.get("type") == "event":
@@ -455,7 +469,10 @@ class Watch:
 
     def moment(self, ev: MatchEvent, text: str) -> None:
         """A moment on the match feed: what the Match agent saw."""
-        self.publish({"type": "moment", "minute": ev.minute, "text": text, "big": ev.type in BIG})
+        if ev.type in BIG:
+            self.moments.append(text)
+        self.publish({"type": "moment", "minute": ev.minute, "text": text, "big": ev.type in BIG,
+                      "kind": ev.type.value, "team": ev.team, "elapsed": ev.elapsed})
 
     async def _send(self, event: dict) -> bool:
         if self.voice is None:
@@ -470,6 +487,11 @@ class Watch:
                          shown: str | None = None) -> None:
         self.note(kind, shown or text)
         await self._send({"type": "session.commentary.append", "delegation_id": delegation_id, "content": text})
+
+    async def instruct(self, text: str, kind: str = "referee") -> None:
+        """A trusted change to how the rival behaves (the Referee stepping in)."""
+        self.note(kind, text)
+        await self._send({"type": "session.instructions.append", "delegation_id": None, "content": text})
 
     async def thinking(self, text: str, kind: str = "context", delegation_id: str | None = None,
                        shown: str | None = None) -> None:
@@ -503,6 +525,7 @@ class Rival:
         self.default_voice = os.getenv("KICKOFF_RIVAL_VOICE", "cedar")
         self.default_accent = os.getenv("KICKOFF_RIVAL_ACCENT", "london")
         self.world, self.match, self.clients = world, match, clients
+        self.agents = RivalAgents(clients) if clients else None
         self.watches: dict[str, Watch] = {}
 
     @property
@@ -681,8 +704,9 @@ class Rival:
             return
         if watch.director and watch.director is not asyncio.current_task():
             watch.director.cancel()
-        if watch.news_task:
-            watch.news_task.cancel()
+        for task in (watch.news_task, watch.reading, watch.next_dig, watch.refereeing):
+            if task and task is not asyncio.current_task():
+                task.cancel()
         if watch.voice:
             with suppress(Exception):
                 await watch.voice.sideband.send(json.dumps({"type": "session.close"}))
@@ -750,7 +774,15 @@ class Rival:
         """One event: on the pitch, on the match feed, and to the rival if it's worth saying."""
         ev = update.event
         watch.minute = ev.minute
+        watch.snapshot = update.snapshot
         watch.score = {t.id: t.score for t in (update.snapshot.home, update.snapshot.away)}
+        if self.agents and ev.elapsed - watch.last_read >= READ_EVERY_S and ev.type not in BIG:
+            self._read(watch, update)
+        if self.agents and watch.dig_score and watch.dig_score != tuple(watch.score.values()):
+            if watch.next_dig and not watch.next_dig.done():
+                watch.next_dig.cancel()
+            watch.next_dig = None
+            self._prepare_dig(watch)  # the score has moved on: a fresh dig for the new situation
         if ev.type is EventType.HALF_TIME:
             watch.phase = "half_time"
         elif ev.type is EventType.KICK_OFF and ev.period == 2 and watch.phase == "half_time":
@@ -773,6 +805,8 @@ class Rival:
             watch.last_nudge = time.monotonic()
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
             await watch.commentary(f"{BREAK_IN}{text} {cue}", shown=text)
+            if self.agents and watch.snapshot:
+                self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
                 await asyncio.sleep(pacing.holds.get(ev.type, 0))
         elif watch.talking():
@@ -807,6 +841,9 @@ class Rival:
         for team in (watch.user_team, rival.id):
             await watch.thinking(club_news(watch.dossier, self.match, team, self.world), kind="news",
                                  shown=f"{self.world.club(team).short_name} news")
+        if self.agents:
+            self._prepare_dig(watch)
+            watch.refereeing = asyncio.create_task(self._referee(watch))
 
     async def _fill(self, watch: Watch, seconds: float, lull: float = 12, gap: float = 20) -> None:
         """Wait, but if the conversation goes quiet for a while, hand the rival a fresh talking point."""
@@ -825,10 +862,15 @@ class Rival:
                 raise asyncio.CancelledError
             if now - watch.last_voice > lull and now - watch.last_nudge > gap:
                 watch.last_nudge = now
-                point = (watch.talking_points.pop(0) if watch.talking_points else
-                         self._situation(watch) + " Needle them about how it's going, or make a bold prediction.")
-                watch.agent("ammo", "Dig: " + point[:90])
+                point = self._take_dig(watch)
+                if point is None:
+                    point = (watch.talking_points.pop(0) if watch.talking_points else
+                             self._situation(watch) + " Needle them about how it's going, or make a bold prediction.")
+                    watch.agent("ammo", point[:120], working=False)
+                watch.used_digs.append(point)
                 await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point)
+                if self.agents:
+                    self._prepare_dig(watch)
 
     def _situation(self, watch: Watch) -> str:
         home, away = self.match.home, self.match.away
@@ -837,6 +879,121 @@ class Rival:
         where = {"lobby": "before kick-off", "prematch": "the pre-match build-up, kick-off any second",
                  "half_time": "half-time", "full_time": "full-time"}.get(watch.phase, f"minute {watch.minute}")
         return f"Right now it's {where}, and the score is {score}."
+
+    # -- the agents ---------------------------------------------------------
+
+    def _player(self, player_id: str) -> str:
+        return self.world.club(player_id.split("-")[0]).player(player_id).name
+
+    def _sides(self, watch: Watch) -> dict:
+        return {"rival_supports": self.world.club(self.other(watch.user_team)).name,
+                "user_supports": self.world.club(watch.user_team).name}
+
+    def _read(self, watch: Watch, update, ev: MatchEvent | None = None) -> None:
+        """Ask the Match agent for a read of the game, without holding anything up. One read at a time."""
+        if watch.reading and not watch.reading.done():
+            return
+        snap = watch.snapshot
+        watch.last_read = (ev.elapsed if ev else update.event.elapsed)
+        home, away = snap.home, snap.away
+        brief = {
+            **self._sides(watch), "minute": watch.minute, "phase": watch.phase,
+            "score": f"{home.name} {home.score}-{away.score} {away.name}",
+            "just_happened": watch.moments[-1] if ev else None,
+            "big_moments_so_far": watch.moments[-8:],
+            "previous_storyline": watch.storyline,
+            "stats": {t.name: {"possession_pct": t.possession_pct, "shots": t.shots, "on_target": t.shots_on_target,
+                               "players": len(t.players_on_pitch), "booked": len(t.booked), "sent_off": len(t.sent_off),
+                               "scorers": [f"{self._player(g.player)} {g.minute}'" for g in t.goals]}
+                      for t in (home, away)},
+        }
+        watch.agent("match", "Reading the game…")
+        watch.reading = asyncio.create_task(self._reading(watch, brief))
+
+    async def _reading(self, watch: Watch, brief: dict) -> None:
+        try:
+            story = await self.agents.read_match(brief)
+        except Exception:
+            log.exception("Match agent failed")
+            return
+        if story and story != watch.storyline:
+            watch.storyline = story
+            watch.agent("match", story, working=False)
+            await watch.thinking(f"The Match agent's read: {story}", kind="storyline", shown=story)
+
+    def _prepare_dig(self, watch: Watch) -> None:
+        """Have the Ammo agent choose the next dig and the Referee check it, ahead of the next lull."""
+        if watch.next_dig and not watch.next_dig.done():
+            return
+        watch.dig_score = tuple(watch.score.values())
+        watch.next_dig = asyncio.create_task(self._dig(watch))
+
+    async def _dig(self, watch: Watch) -> str | None:
+        brief = {
+            **self._sides(watch), "phase": watch.phase, "minute": watch.minute,
+            "score": self._situation(watch), "match_read": watch.storyline,
+            "candidates": watch.talking_points[:10],
+            "user_said_this_match": [text.strip()[-300:] for who, text in watch.transcript if who == "user"][-6:],
+            "rival_said_recently": [text.strip()[-300:] for who, text in watch.transcript if who == "rival"][-4:],
+            "used": watch.used_digs[-12:],
+        }
+        watch.agent("ammo", "Choosing the next dig…")
+        try:
+            choice = await self.agents.next_dig(brief)
+        except Exception:
+            log.exception("Ammo agent failed")
+            return None
+        if choice is None:
+            return None
+        watch.agent("ammo", f"{choice.dig} ({choice.source.replace('_', ' ')})", working=False)
+        watch.agent("referee", "Checking the dig…")
+        try:
+            verdict = await self.agents.check(choice.dig, self._situation(watch))
+        except Exception:
+            log.exception("Referee check failed")
+            return None
+        if verdict.ok:
+            watch.agent("referee", "Dig checked: fine", working=False)
+            return choice.dig
+        watch.agent("referee", f"Rewrote a dig: {verdict.reason}" if verdict.line else f"Blocked a dig: {verdict.reason}",
+                    working=False)
+        return verdict.line or None
+
+    def _take_dig(self, watch: Watch) -> str | None:
+        """The prepared dig, if it's ready and still fits the score."""
+        task = watch.next_dig
+        if not task or not task.done() or task.cancelled():
+            return None
+        watch.next_dig = None
+        dig = task.result() if not task.exception() else None
+        if dig is None or watch.dig_score != tuple(watch.score.values()):
+            return None  # the score has moved on since it was written
+        return dig
+
+    async def _referee(self, watch: Watch) -> None:
+        """Watch the conversation as it happens and step in if the rival goes too far or the user is upset."""
+        try:
+            while watch.id in self.watches:
+                await asyncio.sleep(REVIEW_EVERY_S)
+                said = sum(len(text) for who, text in watch.transcript if who == "rival")
+                if said - watch.reviewed_chars < REVIEW_MIN_CHARS or watch.voice is None:
+                    continue
+                watch.reviewed_chars = said
+                lines = [{"who": "user" if who == "user" else "rival", "said": text.strip()[-400:]}
+                         for who, text in watch.transcript[-8:]]
+                watch.agent("referee", "Listening in on the conversation…")
+                try:
+                    verdict = await self.agents.review(lines, self._situation(watch))
+                except Exception:
+                    log.exception("Referee review failed")
+                    continue
+                if verdict.verdict == "fine" or not verdict.instruction:
+                    watch.agent("referee", "All good-natured", working=False)
+                    continue
+                watch.agent("referee", f"Stepped in: {verdict.instruction}", working=False)
+                await watch.instruct(f"The Referee says: {verdict.instruction}")
+        except asyncio.CancelledError:
+            pass
 
     # -- the voice ----------------------------------------------------------
 

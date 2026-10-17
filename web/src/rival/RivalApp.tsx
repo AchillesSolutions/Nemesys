@@ -1,46 +1,42 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Directory, loadStatic } from "../api";
 import { Crest } from "../components/Crest";
 import { Fixture, Score } from "../components/Fixture";
-import { LeagueTable } from "../components/Panels";
-import { Pitch } from "../components/Pitch";
 import type { MatchEvent, MatchInfo, Snapshot } from "../types";
-import { type AgentReport, AgentsStrip } from "./Agents";
+import { type AgentReport, AgentsFlow } from "./Agents";
 import { LiveCall, type Speaker } from "./live";
 import { hostSay, listen } from "./lobby";
 import { highlight, nameMatcher, type NameMatcher } from "./names";
+import { Timeline, type TimelineMoment } from "./Timeline";
 
 /**
  * The Rival on the matchday screen. A lobby host (not the rival) asks, by voice, who you support and which
  * rival you'd like: the one you watched with last time, or someone new. Then the rival joins, greets you and
  * the match plays, fast-forwarding quiet play so the whole thing fits in about two minutes. The real product
- * is voice only, with no screen: this is the demo view, with the agents at work under the pitch. The lobby's
- * crests and rival cards can be tapped, for testing only.
+ * is voice only, with no screen (the match is on the viewer's TV): this is the demo view, with the conversation
+ * as captions, the score and a timeline at the top, and the agents at work along the bottom. The lobby's crests
+ * and rival cards can be tapped, for testing only.
  */
 
 interface Line { who: Speaker; text: string; at: number }
-interface Moment { minute: string; text: string; big: boolean }
+type Moment = TimelineMoment & { big: boolean };
 interface RivalCard { id: string; name: string; home: string; club: string; language: string; watched: boolean; last: string | null }
 interface Lobby { stage: "side" | "rival" | "done"; team: string | null; say: string | null; online: RivalCard[];
   offered: string[]; rival: RivalCard | null }
 interface Play {
-  event: MatchEvent | null; snapshot: Snapshot | null; recent: MatchEvent[]; arrivedAt: number; nextGap: number | null;
+  event: MatchEvent | null; snapshot: Snapshot | null; arrivedAt: number; nextGap: number | null;
   pace: number; // match seconds per real second for the stretch after this event
 }
 type Status = "idle" | "lobby" | "matching" | "live" | "reconnecting" | "ended";
 
 const PAUSE_MS = 1800; // a fragment after this much quiet from the same speaker starts a new line
 const SHOWN_LINES = 6; // the conversation window: roughly the last few exchanges
-const TRAIL = 6;
 const MATCHING_MIN_MS = 3000; // the "connecting you to a rival" screen stays up at least this long
 const COST_PER_S = 0.0008; // third-party listing for gpt-live-1; not yet on Azure's price list
 const SOUNDS: Record<string, string> = { laugh: "laughs", laughs: "laughs", sigh: "sighs", groan: "groans",
   gasp: "gasps", scoff: "scoffs", chuckle: "chuckles", cheer: "cheers", boo: "boos" };
-const NO_PLAY: Play = { event: null, snapshot: null, recent: [], arrivedAt: 0, nextGap: null, pace: 40 };
+const NO_PLAY: Play = { event: null, snapshot: null, arrivedAt: 0, nextGap: null, pace: 40 };
 const MAX_RECONNECTS = 4;
-// The pitch and the table only redraw when the match moves, not on every word of the conversation.
-const MatchPitch = memo(Pitch);
-const Table = memo(LeagueTable);
 const MODE = new URLSearchParams(location.search).get("mode") === "full" ? "full" : "short";
 
 /** Transcript text: sound tags like [laugh] as stage directions (a half-arrived tag is hidden), names coloured. */
@@ -118,7 +114,7 @@ export default function RivalApp() {
     });
   }
 
-  /** The match stream: events for the pitch, moments for the feed, what the agents are doing. */
+  /** The match stream: events for the score and clock, moments for the timeline, what the agents are doing. */
   function follow(watch: string) {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/api/rival/${watch}/stream`);
@@ -131,12 +127,12 @@ export default function RivalApp() {
       } else if (msg.type === "agent") {
         setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at } }));
       } else if (msg.type === "moment") {
-        setMoments((m) => [{ minute: msg.minute, text: msg.text, big: msg.big }, ...m].slice(0, 8));
+        setMoments((m) => [...m, { minute: msg.minute, text: msg.text, big: msg.big, kind: msg.kind,
+          team: msg.team, elapsed: msg.elapsed }]);
       } else if (msg.type === "event") {
         setPlay((p) => ({
           event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
-          pace: msg.pace ?? p.pace, recent: msg.event.elapsed - (p.event?.elapsed ?? 0) > 120 ? [msg.event]
-            : [...p.recent, msg.event].slice(-TRAIL),
+          pace: msg.pace ?? p.pace,
         }));
       }
     };
@@ -300,9 +296,21 @@ export default function RivalApp() {
   const rival = lobby?.rival ?? null;
   const rivalSpeaking = Date.now() - lastRivalWord.current < 1500;
 
+  const lastMoment = moments[moments.length - 1];
+
   return (
-    <div className="live rival-live">
-      <div className="screen">
+    <div className="rival-live">
+      <svg className="rival-pitch-bg" viewBox="0 0 105 68" preserveAspectRatio="xMidYMid slice" aria-hidden>
+        <rect x="1" y="1" width="103" height="66" />
+        <line x1="52.5" y1="1" x2="52.5" y2="67" />
+        <circle cx="52.5" cy="34" r="9.15" />
+        <rect x="1" y="13.85" width="16.5" height="40.3" />
+        <rect x="87.5" y="13.85" width="16.5" height="40.3" />
+        <rect x="1" y="24.85" width="5.5" height="18.3" />
+        <rect x="98.5" y="24.85" width="5.5" height="18.3" />
+      </svg>
+
+      <header className="rival-top">
         <Fixture dir={dir} match={match} home={play.snapshot?.home} away={play.snapshot?.away} lang="en">
           {play.event ? (
             <Score snapshot={play.snapshot} lang="en"
@@ -316,116 +324,124 @@ export default function RivalApp() {
             </>
           )}
         </Fixture>
+        <Timeline dir={dir} moments={moments} elapsed={play.event?.elapsed ?? 0} duration={match.duration} />
+      </header>
 
-        <main className="stage">
-          <div className="stage-pitch">
-            <MatchPitch dir={dir} match={match} snapshot={play.snapshot} recent={play.recent}
-                   nextGap={play.nextGap} speed={play.pace} lang="en" lineup={match.lineup ?? null} />
-            {inLobby && lobby && (
-              <div className="lobby-overlay">
-                {lobby.stage === "side" ? (
-                  <div className="lobby-box glass">
-                    <p className="lobby-kicker">Kick-Off lobby</p>
-                    <h2>Who are you supporting?</h2>
-                    <div className="lobby-crests">
-                      {[home, away].map((c) => (
-                        <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
-                          <Crest club={c} className="crest-big" />
-                          <span>{c.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
+      <main className="rival-main">
+        <section className="rival-chat" aria-live="polite" aria-label="The conversation">
+          <div className="rival-chat-lines">
+            {shown.map((line, i) => (
+              <p key={lines.length - shown.length + i}
+                 className={`rival-line rival-line-${line.who}`}
+                 style={{ opacity: 0.3 + 0.7 * ((i + 1) / shown.length) }}>
+                <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
+                {render(line.text, names)}
+              </p>
+            ))}
+            {!shown.length && status !== "idle" && !inLobby && <p className="empty">The conversation shows up here as it happens.</p>}
+          </div>
+
+          {(status === "idle" || status === "ended") && (
+            <div className="opening">
+              <p className="lobby-kicker">Kick-Off · {home.short_name} v {away.short_name}</p>
+              <h1>Watch the match with a rival</h1>
+              <p className="opening-sub">A fan of the other side, in your ear for the whole game. Voice only: the match is on your TV.</p>
+              <div className="opening-choices">
+                <button className="opening-choice primary" onClick={() => void start()}>
+                  <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
+                </button>
+                <button className="opening-choice" disabled title="Coming next">
+                  <b>Listen in</b><span>Two fans, hands-free</span>
+                </button>
+              </div>
+              <p className="opening-note">Kick-Off remembers what you say, so your rival can bring it up next time.</p>
+              {error && <p className="rival-error" role="alert">{error}</p>}
+            </div>
+          )}
+
+          {inLobby && lobby && (
+            <div className="lobby-box">
+              {lobby.stage === "side" ? (
+                <>
+                  <p className="lobby-kicker">Kick-Off lobby</p>
+                  <h2>Who are you supporting?</h2>
+                  <div className="lobby-crests">
+                    {[home, away].map((c) => (
+                      <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
+                        <Crest club={c} className="crest-big" />
+                        <span>{c.name}</span>
+                      </button>
+                    ))}
                   </div>
-                ) : lobby.stage === "rival" ? (
-                  <div className="lobby-box glass">
-                    <p className="lobby-kicker">Kick-Off lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
-                    <h2>Who do you fancy?</h2>
-                    <div className="lobby-rivals">
-                      {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
-                        <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
-                          <span className="lobby-rival-name">{r.name}</span>
-                          <span className="lobby-rival-home">{r.home}{r.language !== "English" && ` · speaks ${r.language}`}</span>
-                          <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : lobby.offered.length === 1 ? "\u201cRematch\u201d or \u201csomeone new\u201d" : "Say a name"}</p>
+                  <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
+                </>
+              ) : lobby.stage === "rival" ? (
+                <>
+                  <p className="lobby-kicker">Kick-Off lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
+                  <h2>Who do you fancy?</h2>
+                  <div className="lobby-rivals">
+                    {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
+                      <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>
+                        <span className="lobby-rival-name">{r.name}</span>
+                        <span className="lobby-rival-home">{r.home}{r.language !== "English" && ` · speaks ${r.language}`}</span>
+                        <span className={`lobby-rival-tag ${r.watched ? "seen" : ""}`}>{r.watched ? "Watched together" : "New"}</span>
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div className="lobby-box glass matching">
-                    <p className="lobby-kicker">Kick-Off lobby</p>
-                    <h2>Connecting you to {rival?.name ?? "your rival"}<span className="dots" aria-hidden><i /><i /><i /></span></h2>
-                    {rival && dir.club(rival.club) && (
-                      <div className="rival-card">
-                        <Crest club={dir.club(rival.club)!} className="crest-big" />
-                        <div>
-                          <p className="rival-card-name">{rival.name}</p>
-                          <p className="rival-card-club">{dir.club(rival.club)!.name} fan · {rival.home}</p>
-                          {rival.watched && rival.last && <p className="rival-card-last">Last time: {rival.last}</p>}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : lobby.offered.length === 1 ? "\u201cRematch\u201d or \u201csomeone new\u201d" : "Say a name"}</p>
+                </>
+              ) : (
+                <>
+                  <p className="lobby-kicker">Kick-Off lobby</p>
+                  <h2>Connecting you to {rival?.name ?? "your rival"}<span className="dots" aria-hidden><i /><i /><i /></span></h2>
+                </>
+              )}
+              {notice && <p className="rival-notice">{notice}</p>}
+            </div>
+          )}
+        </section>
+
+        <aside className="rival-side">
+          {rival && dir.club(rival.club) ? (
+            <section className="rival-profile">
+              <p className="lobby-kicker">Watching with</p>
+              <div className="rival-profile-head">
+                <Crest club={dir.club(rival.club)!} className="crest-big" />
+                <div>
+                  <p className="rival-card-name">{rival.name}</p>
+                  <p className="rival-card-club" style={{ color: dir.colour(rival.club) }}>{dir.club(rival.club)!.name} fan</p>
+                </div>
+              </div>
+              <p className="rival-profile-line">{rival.home}{rival.language !== "English" ? ` · speaks ${rival.language}` : ""}</p>
+              <p className="rival-profile-line">{rival.watched && rival.last ? `Last time: ${rival.last}` : "First time watching together"}</p>
+            </section>
+          ) : (
+            <section className="rival-profile empty-profile">
+              <p className="lobby-kicker">Watching with</p>
+              <p className="empty">Your rival appears here once the lobby matches you.</p>
+            </section>
+          )}
+          {(userClub || (status !== "idle" && status !== "ended") || started.current > 0) && <section className="rival-controls">
+            {userClub &&<p className="rival-sides">Supporting <b style={{ color: dir.colour(userClub.id) }}>{userClub.short_name}</b></p>}
+            {status !== "idle" && status !== "ended" && (
+              <div className="rival-buttons">
+                <button className="btn" onClick={stop}>End</button>
+                <button className="btn" onClick={toggleMute} disabled={!live}>{muted ? "Unmute mic" : "Mute mic"}</button>
               </div>
             )}
-          </div>
+            {started.current > 0 && <p className="rival-meter">{Math.round(seconds)}s · ~${(seconds * COST_PER_S).toFixed(2)}</p>}
+            {live && notice && <p className="rival-notice">{notice}</p>}
+          </section>}
+        </aside>
+      </main>
 
-          <div className="stage-agents">
-            <AgentsStrip reports={reports} now={now} active={{
-              host: host?.working ?? false,
-              rival: live && rivalSpeaking,
-            }} />
-          </div>
-
-          <aside className="rail left">
-            <section className="panel glass rival-session">
-              <h2>The Rival <span className="sub">{started.current ? `${Math.round(seconds)}s · ~$${(seconds * COST_PER_S).toFixed(2)}` : ""}</span></h2>
-              <div className="rival-buttons">
-                {status !== "idle" && status !== "ended" ? (
-                  <>
-                    <button className="btn rival-primary" onClick={stop}>End</button>
-                    <button className="btn" onClick={toggleMute} disabled={!live}>{muted ? "Unmute mic" : "Mute mic"}</button>
-                  </>
-                ) : (
-                  <button className="btn rival-primary" onClick={() => void start()}>{status === "ended" ? "Start again" : "Start"}</button>
-                )}
-              </div>
-              {userClub && <p className="rival-sides">Supporting: <b style={{ color: dir.colour(userClub.id) }}>{userClub.short_name}</b></p>}
-              {notice && <p className="rival-notice">{notice}</p>}
-              {error && <p className="rival-error" role="alert">{error}</p>}
-              {rival && <p className="rival-sides">Watching with: <b>{rival.name}</b> <span className="empty">from {rival.home}</span></p>}
-            </section>
-            <Table dir={dir} match={match} snapshot={play.snapshot} lang="en" />
-          </aside>
-
-          <aside className="rail right">
-            <section className="panel glass match-feed">
-              <h2>Match feed</h2>
-              {moments.length ? moments.slice(0, 5).map((m, i) => (
-                <p key={`${m.minute}-${i}-${moments.length}`} className={`feed-moment ${m.big ? "big" : ""}`}>
-                  <span className="feed-minute">{m.minute}’</span>{highlight(m.text.replace(/^[\d+]+': /, ""), names, i)}
-                </p>
-              )) : <p className="empty">The big moments show up here as they happen.</p>}
-            </section>
-            <section className="panel glass rival-chat" aria-live="polite">
-              <h2>Conversation</h2>
-              <div className="rival-chat-lines">
-                {shown.map((line, i) => (
-                  <p key={lines.length - shown.length + i}
-                     className={`rival-line rival-line-${line.who}`}
-                     style={{ opacity: 0.35 + 0.65 * ((i + 1) / shown.length) }}>
-                    <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
-                    {render(line.text, names)}
-                  </p>
-                ))}
-                {!shown.length && <p className="empty">The conversation shows up here as it happens.</p>}
-              </div>
-            </section>
-          </aside>
-        </main>
-      </div>
+      <footer className="rival-agents">
+        <AgentsFlow reports={reports} now={now} active={{
+          host: host,
+          match: lastMoment && reports.match === undefined ? { working: false, text: `${lastMoment.minute}\u2019 ${lastMoment.text}` } : undefined,
+          rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening" } : undefined,
+        }} />
+      </footer>
     </div>
   );
 }

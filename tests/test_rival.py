@@ -283,3 +283,75 @@ def test_the_match_carries_on_when_the_voice_drops(world, match, monkeypatch, tm
     spoken = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
     assert not any("90+4'" in s for s in spoken), "nothing is sent while there's no voice"
     assert any("90+4'" in f["text"] for f in watch.feed), "but the feed still shows what happened"
+
+
+# -- the agents (the offline client stands in for the model) ------------------------------------------------
+
+def offline_clients():
+    from kickoff.agents.offline import OfflineChatClient
+    return lambda role: OfflineChatClient(role)
+
+
+def test_the_agents_answer_in_their_structured_form():
+    from kickoff.rival_agents import RivalAgents
+
+    agents = RivalAgents(offline_clients())
+
+    async def run():
+        story = await agents.read_match({"minute": "56", "score": "Kilburn 1-2 Harbour City"})
+        dig = await agents.next_dig({"candidates": ["used one", "fresh one"], "used": ["used one"]})
+        check = await agents.check("Your keeper's had a mare", "minute 56")
+        verdict = await agents.review([{"who": "rival", "said": "Ha!"}], "minute 56")
+        return story, dig, check, verdict
+
+    story, dig, check, verdict = asyncio.run(run())
+    assert "56" in story
+    assert dig.dig == "fresh one", "never a used dig"
+    assert check.ok and check.line == "Your keeper's had a mare"
+    assert verdict.verdict == "fine"
+
+
+def test_the_agents_work_alongside_the_match(world, match, monkeypatch, tmp_path):
+    fast(monkeypatch)
+    monkeypatch.setattr(rival_module, "SAVED", tmp_path)
+    monkeypatch.setattr(rival_module, "REVIEW_EVERY_S", 0)
+
+    async def run():
+        rival = Rival(world, match, offline_clients(), endpoint="https://example.invalid", key="test")
+        sideband = FakeSideband()
+        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband), mode="short",
+                      persona=next(p for p in ROSTER if p.id == "dez"))
+        rival.watches[watch.id] = watch
+        rival.choose_side(watch, "kil")
+        await rival.opened(watch, resumed=False)
+        await asyncio.wait_for(watch.director, timeout=30)
+        await asyncio.sleep(0.05)  # let the last read land
+        dig = rival._take_dig(watch)
+        watch.transcript.append(("rival", "Ha! " * 40))
+        await asyncio.sleep(0.05)  # one referee review
+        await rival.end(watch)
+        return watch, sideband.sent, dig
+
+    watch, sent, dig = asyncio.run(run())
+    reads = [m["content"] for m in sent if m["type"] == "session.thinking.append" and "Match agent's read" in m["content"]]
+    assert reads, "the Match agent's reads reach the rival as quiet context"
+    assert watch.storyline.startswith("Offline read")
+    assert dig is not None, "the Ammo agent has a refereed dig ready for the next lull"
+    assert {"match", "ammo", "referee"} <= set(watch.agents)
+    assert watch.agents["referee"]["text"] in ("All good-natured", "Dig checked: fine")
+
+
+def test_a_dig_goes_stale_when_the_score_changes():
+    async def run():
+        rival = Rival.__new__(Rival)
+        watch = Watch("w", {"kil": 0, "hbr": 0})
+        watch.dig_score = (0, 0)
+
+        async def ready():
+            return "Ask them if they still think it's their year."
+        watch.next_dig = asyncio.create_task(ready())
+        await asyncio.sleep(0)
+        watch.score = {"kil": 1, "hbr": 0}
+        return rival._take_dig(watch)
+
+    assert asyncio.run(run()) is None, "a dig written at 0-0 can't be used at 1-0"
