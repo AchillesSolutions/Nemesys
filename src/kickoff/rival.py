@@ -89,6 +89,7 @@ class Persona:
     club: str
     language: str = "English"  # rivals who speak another language say so in the lobby, and only speak it
     aliases: tuple[str, ...] = ()  # other things a viewer might say to pick them ("the Spanish one")
+    manner: str = ""  # how they come across: each rival has their own energy
 
     def heard_in(self, text: str) -> bool:
         return any(re.search(rf"\b{w}\b", text) for w in (self.name.lower(), *self.aliases))
@@ -98,18 +99,18 @@ class Persona:
 # seeded "last time" memory remembers.
 ROSTER = [
     # Aliases include how speech recognition tends to spell the names ("Des" for Dez).
-    Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr", aliases=("des", "daz", "dezz", "desmond", "bristol")),
-    Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr", aliases=("kevin", "kevvy", "manchester")),
+    Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr", aliases=("des", "daz", "dezz", "desmond", "bristol"), manner="loud, cocky and always laughing; you take nothing seriously except your club"),
+    Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr", aliases=("kevin", "kevvy", "manchester"), manner="quick, dry Manchester wit; you deliver put-downs fast and grin about them"),
     Persona("chen", "Chen", "Shanghai", "mandarin", "verse", "hbr", "Mandarin",
-            ("chan", "chun", "shen", "chinese", "mandarin", "shanghai")),
+            ("chan", "chun", "shen", "chinese", "mandarin", "shanghai"), manner="excitable and quick-fire; you get carried away, then tease them about it"),
     Persona("carlos", "Carlos", "Mexico City", "spanish", "echo", "hbr", "Spanish",
-            ("carl", "karlos", "spanish", "mexico", "mexican")),
-    Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil", aliases=("robbie", "robert", "bob")),
-    Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil", aliases=("pria", "preya", "leicester")),
+            ("carl", "karlos", "spanish", "mexico", "mexican"), manner="passionate and theatrical; every moment is a drama, the bigger the better"),
+    Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil", aliases=("robbie", "robert", "bob"), manner="a cheeky London wind-up merchant; you poke and poke, all with a grin"),
+    Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil", aliases=("pria", "preya", "leicester"), manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
     Persona("lin", "Lin", "Beijing", "mandarin", "sage", "kil", "Mandarin",
-            ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing")),
+            ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing"), manner="playful and teasing; you never miss a chance for a sly dig"),
     Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "coral", "kil", "Spanish",
-            ("sofia", "sophia", "spanish", "argentina")),
+            ("sofia", "sophia", "spanish", "argentina"), manner="fiery and dramatic; you love a big moment and you let everyone know it"),
 ]
 YES = re.compile(r"\b(yes|yeah|yep|yup|ya|aye|go on|rematch|sure|ok|okay|why not|same|again|let'?s go|let'?s do it|"
                  r"him|her|definitely|absolutely|go for it|please)\b")
@@ -176,6 +177,29 @@ def _table_position(world: World, club: Club) -> int:
     return next(i for i, row in enumerate(world.table, 1) if row.club == club.name)
 
 
+def form_words(form: list[str]) -> str:
+    """Recent form the way a fan says it: "three wins and two draws in their last five, unbeaten in four",
+    never "W-D-L-W-W", which nobody reads out loud."""
+    say = "no one two three four five six seven eight nine ten".split()
+    wins, draws, losses = form.count("W"), form.count("D"), form.count("L")
+    count = lambda n, word: f"{say[n]} {word}{'' if n == 1 else 's'}"
+    parts = [count(n, word) for n, word in ((wins, "win"), (draws, "draw"), (losses, "defeat")) if n]
+    summary = (", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0]) + f" in their last {say[len(form)]}"
+    newest = form[-1]
+    run = len(form) - len("".join(form).rstrip(newest)) if newest else 0
+    unbeaten = len(form) - len("".join(form).rstrip("WD"))
+    if newest == "W" and run >= 2:
+        summary += f", won their last {say[run]}"
+    elif newest == "L" and run >= 2:
+        summary += f", lost their last {say[run]}"
+    elif unbeaten >= 3:
+        summary += f", unbeaten in {say[unbeaten]}"
+    elif newest != "W":
+        since = len(form) - len("".join(form).rstrip("DL"))
+        summary += f", without a win in {say[since]}" if since >= 2 else ""
+    return summary
+
+
 def _club_brief(world: World, club: Club) -> str:
     position = _table_position(world, club)
     row = world.table[position - 1]
@@ -184,9 +208,9 @@ def _club_brief(world: World, club: Club) -> str:
                         for p in starters)
     return (f"{club.name}, known as {club.nickname}, from {club.city}, play at {club.stadium}. "
             f"Style: {club.style.summary.rstrip('.')}. "
-            f"League position: {position} of {len(world.table)} with {row.points} points from {row.played} games "
-            f"(W{row.won} D{row.drawn} L{row.lost}, goals {row.goals_for}-{row.goals_against}), "
-            f"recent form oldest to newest: {' '.join(row.form)}. "
+            f"League position: {position} of {len(world.table)}, {row.points} points from {row.played} games "
+            f"({row.won} won, {row.drawn} drawn, {row.lost} lost; {row.goals_for} scored, {row.goals_against} conceded), "
+            f"recent form: {form_words(row.form)}. "
             f"Starting XI: {players}.")
 
 
@@ -199,11 +223,12 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
         name = f"{persona.name} from {persona.home}" if persona else "a fan"
         met = (f" You've watched with this person before: {rematch['when']} ({rematch['result']}), so greet them "
                "like an old rival: 'oh, it's YOU again'." if rematch else " You've never met.")
-        who = (f"You are {name}, a lifelong {mine.name} fan. The Nemesys lobby has just matched you with a "
+        manner = f" You're {persona.manner}." if persona and persona.manner else ""
+        who = (f"You are {name}, a lifelong {mine.name} fan.{manner} The Nemesys lobby has just matched you with a "
                f"{world.club(user_team).name} fan to watch the match together, as rivals.{met} You support "
                f"{mine.name} passionately for the whole match; never be neutral and never switch sides.")
-        setup = ("Setup: when you join, greet them in character straight away and get the first dig in. "
-                 "Kick-off is seconds away, so keep the greeting short.")
+        setup = ("Setup: when you join, greet them in character straight away and get the first dig in. The match "
+                 "hasn't kicked off yet: you'll be told the moment it does.")
     else:
         who = "You are a football fan watching the match on the sofa with the user, like a mate who supports the other team."
         setup = ("Setup: open by saying the match is about to kick off and asking who they are backing. Whichever club "
@@ -213,9 +238,13 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
                 if persona is None or persona.language == "English" else
                 f"Language: you always speak {persona.language}, whatever language the user uses. You understand "
                 f"English perfectly. Club and player names stay as they are.")
-    return f"""{who} It's a {league} match. This is a live, spoken, full-duplex conversation: talk over each other, interrupt, react while they are still talking, laugh at them. Never sound like an assistant or a commentator. {ACCENTS.get(accent, "")}
+    return f"""{who} It's a {league} match. This is a live, spoken conversation between two fans, so sound like one: never like an assistant or a commentator. {ACCENTS.get(accent, "")}
 
-You lead the build-up: before kick-off you drive the conversation with digs, predictions and stories. Once the match is on, you're both watching: it's fine to go quiet for a bit, like real fans do, and let either of you break the silence.
+Energy: you're animated and full of life, like a fan in the pub with mates: quick, expressive, laughing, never flat or bored. Not shouting all the time, but always alive, with big peaks for the big moments.
+
+Taking turns: let them finish what they're saying. A pause in the middle of a sentence isn't the end of it, so wait for them. React with little noises while they talk if you like ("ha!", "come off it"), but don't talk over them. The only time you cut in is a big match moment (a goal, a penalty, a red card, VAR), and then you cut in properly, shocked: "WHAT?! Hang on—".
+
+You lead: you drive the conversation with digs, predictions, stories and questions. Never let it go quiet for long: if nobody has said anything for a few seconds, start something new.
 
 Talk about more than this match. Real fans bring up the whole season: what a player cost and whether he's been worth it, who's injured, the manager under pressure, how the last meetings went, things the user said last time. News and talking points arrive as quiet context; use them.
 
@@ -230,6 +259,10 @@ Big moments are BIG. When your team scores you erupt: shout, cheer, laugh at the
 Sounds: use real non-verbal sounds the way a fan would: laughing, groaning, gasping, sharp intakes of breath, "ooooh", jeering. Make the sound itself, never describe it.
 
 Match events arrive as commentary. You are watching the same screen as the user, so you always know the score, the minute and what just happened. You already know everything you need: never say you'll check something or look something up.
+
+Only talk about play you've actually been told about. Never invent what's happening on the pitch: no passes, chances or pressure you haven't heard about. Before you're told it's KICK-OFF, the match hasn't started, so talk about the build-up only.
+
+Say things the way a fan would. Never read out letter codes, abbreviations or lists of numbers (no "W-D-L-W-W", no "14 points from 8 games"): say "they've won three of their last five" or "you're mid-table".
 
 {language}
 
@@ -785,7 +818,7 @@ class Rival:
             dig = watch.talking_points.pop(0)
             watch.agent("ammo", "Opening dig: " + dig[:90])
             await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
-                                   + " Kick-off is seconds away; keep it short.", kind="prematch")
+                                   + " The match hasn't kicked off yet; keep it short.", kind="prematch")
         watch.director = asyncio.create_task(self._direct(watch, reader))
 
     def _catch_up(self, watch: Watch, reader: MatchReader) -> None:
@@ -997,7 +1030,7 @@ class Rival:
             self._prepare_dig(watch)
             watch.refereeing = asyncio.create_task(self._referee(watch))
 
-    async def _fill(self, watch: Watch, seconds: float, lull: float = 12, gap: float = 20) -> None:
+    async def _fill(self, watch: Watch, seconds: float, lull: float = 7, gap: float = 12) -> None:
         """Wait, but if the conversation goes quiet for a while, hand the rival a fresh talking point."""
         end = time.monotonic() + seconds
         while (now := time.monotonic()) < end:

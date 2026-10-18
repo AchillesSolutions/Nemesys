@@ -27,6 +27,11 @@ from .agents.llm import ClientFactory, options_for
 from .data_store import DATA_DIR
 from .models import Match, World
 
+
+def form_words(form: list[str]) -> str:
+    from .rival import form_words as words  # one way of saying form, shared with the rival
+    return words(form)
+
 log = logging.getLogger(__name__)
 
 CACHE = DATA_DIR / "news.json"
@@ -47,6 +52,7 @@ Rules:
 - Stay consistent with the facts given (league position, form, players' traits, the last meeting).
 - Name people correctly: a story about the manager names the manager, never a player.
 - Football only. Nothing about anyone's private life, background or appearance; nothing cruel; no violent language.
+- Write the way a fan talks: never letter codes like "W-D-L" or strings of stats.
 - Each headline is under 12 words. Each detail is one or two sentences, with numbers where they help (fees, goals, minutes).
 - Balance it: roughly half the stories about each club, some good news and some bad for each."""
 
@@ -81,7 +87,7 @@ def brief(world: World, match: Match) -> str:
             f"\n{side.upper()}: {club.name} ('{club.nickname}'), {club.city}, stadium {club.stadium}.",
             f"Style: {club.style.summary}",
             f"Table: {position}th of {len(world.table)}, {row.points} pts, W{row.won} D{row.drawn} L{row.lost}, "
-            f"goals {row.goals_for}-{row.goals_against}, last five {' '.join(row.form)} (oldest first).",
+            f"goals {row.goals_for}-{row.goals_against}, recent form: {form_words(row.form)}.",
             f"Starting XI: {describe(xi)}",
             f"Rest of the squad: {describe(bench)}",
         ]
