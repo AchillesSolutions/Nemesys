@@ -3,98 +3,104 @@
     {
       "club": "home",
       "kind": "form",
-      "headline": "Otters stretch unbeaten run to four",
-      "detail": "Kilburn Athletic have taken 8 points from the last 12, with 3 straight draws after one win. They still keep the ball neatly, but just 8 goals in 8 games is leaving fans wanting more."
+      "headline": "Otters keep grinding out results",
+      "detail": "Kilburn have only lost once in five and are unbeaten in three, which has the Lockside Park crowd feeling they’re tough to shake. They’ve been drawing teams side to side and finding a late gap rather than forcing it."
     },
     {
       "club": "home",
       "kind": "transfer",
-      "headline": "Rios fee already looks like value",
-      "detail": "Mateo Rios cost £1.4 million from a regional rival in the summer, and he has hardly misplaced a pass since. The midfielder's calm control has been central to Kilburn's patient style."
+      "headline": "Quintero fee looking like a steal",
+      "detail": "Rafa Quintero cost £2.4m in the summer and he’s already won fouls in dangerous spots, even if the goals have not quite flowed yet. Fans reckon the 21-year-old’s feet are causing defenders all sorts of trouble."
     },
     {
       "club": "home",
       "kind": "injury",
-      "headline": "Visser misses out again",
-      "detail": "Back-up defender Arno Visser is still not ready, so the Otters have no extra cover if Elias Varga or Jun-ho Park need a rest. The manager says he is close, but not close enough for this week."
+      "headline": "Fairweather still not ready",
+      "detail": "Back-up keeper Liam Fairweather is still sidelined and Tomas Brennan keeps the gloves for now. The Otters won’t rush the 34-year-old back after his latest setback in training."
     },
     {
       "club": "home",
       "kind": "manager",
-      "headline": "Madsen rejects 'too safe' criticism",
-      "detail": "Manager Henrik Madsen snapped back after another draw, saying Kilburn are building attacks the right way. He pointed to their 12 points and 8th place as proof the side is progressing, not stalling."
+      "headline": "Serrano bites back at the doubters",
+      "detail": "Manager Nico Serrano was blunt after the midweek draw, insisting his side do not need to turn into a long-ball team just because results have been tight. He says Kilburn’s passing game is the reason they’re sitting 8th, not the problem."
     },
     {
       "club": "home",
       "kind": "fans",
-      "headline": "Lockside crowd turns on ticket hike",
-      "detail": "A new matchday price increase has angered regulars at Lockside Park. One banner in the home end read, 'Keep the passing, cut the prices'."
-    },
-    {
-      "club": "home",
-      "kind": "transfer",
-      "headline": "Castellanos deal almost collapsed",
-      "detail": "Leo Castellanos was due to leave on loan in August, but the paperwork came back late and the move fell through. Kilburn now call the 19-year-old super-sub a bargain they nearly lost for nothing."
-    },
-    {
-      "club": "home",
-      "kind": "form",
-      "headline": "Whitcombe keeps finding the right spots",
-      "detail": "Ollie Whitcombe has scored 4 of Kilburn's 8 league goals and remains their main penalty-box threat. His movement has given Rafa Quintero and Dario Kessler more room around him."
+      "headline": "Ticket row over the Quay allocation",
+      "detail": "Kilburn fans are fuming at the small away allocation and the price jump for the Harbour City trip. One banner on matchday read: “Keep football for the people, not the pockets.”"
     },
     {
       "club": "home",
       "kind": "finance",
-      "headline": "Lockside Park expansion hits delay",
-      "detail": "The club's small stadium upgrade is now running weeks behind schedule, which has annoyed supporters expecting better facilities. Kilburn say the extra seating should still be ready later in the season."
+      "headline": "Lockside Park plans get louder",
+      "detail": "The club keeps talking up a stand upgrade at Lockside Park, and the board says the move is tied to a better matchday income stream. Supporters just hope the extra money ends up on the pitch, not only in the office."
+    },
+    {
+      "club": "home",
+      "kind": "transfer",
+      "headline": "Pereira deal never got over the line",
+      "detail": "Kilburn tried to land a striker on deadline day, but the move collapsed after the fee climbed past £1.1m. Noah Pereira’s experience was the target, so fans are still wondering what might have been."
+    },
+    {
+      "club": "home",
+      "kind": "form",
+      "headline": "Whitcombe finally off the mark",
+      "detail": "Ollie Whitcombe has started to look like the poacher Kilburn paid for, with two goals in his last three appearances. The old gripe was that the build-up looked nice but the box had no bite."
     },
     {
       "club": "away",
       "kind": "form",
-      "headline": "Gulls fly after back-to-back wins",
-      "detail": "Harbour City arrive on a 5-match run of W D L W W, and the two latest wins have pushed them to 5th. They have scored 8 and conceded only 7, which suits their quick-break style."
+      "headline": "Gulls flying after two straight wins",
+      "detail": "Harbour City have won their last two and look sharp on the break again, with Isaac Mwangi ending moves the way he should. They’re 5th now, and the away end is starting to dream bigger."
     },
     {
       "club": "away",
       "kind": "transfer",
-      "headline": "Mwangi looks a bargain at £2 million",
-      "detail": "Isaac Mwangi cost £2 million and already has the league scouts talking. His sharp runs in behind have turned several half-chances into clean finishes for the Gulls."
+      "headline": "Mwangi price tag suddenly feels fair",
+      "detail": "Isaac Mwangi cost £3.1m and the talk was he’d need time, but his finishing has started to pay back the fee. Every run in behind now looks like money well spent."
     },
     {
       "club": "away",
       "kind": "injury",
-      "headline": "Novak and Grant remain sidelined",
-      "detail": "Back-up goalkeeper Pavel Novak and midfielder Elijah Grant are both still out, but neither was in the starting XI anyway. Harbour City's first choice has not been disturbed, which keeps their setup steady."
+      "headline": "Ferraro missing the bench again",
+      "detail": "Nico Ferraro is still out, so Harbour City are short on that burst of pace late in games. The 20-year-old’s been close, but not close enough for this trip."
     },
     {
       "club": "away",
       "kind": "manager",
-      "headline": "Silva praises discipline after clean sheets",
-      "detail": "Manager Rafael Silva said his side are 'finally looking like Harbour City again' after two composed wins. He also warned his full-backs not to get dragged out too early against Kilburn."
+      "headline": "Brennan hails the deep-block discipline",
+      "detail": "Manager Ruan Mercer praised his side’s patience, saying the low block and quick outlet are what make Harbour City awkward to face. He also swatted away questions about being too cautious, saying points matter more than style points."
     },
     {
       "club": "away",
       "kind": "fans",
-      "headline": "Gulls unveil a banner for Halloran",
-      "detail": "Away fans have been singing for Viktor Halloran after his latest save-heavy display. A travelling banner called him 'The Quay wall' after his recent form."
-    },
-    {
-      "club": "away",
-      "kind": "transfer",
-      "headline": "Ferraro loan bid turned down",
-      "detail": "Harbour City's late bid to loan Nico Ferraro to a lower-league side was rejected because the squad needed depth. The 20-year-old remains an exciting option, even if minutes are still hard to come by."
+      "headline": "Away fans chant for the counter",
+      "detail": "Harbour City supporters have been singing about “one pass and gone” ever since the last two wins. They think this team is at its best when it sits in and springs forward."
     },
     {
       "club": "away",
       "kind": "finance",
-      "headline": "New sponsor boosts Harbour City's budget",
-      "detail": "A fresh front-of-shirt sponsor has given the club a welcome lift in revenue. Harbour City say the extra money should help keep their counter-attacking core together."
+      "headline": "Sponsor boost lands before the derby",
+      "detail": "A new shirt sponsor has given Harbour City a tidy extra pay packet this month, and the club is already talking up January business. Fans just want some of that cash turned into another forward who can finish the breaks."
     },
     {
       "club": "both",
       "kind": "history",
-      "headline": "Three recent meetings, one familiar sting",
-      "detail": "Last three meetings: Harbour City 2-1 Kilburn Athletic, last season, at The Quay — Mwangi's late winner after Whitcombe levelled it. Kilburn Athletic 1-1 Harbour City, at Lockside Park — Varga headed in before Halloran saved the day with a late stop. Harbour City 0-0 Kilburn Athletic, at The Quay — the memorable moment was Brennan's double save from Marsh and Petrovic."
+      "headline": "Last three meetings still sting",
+      "detail": "The last three meetings were Harbour City 2-1 Kilburn Athletic, last season, at The Quay; Kilburn Athletic 1-1 Harbour City, the season before, at Lockside Park; and Harbour City 0-0 Kilburn Athletic, the season before that, at The Quay. The memorable one is still the latest: Harbour City nicked it 2-1 after a late break, and Kilburn were left moaning about missing their chances."
+    },
+    {
+      "club": "away",
+      "kind": "transfer",
+      "headline": "Pike’s bargain move under the spotlight",
+      "detail": "Jordan Pike arrived for £900k and he’s had bright moments, but the rash side of his game still gets people talking. One loose challenge can undo all the good work in a hurry."
+    },
+    {
+      "club": "away",
+      "kind": "form",
+      "headline": "Bellandi marshals another shutout",
+      "detail": "Marco Bellandi has been leading the back line through a good spell, and Harbour City have looked much harder to open up. When they keep it tight, that front three only needs one clean break."
     }
   ]
 }
