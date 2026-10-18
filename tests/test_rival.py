@@ -443,3 +443,50 @@ def test_the_host_asks_again_rather_than_going_quiet(world, match, tmp_path, mon
     assert rival.heard(watch, "erm well I think")["say"].endswith("Kilburn Athletic, or Harbour City?")
     assert rival.heard(watch, "um what")["say"] is None, "but not twice in a row"
     assert rival.heard(watch, "uh")["say"] is None, "and not for a stray word"
+
+
+# -- free ways to check the screen: dry runs and replays --------------------------------------------------
+
+def test_a_dry_run_plays_the_match_with_a_text_stand_in_and_is_never_saved(world, match, monkeypatch, tmp_path):
+    fast(monkeypatch)
+    monkeypatch.setattr(rival_module, "SAVED", tmp_path)
+
+    async def run():
+        rival = Rival(world, match, endpoint="https://example.invalid", key="test")
+        watch = await rival.dry_run("kil", "dez", "match")
+        queue: asyncio.Queue = asyncio.Queue()
+        watch.listeners.add(queue)
+        await asyncio.wait_for(watch.director, timeout=30)
+        await asyncio.sleep(0.2)  # the stand-in finishes its last words
+        messages = []
+        while not queue.empty():
+            messages.append(queue.get_nowait())
+        return watch, messages
+
+    watch, messages = asyncio.run(run())
+    said = [m for m in messages if m["type"] == "transcript"]
+    assert said and all(m["who"] == "rival" and "start_ms" in m for m in said)
+    assert any("GOAL for" in m["delta"] for m in said) or any("GOAL" in t for _, t in watch.transcript)
+    assert not list(tmp_path.glob("watch-*.json")), "a rehearsal never becomes 'last time'"
+
+
+def test_a_replay_plays_a_recorded_session_back(world, match, tmp_path, monkeypatch):
+    monkeypatch.setattr(rival_module, "SAVED", tmp_path)
+    recording = [[0, {"type": "state", "phase": "prematch"}],
+                 [10, {"type": "transcript", "who": "rival", "delta": "Oh, it's you again!", "start_ms": 10, "end_ms": 900}],
+                 [20, {"type": "transcript", "who": "user", "delta": "Here we go", "start_ms": 5, "end_ms": 400}]]
+    (tmp_path / "watch-20261018-000000-abc.json").write_text(json.dumps(
+        {"user_team": "kil", "rival": "dez", "mode": "match", "recording": recording, "transcript": []}))
+
+    async def run():
+        rival = Rival(world, match, endpoint="https://example.invalid", key="test")
+        watch = rival.replay("last", speed=8)
+        queue: asyncio.Queue = asyncio.Queue()
+        watch.listeners.add(queue)
+        await asyncio.sleep(0.2)
+        return watch, [queue.get_nowait() for _ in range(queue.qsize())]
+
+    watch, messages = asyncio.run(run())
+    assert watch.persona.id == "dez" and watch.rehearsal
+    assert [m["type"] for m in messages] == ["state", "transcript", "transcript"]
+    assert messages[2]["start_ms"] < messages[1]["start_ms"], "the viewer's line is kept as said first"

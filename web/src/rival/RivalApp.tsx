@@ -4,7 +4,8 @@ import { Crest } from "../components/Crest";
 import { Fixture, Score } from "../components/Fixture";
 import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { type AgentReport, AgentsFlow } from "./Agents";
-import { LiveCall, type Speaker } from "./live";
+import { addPiece, type Line } from "./lines";
+import { LiveCall } from "./live";
 import { hostSay, listen, prepare } from "./lobby";
 import { Logo } from "./Logo";
 
@@ -30,7 +31,6 @@ import { Timeline, type TimelineMoment } from "./Timeline";
  * and rival cards can be tapped, for testing only.
  */
 
-interface Line { who: Speaker; text: string; at: number }
 type Moment = TimelineMoment & { big: boolean };
 interface RivalCard { id: string; name: string; home: string; club: string; language: string; watched: boolean; last: string | null }
 interface Lobby { stage: "side" | "rival" | "done"; team: string | null; say: string | null; online: RivalCard[];
@@ -41,7 +41,6 @@ interface Play {
 }
 type Status = "idle" | "lobby" | "matching" | "live" | "reconnecting" | "ended";
 
-const PAUSE_MS = 1800; // a fragment after this much quiet from the same speaker starts a new line
 const SHOWN_LINES = 6; // the conversation window: roughly the last few exchanges
 const MATCHING_MIN_MS = 3000; // the "connecting you to a rival" screen stays up at least this long
 const COST_PER_S = 0.0008; // third-party listing for gpt-live-1; not yet on Azure's price list
@@ -54,6 +53,10 @@ const MAX_RECONNECTS = 4;
 const QUERY = new URLSearchParams(location.search);
 const MODE = ["live", "short"].includes(QUERY.get("mode") ?? "") ? QUERY.get("mode")! : "match";
 const FROM = Number(QUERY.get("from") ?? 0) || 0;
+// Free ways to check the screen without paying for a voice: ?replay=last plays the last recorded session back
+// exactly; ?dry=1 runs the real match and agents with a text stand-in for the rival (&team=kil&rival=dez).
+const REPLAY = QUERY.get("replay");
+const DRY = QUERY.get("dry") === "1";
 
 /** Transcript text: sound tags like [laugh] as stage directions (a half-arrived tag is hidden), names coloured. */
 function render(text: string, names: NameMatcher | null): ReactNode[] {
@@ -77,7 +80,7 @@ export default function RivalApp() {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [paused, setPaused] = useState(false);
   const pausedAt = useRef(0);
-  const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({});
+  const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({}); // by line id
   const translating = useRef(new Set<number>());
   const hostEndedAt = useRef(0);
   const hostLine = useRef("");
@@ -100,7 +103,6 @@ export default function RivalApp() {
   const joining = useRef(false);
   const stopping = useRef(false);
   const reconnects = useRef(0);
-  const open = useRef<Partial<Record<Speaker, number>>>({}); // each speaker's line still being spoken
   const lastRivalWord = useRef(0);
   const started = useRef(0);
 
@@ -114,6 +116,11 @@ export default function RivalApp() {
     return () => { call.current?.close(); stream.current?.close(); stopListening.current?.(); };
   }, []);
 
+  // A replay or dry run can start by itself (&auto=1): no voice, so no click is needed for sound.
+  useEffect(() => {
+    if (data && (REPLAY || DRY) && QUERY.get("auto") === "1" && status === "idle") void start();
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A clock for the agent pulses, and billing while the rival's voice is open.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -123,22 +130,6 @@ export default function RivalApp() {
     return () => clearInterval(timer);
   }, []);
 
-  // Speakers overlap, so each keeps its own open line: a fragment joins that speaker's line unless they've paused.
-  function addFragment(who: Speaker, text: string) {
-    if (who === "rival") lastRivalWord.current = Date.now();
-    setLines((prev) => {
-      const at = Date.now();
-      const i = open.current[who];
-      if (i !== undefined && prev[i] && at - prev[i].at < PAUSE_MS) {
-        const next = prev.slice();
-        next[i] = { who, text: prev[i].text + text, at };
-        return next;
-      }
-      open.current[who] = prev.length;
-      return [...prev, { who, text: text.trimStart(), at }];
-    });
-  }
-
   /** The match stream: events for the score and clock, moments for the timeline, what the agents are doing. */
   function follow(watch: string) {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -146,7 +137,11 @@ export default function RivalApp() {
     stream.current = ws;
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.type === "state") {
+      if (msg.type === "transcript") {
+        // Through the server, with when each piece was said, so lines are in the order they were spoken.
+        if (msg.who === "rival") lastRivalWord.current = Date.now();
+        setLines((prev) => addPiece(prev, msg.who, msg.delta, msg.start_ms, msg.end_ms));
+      } else if (msg.type === "state") {
         setPhase(msg.phase);
         if (msg.agents) setReports(msg.agents);
       } else if (msg.type === "agent") {
@@ -165,6 +160,24 @@ export default function RivalApp() {
 
   // -- the lobby -----------------------------------------------------------------------------------
 
+  /** A replay or a dry run: no lobby and no voice, straight to the match. */
+  async function startWithoutVoice() {
+    const url = REPLAY ? `/api/rival/replay?which=${encodeURIComponent(REPLAY)}`
+      : `/api/rival/dry?team=${QUERY.get("team") ?? "kil"}&rival=${QUERY.get("rival") ?? "dez"}&mode=${MODE}&start=${FROM}`;
+    const resp = await fetch(url, { method: "POST" });
+    if (!resp.ok) {
+      setError((await resp.json().catch(() => ({ detail: resp.statusText }))).detail);
+      setStatus("ended");
+      return;
+    }
+    const first: Lobby & { id: string } = await resp.json();
+    watchId.current = first.id;
+    setLobby(first);
+    follow(first.id);
+    started.current = Date.now();
+    setStatus("live");
+  }
+
   async function start() {
     if (!data) return;
     setError(null);
@@ -177,12 +190,13 @@ export default function RivalApp() {
     setHeard("");
     setSeconds(0);
     setPhase("lobby");
-    open.current = {};
+    setEnglish({});
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
     started.current = 0;
     stream.current?.close();
+    if (REPLAY || DRY) return startWithoutVoice();
     setStatus("lobby");
     // The welcome starts the moment Start is pressed, while the watch is set up behind it.
     const greeting = welcome.current ? speak(welcome.current, "Asking who you support") : null;
@@ -259,7 +273,7 @@ export default function RivalApp() {
     call.current = await LiveCall.start(
       { watch },
       {
-        onTranscript: addFragment,
+        onTranscript: () => {}, // the conversation comes through the server's stream, in the order it was said
         onUsage: (s) => setSeconds((prev) => Math.max(prev, s)),
         onClosed: (reason) => void dropped(reason),
         onError: (message, code) => (code === "content_filter"
@@ -327,7 +341,8 @@ export default function RivalApp() {
   // Anything said in another language, by either of you, is shown in English too once the line has settled,
   // so whoever is watching (a judge, a friend) can follow a match enjoyed in Mandarin or Spanish.
   useEffect(() => {
-    lines.forEach((line, i) => {
+    lines.forEach((line) => {
+      const i = line.id;
       const settled = Date.now() - line.at > TRANSLATE_AFTER_MS;
       if (!settled || english[i]?.src === line.text || translating.current.has(i)) return;
       const src = line.text;
@@ -389,13 +404,13 @@ export default function RivalApp() {
         <section className="rival-chat" aria-live="polite" aria-label="The conversation">
           <div className="rival-chat-lines">
             {shown.map((line, i) => (
-              <p key={lines.length - shown.length + i}
+              <p key={line.id}
                  className={`rival-line rival-line-${line.who}`}
                  style={{ opacity: 0.3 + 0.7 * ((i + 1) / shown.length) }}>
                 <span className="rival-who">{line.who === "user" ? "You" : rival?.name ?? "Rival"}</span>
-                {english[lines.length - shown.length + i]?.text ? (
+                {english[line.id]?.text ? (
                   <>
-                    {render(english[lines.length - shown.length + i].text, names)}
+                    {render(english[line.id].text, names)}
                     <span className="rival-original">{render(line.text, null)}</span>
                   </>
                 ) : render(line.text, names)}
@@ -447,6 +462,7 @@ export default function RivalApp() {
         {(status === "idle" || status === "ended") && (
           <div className="curtain-body">
             <h1>Enjoy football with a rival</h1>
+            {(REPLAY || DRY) && <p className="curtain-mode">{REPLAY ? "Replay of the last recorded session (free)" : "Dry run: text stand-in for the rival's voice"}</p>}
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
                 <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>

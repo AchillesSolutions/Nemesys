@@ -208,6 +208,24 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         w = rival.new_watch(mode, start)
         return {"id": w.id, **rival.lobby_state(w, rival.welcome())}
 
+    @app.post("/api/rival/replay")
+    async def rival_replay(which: str = "last", speed: float = 1.0) -> dict:
+        """Play a recorded session back, for free: no model is called."""
+        try:
+            w = rival.replay(which, max(0.25, min(speed, 8.0)))
+        except RivalUnavailable as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"id": w.id, **rival.lobby_state(w)}
+
+    @app.post("/api/rival/dry")
+    async def rival_dry(team: str = "kil", rival_id: str = Query("dez", alias="rival"), mode: str = "match",
+                        start: int = 0) -> dict:
+        """A dry run: the real match and agents, with a text stand-in for the rival's voice."""
+        if team not in (match.home, match.away):
+            raise HTTPException(400, "Unknown team")
+        w = await rival.dry_run(team, rival_id, mode, start)
+        return {"id": w.id, **rival.lobby_state(w)}
+
     @app.get("/api/rival/welcome")
     def rival_welcome() -> dict:
         """The host's opening line, so the page can have it ready to play before Start is pressed."""

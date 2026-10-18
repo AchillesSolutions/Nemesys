@@ -117,6 +117,7 @@ UNSURE = re.compile(r"\b(not sure|unsure|dunno|don'?t know|no idea|maybe|hmm+|no
 NEW = re.compile(r"\b(new|some ?one else|some ?body else|else|no|nah|nope|different|other|another|next|"
                  r"not (him|her|them)|someone new)\b")
 
+RECORDING_MAX = 20000      # messages kept for replay (a ten-minute match uses a few thousand)
 LOBBY_MAX_S = 10 * 60     # a watch that never gets past the lobby is dropped after this long
 NEWS_WAIT_S = 20          # how long the build-up waits for the News agent before using the last good stories
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
@@ -427,6 +428,48 @@ def frame_plan(events: list[MatchEvent], plan: list[float]) -> dict[int, tuple[i
     return frames
 
 
+class DrySideband:
+    """Stands in for GPT-Live in a dry run: whatever the rival is told to say comes back as its 'speech', a
+    word at a time, so the screen, the captions and the agents can be checked without paying for a voice."""
+
+    def __init__(self, watch: "Watch"):
+        self.watch = watch
+
+    async def send(self, raw: str) -> None:
+        event = json.loads(raw)
+        if event.get("type") == "session.commentary.append":
+            asyncio.get_running_loop().create_task(self._say(self.gist(event["content"])))
+
+    @staticmethod
+    def gist(told: str) -> str:
+        """What the rival was told to talk about, as one readable line: the instructions to it are dropped."""
+        text = told.replace(BREAK_IN, "")
+        for lead in ("It's gone quiet. ", "You've just joined. ", "The teams are walking out. ",
+                     "Greet them in character, then get your first dig in: "):
+            text = text.removeprefix(lead)
+        first = text.split(". ")[0].rstrip(".") + "."  # the cue that follows is for the rival, not the screen
+        return (first[:220] + "…") if len(first) > 220 else first
+
+    async def _say(self, line: str) -> None:
+        await asyncio.sleep(0.4)
+        start = self.watch.ms()
+        for i, word in enumerate(line.split(" ")):
+            delta = (" " if i else "") + word
+            self.watch.heard("rival", delta)
+            self.watch.publish({"type": "transcript", "who": "rival", "delta": delta,
+                                "start_ms": start, "end_ms": self.watch.ms()})
+            await asyncio.sleep(0.05)
+
+    async def close(self) -> None:
+        pass
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+
 @dataclass
 class Voice:
     """One GPT-Live session; a watch can go through several if the connection drops."""
@@ -475,10 +518,19 @@ class Watch:
     refereeing: asyncio.Task | None = None
     reviewed_chars: int = 0
     paused: bool = False  # the viewer has paused: the clock stops and the rival stays quiet
+    recording: list = field(default_factory=list)  # (ms since the watch started, message): replayable for free
+    voice_began_ms: int = 0  # when the current voice session began, on the watch's timeline
+    rehearsal: bool = False  # a dry run or a replay: never saved, so it never becomes "last time"
+
+    def ms(self) -> int:
+        """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
+        return int((time.monotonic() - self.started) * 1000)
 
     def publish(self, message: dict) -> None:
         if message.get("type") == "event":
             self.last_event = message
+        if len(self.recording) < RECORDING_MAX:
+            self.recording.append((self.ms(), message))
         for queue in self.listeners:
             queue.put_nowait(message)
 
@@ -703,6 +755,7 @@ class Rival:
         sideband = await websockets.connect(f"wss://{self.host}/openai/v1/live/sessions/{session_id}/attach",
                                             additional_headers={"api-key": self.key})
         watch.voices += 1
+        watch.voice_began_ms = watch.ms()
         watch.voice = Voice(session_id, sideband)
         watch.voice_lost = None
         watch.voice.watcher = asyncio.create_task(self._listen(watch, watch.voice))
@@ -983,6 +1036,52 @@ class Rival:
                  "half_time": "half-time", "full_time": "full-time"}.get(watch.phase, f"minute {watch.minute}")
         return f"Right now it's {where}, and the score is {score}."
 
+    # -- replay and dry run: the whole experience without paying for a voice --------------------------
+
+    def replay(self, which: str = "last", speed: float = 1.0) -> Watch:
+        """Play a saved session back exactly as it happened: the match, the conversation, the agents. No model
+        is called, so it costs nothing: for checking the screen without a live voice."""
+        files = sorted(SAVED.glob("watch-*.json"), key=lambda f: f.stat().st_mtime, reverse=True) if SAVED.exists() else []
+        saved = None
+        for f in files:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            if data.get("recording") and (which == "last" or which in f.name):
+                saved = data
+                break
+        if saved is None:
+            raise RivalUnavailable("No recorded session to replay yet: play one live first, or use a dry run")
+        watch = Watch(uuid.uuid4().hex[:12], {self.match.home: 0, self.match.away: 0}, mode=saved.get("mode", "match"))
+        watch.user_team = saved.get("user_team")
+        watch.persona = next((p for p in ROSTER if p.id == saved.get("rival")), None)
+        watch.lobby = "done"
+        watch.rehearsal = True
+        self.watches[watch.id] = watch
+
+        async def play() -> None:
+            began = time.monotonic()
+            for at, message in saved["recording"]:
+                await asyncio.sleep(max(0.0, at / 1000 / speed - (time.monotonic() - began)))
+                watch.publish(message)
+            await asyncio.sleep(5)
+            self.watches.pop(watch.id, None)
+
+        watch.director = asyncio.create_task(play())
+        return watch
+
+    async def dry_run(self, team: str = "kil", rival: str = "dez", mode: str = "match", minute: int = 0) -> Watch:
+        """The real match and the real agents, with a stand-in for the rival's voice that 'says' what it's told
+        as text. Only the agents' model calls cost anything (pennies): for checking the screen and the flow."""
+        watch = self.new_watch(mode, minute)
+        watch.rehearsal = True
+        self.choose_side(watch, team)
+        persona = next((p for p in ROSTER if p.id == rival and p.club == self.other(team)), None)
+        persona = persona or next(p for p in ROSTER if p.club == self.other(team))
+        self.choose_rival(watch, persona.id)
+        watch.voice = Voice("dry-run", DrySideband(watch))
+        watch.voices = 1
+        await self.opened(watch, resumed=False)
+        return watch
+
     # -- the agents ---------------------------------------------------------
 
     def _player(self, player_id: str) -> str:
@@ -1110,6 +1209,14 @@ class Rival:
                 if kind in ("session.input_transcript.delta", "session.output_transcript.delta"):
                     who = "user" if kind == "session.input_transcript.delta" else "rival"
                     watch.heard(who, ev["delta"])
+                    # When it was said, not when the text arrived: the viewer's words are transcribed after they
+                    # finish, so they arrive after the rival's reply has started. GPT-Live's timeline starts again
+                    # with each voice session, so it's moved onto the watch's.
+                    said = ev.get("start_ms")
+                    start = watch.voice_began_ms + said if isinstance(said, (int, float)) else watch.ms()
+                    watch.publish({"type": "transcript", "who": who, "delta": ev["delta"], "start_ms": start,
+                                   "end_ms": watch.voice_began_ms + ev["end_ms"]
+                                   if isinstance(ev.get("end_ms"), (int, float)) else start})
                 elif kind == "session.delegation.created":
                     # The rival wants to look something up. It has everything already; tell it so, at once.
                     await watch.thinking(self._situation(watch) + " You already know all this; carry on the banter.",
@@ -1140,7 +1247,7 @@ class Rival:
                 watch.publish_state()
 
     def _save(self, watch: Watch) -> None:
-        if not watch.transcript:
+        if not watch.transcript or watch.rehearsal:
             return
         with suppress(Exception):
             SAVED.mkdir(parents=True, exist_ok=True)
@@ -1149,6 +1256,7 @@ class Rival:
                       f"{self.world.club(away).name}") if watch.phase != "setup" else ""
             (SAVED / f"watch-{time.strftime('%Y%m%d-%H%M%S')}-{watch.id}.json").write_text(json.dumps({
                 "user_team": watch.user_team, "rival": watch.persona.id if watch.persona else None,
+                "mode": watch.mode, "recording": watch.recording,
                 "result": result, "reached": watch.minute or watch.phase,
                 "transcript": [(who, text.strip()) for who, text in watch.transcript],
                 "feed": watch.feed,
