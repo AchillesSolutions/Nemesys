@@ -79,6 +79,7 @@ export default function RivalApp() {
   const [lines, setLines] = useState<Line[]>([]);
   const [moments, setMoments] = useState<Moment[]>([]);
   const [paused, setPaused] = useState(false);
+  const [booking, setBooking] = useState<{ reason: string; count: number; key: number } | null>(null);
   const pausedAt = useRef(0);
   const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({}); // by line id
   const translating = useRef(new Set<number>());
@@ -141,6 +142,11 @@ export default function RivalApp() {
         // Through the server, with when each piece was said, so lines are in the order they were spoken.
         if (msg.who === "rival") lastRivalWord.current = Date.now();
         setLines((prev) => addPiece(prev, msg.who, msg.delta, msg.start_ms, msg.end_ms));
+      } else if (msg.type === "card") {
+        // The Referee has booked the viewer: a yellow card in the middle of the screen, then it goes.
+        const key = Date.now();
+        setBooking({ reason: msg.reason, count: msg.count, key });
+        setTimeout(() => setBooking((b) => (b?.key === key ? null : b)), 4500);
       } else if (msg.type === "state") {
         setPhase(msg.phase);
         if (msg.agents) setReports(msg.agents);
@@ -518,6 +524,17 @@ export default function RivalApp() {
           </div>
         )}
       </div>
+
+      {booking && (
+        <div className="booking" key={booking.key} role="alert">
+          <div className="booking-card" aria-hidden />
+          <div className="booking-text">
+            <p className="booking-title">{booking.count > 1 ? "Another yellow card" : "Yellow card"}</p>
+            <p className="booking-reason">{booking.reason}</p>
+            <p className="booking-ask">{booking.count > 1 ? "That's another warning. Keep it friendly." : "Keep it friendly."}</p>
+          </div>
+        </div>
+      )}
 
       <footer className="rival-agents">
         <AgentsFlow reports={reports} now={now} beforeDone={live && phase !== "lobby"} active={{

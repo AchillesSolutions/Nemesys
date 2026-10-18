@@ -7,8 +7,9 @@ the match never wait on a model call.
                   men tiring), passed to the rival as quiet context
     Ammo agent    chooses the next dig when the conversation goes quiet: club news, the table, what the user
                   said last time, and what they've said in this match, never repeating itself
-    Referee       checks each dig before the rival is given it, and watches the conversation as it happens,
-                  telling the rival to ease off if it gets too personal or the user is genuinely upset
+    Referee       checks each dig before the rival is given it, watches the conversation as it happens,
+                  telling the rival to ease off if it gets too personal or the user is genuinely upset, and
+                  shows the viewer a yellow card for swearing or abuse
 
 Each runs on Microsoft Agent Framework with a structured reply, on the model set for its role (see
 agents/llm.py; gpt-5.4-mini by default). Every brief is JSON, so the offline client can stand in for the
@@ -44,6 +45,8 @@ REFEREE_INSTRUCTIONS = """You are the Referee for a rival football fan who bante
 
 task "check": a dig is about to be given to the rival. Cheeky football banter is fine: clubs, results, the table, players' football, fees, managers, what the user said. Not fine: anything about the user personally (looks, background, life), protected characteristics, swearing, threats or violent words, cruelty, real clubs or players or the Premier League. If it's fine, set ok true and return the line unchanged. If it can be fixed, set ok false and return a fixed line that keeps the joke. If it can't, set ok false with an empty line. Give a short reason.
 
+task "user": the brief has one thing the user just said, in any language. Show a yellow card only for swearing, personal abuse or insults aimed at a person, threats, slurs, or violent language. Cheeky football banter is fine, even rude about a club, a player's football or the rival's team ("your keeper's useless", "you lot are rubbish"): no card for that. Give a short reason the user would understand, e.g. "Swearing" or "Personal abuse".
+
 task "review": the brief has the latest lines of the live conversation, in any language. Decide whether the rival needs steering: "fine" (good-natured, even if cheeky), "ease_off" (too harsh or personal, needling the same thing over and over, or edging towards anything off-limits), or "user_upset" (the user sounds genuinely upset, not playfully). If it isn't fine, write a one-sentence instruction for the rival, e.g. "Ease off the keeper jokes and give them some credit for the equaliser." """
 
 
@@ -59,6 +62,11 @@ class DigChoice(BaseModel):
 class Check(BaseModel):
     ok: bool
     line: str = ""
+    reason: str = ""
+
+
+class Booking(BaseModel):
+    card: bool
     reason: str = ""
 
 
@@ -80,6 +88,7 @@ class RivalAgents:
         self.ammo = agent("ammo", "ammo", AMMO_INSTRUCTIONS, DigChoice, 0.8)
         self.referee_check = agent("referee", "referee", REFEREE_INSTRUCTIONS, Check, 0.0)
         self.referee_review = agent("referee", "referee", REFEREE_INSTRUCTIONS, Verdict, 0.0)
+        self.referee_user = agent("referee", "referee", REFEREE_INSTRUCTIONS, Booking, 0.0)
 
     async def read_match(self, brief: dict) -> str:
         reply = await self.match.run(json.dumps(brief, ensure_ascii=False))
@@ -93,6 +102,11 @@ class RivalAgents:
         reply = await self.referee_check.run(json.dumps({"task": "check", "line": line, "situation": situation},
                                                         ensure_ascii=False))
         return reply.value if isinstance(reply.value, Check) else Check(ok=False, reason="no verdict")
+
+    async def booking(self, said: str) -> Booking:
+        """Whether something the viewer said earns a yellow card."""
+        reply = await self.referee_user.run(json.dumps({"task": "user", "said": said}, ensure_ascii=False))
+        return reply.value if isinstance(reply.value, Booking) else Booking(card=False)
 
     async def review(self, lines: list[dict], situation: str) -> Verdict:
         reply = await self.referee_review.run(json.dumps({"task": "review", "conversation": lines,

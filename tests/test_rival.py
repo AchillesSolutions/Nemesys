@@ -490,3 +490,28 @@ def test_a_replay_plays_a_recorded_session_back(world, match, tmp_path, monkeypa
     assert watch.persona.id == "dez" and watch.rehearsal
     assert [m["type"] for m in messages] == ["state", "transcript", "transcript"]
     assert messages[2]["start_ms"] < messages[1]["start_ms"], "the viewer's line is kept as said first"
+
+
+def test_the_referee_books_the_viewer_for_abuse_but_not_for_banter(world, match, monkeypatch):
+    monkeypatch.setattr(rival_module, "USER_SETTLE_S", 0.01)
+
+    async def run():
+        rival = Rival(world, match, offline_clients(), endpoint="https://example.invalid", key="test")
+        sideband = FakeSideband()
+        watch = Watch("w", {"kil": 0, "hbr": 0}, voice=Voice("v", sideband), rehearsal=True)
+        rival.watches[watch.id] = watch
+        stream: asyncio.Queue = asyncio.Queue()
+        watch.listeners.add(stream)
+        for said in ("your keeper's useless, mate", "oh shut up you idiot", "and you, idiot"):
+            rival.pretend(watch, said)
+            await asyncio.sleep(0.05)
+        return watch, sideband.sent, [stream.get_nowait() for _ in range(stream.qsize())]
+
+    watch, sent, messages = asyncio.run(run())
+    cards = [m for m in messages if m["type"] == "card"]
+    assert [c["count"] for c in cards] == [1, 2], "banter: no card; abuse: a card each time, only ever a warning"
+    assert cards[0]["reason"] == "Personal abuse"
+    told = [m["content"] for m in sent if m["type"] == "session.commentary.append"]
+    assert any("yellow card" in t and "booked" in t for t in told), "the rival reacts to the booking"
+    assert any("another yellow card" in t for t in told)
+    assert watch.agents["referee"]["text"].startswith("Yellow card for the viewer")

@@ -155,6 +155,9 @@ class OfflineChatClient(FunctionInvocationLayer, BaseChatClient):
                 used = set(brief.get("used", []))
                 fresh = [c for c in brief.get("candidates", []) if c not in used]
                 body = {"dig": fresh[0] if fresh else "Ask them for a score prediction.", "source": "news"}
+            case "referee" if brief.get("task") == "user":
+                rude = re.search(r"\b(idiot|moron|shut up|damn|bloody|kill you)\b", brief["said"].lower())
+                body = {"card": bool(rude), "reason": "Personal abuse" if rude else ""}
             case "referee" if brief.get("task") == "check":
                 body = {"ok": True, "line": brief["line"], "reason": "offline: passed"}
             case "referee":

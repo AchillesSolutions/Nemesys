@@ -192,3 +192,24 @@
 }
 
 .rival-agents { min-height: 0; }
+
+/* ---------- The Referee's yellow card, in the middle of the screen ---------- */
+.booking {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; grid-auto-flow: column;
+  align-items: center; gap: 28px; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .55), transparent);
+  animation: booking-out .6s ease-in 3.9s both;
+}
+.booking-card {
+  width: 120px; height: 170px; border-radius: 10px; background: #f5c518;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .55), inset 0 0 0 3px rgba(255, 255, 255, .25);
+  animation: booking-in .55s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.booking-text { animation: arrive .4s ease-out .2s both; }
+.booking-title { font-family: var(--display); font-stretch: 78%; font-weight: 800; text-transform: uppercase;
+  font-size: clamp(34px, 4vw, 56px); line-height: 1; color: #f5c518; }
+.booking-reason { margin-top: 6px; font-size: 1.2rem; font-weight: 600; }
+.booking-ask { margin-top: 4px; color: var(--muted); }
+@keyframes booking-in { from { transform: rotate(-35deg) translateY(60px) scale(.6); opacity: 0; }
+  to { transform: rotate(-8deg); opacity: 1; } }
+@keyframes booking-out { to { opacity: 0; } }

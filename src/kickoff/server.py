@@ -226,6 +226,15 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         w = await rival.dry_run(team, rival_id, mode, start)
         return {"id": w.id, **rival.lobby_state(w)}
 
+    @app.post("/api/rival/{watch_id}/pretend")
+    async def rival_pretend(watch_id: str, req: Heard) -> dict:
+        """In a dry run, a line from the viewer as if spoken (to check the Referee's yellow card)."""
+        try:
+            rival.pretend(watch_for(watch_id), req.text)
+        except RivalUnavailable as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
+
     @app.get("/api/rival/welcome")
     def rival_welcome() -> dict:
         """The host's opening line, so the page can have it ready to play before Start is pressed."""

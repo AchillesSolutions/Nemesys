@@ -123,6 +123,7 @@ LOBBY_MAX_S = 10 * 60     # a watch that never gets past the lobby is dropped af
 NEWS_WAIT_S = 20          # how long the build-up waits for the News agent before using the last good stories
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
 READ_EVERY_S = 15 * 60     # the Match agent also reads the game every this many match seconds
+USER_SETTLE_S = 1.2        # the viewer has stopped talking this long: the Referee hears what they said
 REVIEW_EVERY_S = 10        # the Referee reviews the conversation at most this often (real seconds)
 REVIEW_MIN_CHARS = 60      # ...once the rival has said at least this much more
 VOICE_GRACE_S = 90        # the voice has been gone this long: the viewer has left, stop the match
@@ -554,6 +555,9 @@ class Watch:
     recording: list = field(default_factory=list)  # (ms since the watch started, message): replayable for free
     voice_began_ms: int = 0  # when the current voice session began, on the watch's timeline
     rehearsal: bool = False  # a dry run or a replay: never saved, so it never becomes "last time"
+    user_pending: str = ""  # what the viewer has said since the Referee last listened
+    user_check: asyncio.Task | None = None
+    cards: int = 0  # yellow cards shown to the viewer: a warning each time, never a sending-off
 
     def ms(self) -> int:
         """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
@@ -874,7 +878,7 @@ class Rival:
             return
         if watch.director and watch.director is not asyncio.current_task():
             watch.director.cancel()
-        for task in (watch.news_task, watch.reading, watch.next_dig, watch.refereeing):
+        for task in (watch.news_task, watch.reading, watch.next_dig, watch.refereeing, watch.user_check):
             if task and task is not asyncio.current_task():
                 task.cancel()
         if watch.voice:
@@ -1115,6 +1119,17 @@ class Rival:
         await self.opened(watch, resumed=False)
         return watch
 
+    def pretend(self, watch: Watch, said: str) -> None:
+        """In a rehearsal, a line from the viewer as if they'd said it: through the transcript and the Referee,
+        exactly as speech would be (for checking the yellow card without swearing at a live rival)."""
+        if not watch.rehearsal:
+            raise RivalUnavailable("Only a rehearsal takes pretend lines")
+        start = watch.ms()
+        watch.heard("user", said)
+        watch.publish({"type": "transcript", "who": "user", "delta": said, "start_ms": start, "end_ms": watch.ms()})
+        if self.agents:
+            self._listen_to_user(watch, said)
+
     # -- the agents ---------------------------------------------------------
 
     def _player(self, player_id: str) -> str:
@@ -1205,6 +1220,40 @@ class Rival:
             return None  # the score has moved on since it was written
         return dig
 
+    def _listen_to_user(self, watch: Watch, delta: str) -> None:
+        """Gather what the viewer is saying; once they stop, the Referee hears it."""
+        watch.user_pending += delta
+        if watch.user_check and not watch.user_check.done():
+            watch.user_check.cancel()
+        watch.user_check = asyncio.create_task(self._book_if_needed(watch))
+
+    async def _book_if_needed(self, watch: Watch) -> None:
+        """Swearing or abuse earns the viewer a yellow card: on screen, and the rival reacts. Only ever a warning."""
+        try:
+            await asyncio.sleep(USER_SETTLE_S)
+        except asyncio.CancelledError:
+            return  # they're still talking
+        said, watch.user_pending = watch.user_pending.strip(), ""
+        if len(said.split()) < 2:
+            return
+        try:
+            booking = await self.agents.booking(said)
+        except Exception:
+            log.exception("Referee booking check failed")
+            return
+        if not booking.card:
+            return
+        watch.cards += 1
+        second = watch.cards >= 2
+        reason = booking.reason or "Language"
+        watch.publish({"type": "card", "colour": "yellow", "reason": reason, "count": watch.cards})
+        watch.agent("referee", f"Yellow card for the viewer: {reason}" + (" (another warning)" if second else ""),
+                    working=False)
+        await watch.commentary(
+            f"The referee has just shown the user {'another' if second else 'a'} yellow card ({reason.lower()}). "
+            "React in character, enjoying it: 'ooh, you've been booked!', then carry on. Don't repeat what they said.",
+            kind="card")
+
     async def _referee(self, watch: Watch) -> None:
         """Watch the conversation as it happens and step in if the rival goes too far or the user is upset."""
         try:
@@ -1245,6 +1294,8 @@ class Rival:
                     # When it was said, not when the text arrived: the viewer's words are transcribed after they
                     # finish, so they arrive after the rival's reply has started. GPT-Live's timeline starts again
                     # with each voice session, so it's moved onto the watch's.
+                    if who == "user" and self.agents:
+                        self._listen_to_user(watch, ev["delta"])
                     said = ev.get("start_ms")
                     start = watch.voice_began_ms + said if isinstance(said, (int, float)) else watch.ms()
                     watch.publish({"type": "transcript", "who": who, "delta": ev["delta"], "start_ms": start,
