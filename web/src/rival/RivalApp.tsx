@@ -3,7 +3,9 @@ import { Directory, loadStatic } from "../api";
 import { Crest } from "../components/Crest";
 import { Fixture, Score } from "../components/Fixture";
 import type { MatchEvent, MatchInfo, Snapshot } from "../types";
-import { type AgentReport, AgentsFlow, type Handoff } from "./Agents";
+import { type AgentReport, AgentsFlow } from "./Agents";
+import { type Handoff, HandoffLayer } from "./Handoffs";
+import { type MemoryItem, MemoryBox } from "./Memory";
 import { sound } from "../sound";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
@@ -103,6 +105,8 @@ export default function RivalApp() {
   const [paused, setPaused] = useState(false);
   const [booking, setBooking] = useState<{ reason: string; count: number; key: number } | null>(null);
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
+  const [memory, setMemory] = useState<MemoryItem[]>([]);
+  const [recalling, setRecalling] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<{ quote: string; when: string; bet: boolean; key: number } | null>(null);
   const [goal, setGoal] = useState<{ colour: string; key: number } | null>(null);
   const pausedAt = useRef(0);
@@ -175,10 +179,18 @@ export default function RivalApp() {
       } else if (msg.type === "state") {
         setPhase(msg.phase);
         if (msg.agents) setReports(msg.agents);
+        if (msg.memory) setMemory(msg.memory);
       } else if (msg.type === "agent") {
         setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at, status: msg.status } }));
       } else if (msg.type === "handoff") {
-        handOff(msg.from, msg.to);
+        handOff(msg.from, msg.to, msg.via);
+      } else if (msg.type === "memory") {
+        // What the rival remembers: a new memory, or one being recalled (it lights up while the dot flies out).
+        if (msg.op === "add") setMemory((m) => (m.some((x) => x.id === msg.id) ? m : [...m, { id: msg.id, kind: msg.kind, text: msg.text }]));
+        else if (msg.op === "recall") {
+          setRecalling(msg.id);
+          setTimeout(() => setRecalling((r) => (r === msg.id ? null : r)), 3200);
+        }
       } else if (msg.type === "receipt") {
         // Demo only: the viewer's own words, on screen as the rival throws them back.
         const key = Date.now() + Math.random();
@@ -198,8 +210,8 @@ export default function RivalApp() {
   }
 
   /** One agent passing its work to the next: a dot on the demo view. */
-  function handOff(from: string, to: string) {
-    setHandoffs((h) => [...h.slice(-7), { from, to, key: Date.now() + Math.random() }]);
+  function handOff(from: string, to: string, via?: string) {
+    setHandoffs((h) => [...h.slice(-7), { from, to, via, key: Date.now() + Math.random() }]);
   }
 
   /** A goal: the crowd roars (the listener hears it) and, for the demo, the screen flashes the scorers' colour. */
@@ -244,6 +256,7 @@ export default function RivalApp() {
     setPhase("lobby");
     setEnglish({});
     setHandoffs([]);
+    setMemory([]);
     void sound.enable().catch(() => {}); // from the Connect click: browsers only allow sound after one
     joining.current = false;
     stopping.current = false;
@@ -483,6 +496,10 @@ export default function RivalApp() {
         </section>
 
         <aside className="rival-side">
+          <section className="demo-note" aria-label="About this screen">
+            <p className="demo-note-title"><span className="demo-dot" aria-hidden />Demo view<span className="short"> · Nemesys is audio only</span></p>
+            <p>Nemesys is audio only: you just talk. This screen shows, for the demo, what's happening behind the voice.</p>
+          </section>
           {rival && dir.club(rival.club) ? (
             <section className="rival-profile">
               <p className="lobby-kicker">Watching with</p>
@@ -493,8 +510,8 @@ export default function RivalApp() {
                   <p className="rival-card-club" style={{ color: dir.colour(rival.club) }}>{dir.club(rival.club)!.name} fan</p>
                 </div>
               </div>
-              <p className="rival-profile-line">{rival.home}{rival.language !== "English" ? ` · speaks ${rival.language}` : ""}</p>
-              <p className="rival-profile-line">{rival.watched && rival.last ? `Last time: ${rival.last}` : "First time watching together"}</p>
+              <p className="rival-profile-line">{rival.home}{rival.language !== "English" ? ` · speaks ${rival.language}` : ""}
+                {" · "}{rival.watched && rival.last ? `last time ${rival.last}` : "first time watching together"}</p>
             </section>
           ) : (
             <section className="rival-profile empty-profile">
@@ -513,10 +530,7 @@ export default function RivalApp() {
             {started.current > 0 && <p className="rival-meter">{Math.round(seconds)}s · ~${(seconds * COST_PER_S).toFixed(2)}</p>}
             {live && notice && <p className="rival-notice">{notice}</p>}
           </section>}
-          <section className="demo-note" aria-label="About this screen">
-            <p className="demo-note-title"><span className="demo-dot" aria-hidden />Demo view</p>
-            <p>Nemesys is audio only: you just talk with your rival. This screen is for the demo, to show what's happening behind the voice.</p>
-          </section>
+          <MemoryBox items={memory} recalling={recalling} />
         </aside>
       </main>
 
@@ -615,10 +629,12 @@ export default function RivalApp() {
         </aside>
       )}
 
+      <HandoffLayer handoffs={handoffs} />
+
       {goal && <div className="goal-flash" key={goal.key} aria-hidden style={{ "--flash": goal.colour } as CSSProperties} />}
 
       <footer className="rival-agents">
-        <AgentsFlow reports={reports} now={now} handoffs={handoffs} beforeDone={live && phase !== "lobby"} active={{
+        <AgentsFlow reports={reports} now={now} beforeDone={live && phase !== "lobby"} active={{
           host: host && { ...host, status: host.working && host.text !== "Listening" ? "Talking" : host.text },
           match: lastMoment && reports.match === undefined ? { working: false, text: `${lastMoment.minute}\u2019 ${lastMoment.text}` } : undefined,
           rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening",

@@ -617,3 +617,30 @@ def test_a_bet_receipt_reads_as_the_viewer_would_put_it():
     watch = Watch("w", {"kil": 0, "hbr": 0}, persona=next(p for p in ROSTER if p.id == "dez"))
     watch.pacts = ["If Kilburn lose, the user will wear the rival's Harbour City shirt next week."]
     assert bet_receipt(watch)["quote"] == "If Kilburn lose, you will wear Dez's Harbour City shirt next week."
+
+
+def test_an_unanswered_question_holds_back_a_new_topic():
+    watch = Watch("w", {"kil": 0, "hbr": 0})
+    watch.heard("user", "So who's likely to finish first, do you think")
+    assert watch.question_open()
+    watch.heard("rival", "Ooh, that's a good one.")
+    assert watch.question_open(), "a holding noise isn't an answer"
+    watch.heard("rival", " Kestrel Bay, easily: unbeaten, top of the pile, and your lot won't get near them this year.")
+    assert not watch.question_open()
+    watch.heard("user", "Great save there.")
+    assert not watch.question_open()
+
+
+def test_memory_is_noted_once_and_recalled_with_a_receipt():
+    watch = Watch("w", {"kil": 0, "hbr": 0}, persona=next(p for p in ROSTER if p.id == "dez"))
+    stream: asyncio.Queue = asyncio.Queue()
+    watch.listeners.add(stream)
+    from kickoff.rival import in_your_words, with_memory
+    bet = watch.remember("bet", in_your_words("If Kilburn lose, the user will wear the rival's shirt.", watch))
+    assert watch.remember("bet", bet["text"]) is bet, "the same memory isn't noted twice"
+    sent = with_memory([{"type": "receipt", "quote": bet["text"], "when": "The bet", "kind": "bet"}], watch)
+    assert {"type": "memory", "op": "recall", "id": bet["id"]} in sent
+    assert {"type": "handoff", "from": "memory", "to": "rival", "via": "ammo"} in sent
+    published = [stream.get_nowait() for _ in range(stream.qsize())]
+    assert {"type": "handoff", "from": "ammo", "to": "memory"} in published
+    assert sum(m["type"] == "memory" and m["op"] == "add" for m in published) == 1

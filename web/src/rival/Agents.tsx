@@ -1,16 +1,15 @@
-import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 /**
  * The agents behind the rival, full width along the bottom of the screen, in the order work flows through
  * them: before kick-off the lobby host and the News agent; during the match the Match agent reads the game,
  * the Ammo agent picks the next dig, the Referee checks it, and the rival says it. Each card shows what it
  * runs on, the part it plays and, large, a two-word status (the detail is on hover); it lights up while it
- * works. When one agent hands its work to another, a dot travels from card to card. All of this is for the
- * demo: the listener hears only the rival.
+ * works. Hand-offs between them are drawn by the HandoffLayer, which finds each card by its data-node. All of
+ * this is for the demo: the listener hears only the rival.
  */
 
 export interface AgentReport { text: string; working: boolean; at: number; status?: string } // at: epoch seconds
-export interface Handoff { from: string; to: string; key: number }
 
 const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -39,51 +38,20 @@ export const DURING: AgentInfo[] = [
 
 const LIT_S = 2.5; // a report keeps its card lit this long
 
-const HANDOFF_MS = 900; // how long the dot takes from one card to the next
-
-interface Dot { key: number; x0: number; y0: number; x1: number; y1: number }
-
-export function AgentsFlow({ reports, active, now, beforeDone = false, handoffs = [] }: {
+export function AgentsFlow({ reports, active, now, beforeDone = false }: {
   reports: Record<string, AgentReport | undefined>;
   beforeDone?: boolean; // once the match is on, the before-kick-off agents have done their part
   active: Record<string, { working: boolean; text?: string; status?: string } | undefined>; // seen in the browser
   now: number;
-  handoffs?: Handoff[];
 }) {
-  const flow = useRef<HTMLElement>(null);
-  const cards = useRef<Record<string, HTMLElement | null>>({});
-  const seen = useRef(new Set<number>());
-  const [dots, setDots] = useState<Dot[]>([]);
-  const [receiving, setReceiving] = useState<Record<string, number>>({});
-
-  // Each new hand-off: measure the two cards and send a dot from one to the other; the target lights on arrival.
-  useLayoutEffect(() => {
-    const box = flow.current?.getBoundingClientRect();
-    if (!box) return;
-    for (const h of handoffs) {
-      if (seen.current.has(h.key)) continue;
-      seen.current.add(h.key);
-      const a = cards.current[h.from]?.getBoundingClientRect(), b = cards.current[h.to]?.getBoundingClientRect();
-      if (!a || !b) continue;
-      setDots((d) => [...d, { key: h.key, x0: a.left + a.width / 2 - box.left, y0: a.top + a.height / 2 - box.top,
-                              x1: b.left + b.width / 2 - box.left, y1: b.top + b.height / 2 - box.top }]);
-      setTimeout(() => {
-        setDots((d) => d.filter((x) => x.key !== h.key));
-        setReceiving((r) => ({ ...r, [h.to]: h.key }));
-        setTimeout(() => setReceiving((r) => (r[h.to] === h.key ? { ...r, [h.to]: 0 } : r)), 900);
-      }, HANDOFF_MS);
-    }
-  }, [handoffs]);
 
   const card = (a: AgentInfo) => {
     const report = reports[a.id], direct = active[a.id];
     const working = direct?.working ?? (report ? report.working && now - report.at < LIT_S : false);
     const latest = direct?.text ?? report?.text ?? a.idle;
     const status = direct?.status ?? report?.status ?? a.resting;
-    const lit = working || Boolean(receiving[a.id]);
     return (
-      <article key={a.id} ref={(el) => { cards.current[a.id] = el; }}
-               className={`agent-card ${lit ? "is-working" : "is-idle"}${receiving[a.id] ? " is-receiving" : ""}`}
+      <article key={a.id} data-node={a.id} className={`agent-card ${working ? "is-working" : "is-idle"}`}
                aria-label={`${a.name}: ${a.role}. ${status}`}>
         <h3>{a.name}</h3>
         <div className="agent-tech">
@@ -98,17 +66,12 @@ export function AgentsFlow({ reports, active, now, beforeDone = false, handoffs 
   // Five equal columns: the two before-kick-off agents share the first, one above the other (their work is done
   // once the match starts); the four match agents follow, with an arrow in each gap. Only agents at work are lit.
   return (
-    <section className="agents-flow" aria-label="The agents" ref={flow}>
+    <section className="agents-flow" aria-label="The agents">
       <p className="agents-label before">Before kick-off</p>
       <p className="agents-label during">During the match</p>
       <div className={`agents-cell stack ${beforeDone ? "done" : ""}`}>{BEFORE.map(card)}</div>
       {DURING.map((a, i) => (
         <div key={a.id} className={`agents-cell ${i > 0 ? "flows" : ""}`}>{card(a)}</div>
-      ))}
-      {dots.map((d) => (
-        <span key={d.key} className="handoff-dot" aria-hidden style={{
-          "--x0": `${d.x0}px`, "--y0": `${d.y0}px`, "--x1": `${d.x1}px`, "--y1": `${d.y1}px`, "--ms": `${HANDOFF_MS}ms`,
-        } as CSSProperties} />
       ))}
     </section>
   );

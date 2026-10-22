@@ -129,6 +129,10 @@ NEWS_WAIT_S = 20          # how long the build-up waits for the News agent befor
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
 READ_EVERY_S = 15 * 60     # the Match agent also reads the game every this many match seconds
 USER_SETTLE_S = 1.2        # the viewer has stopped talking this long: the Referee hears what they said
+QUESTION = re.compile(r"\?|\b(who|what|why|how|when|where|which|whose)\b|\b(do|did|would|will|can|could|are|is) you\b"
+                      r"|\byou think\b", re.I)
+ANSWER_WORDS = 15  # the rival has said this much since the question: it's had its go at answering
+QUESTION_HOLD_S = 30  # ...or it's been this long, and the moment has passed
 RIVAL_DONE_S = 1.2         # the rival has said nothing for this long: its sentence is finished
 USER_DONE_S = 1.0          # ...and the viewer likewise
 STEER_EVERY_S = 60         # the Referee steps in at most this often
@@ -228,9 +232,15 @@ def league_picture(world: World) -> str:
     not only the two playing. In fan terms: positions, points and form in words."""
     rows = "; ".join(f"{i}. {row.club}, {row.points} pts, {form_words(row.form)}"
                      for i, row in enumerate(world.table, 1))
-    return (f"The rest of the {world.league.removeprefix('The ')}, {world.table[0].played} games into the {world.season} season, so it's "
-            f"early days: {rows}. If they ask about other clubs, who'll win the league or who's going down, give a "
-            "fan's opinion from this, never a refusal (and take a swipe at their club's chances while you're at it).")
+    t = world.table
+    top, chasers, bottom = t[0], t[1:4], t[-3:]
+    summary = (f"The title race so far: {top.club} are top with {top.points} points, {form_words(top.form)}; "
+               f"chasing them are {', '.join(f'{r.club} ({r.points})' for r in chasers)}. At the bottom: "
+               f"{', '.join(f'{r.club} ({r.points})' for r in bottom)}, with {bottom[-1].club} propping up the table, "
+               f"{form_words(bottom[-1].form)}.")
+    return (f"The league. {summary} If they ask who'll win it, who's going down or about any other club, answer from "
+            "this with a fan's opinion, never a dodge (and take a swipe at their club's chances while you're at it). "
+            f"The full table, {t[0].played} games into the {world.season} season: {rows}.")
 
 
 BRITISH_FAN_TALK = """Talk like a football fan, not a pundit. You've picked up the language English fans use, and it comes out naturally:
@@ -277,6 +287,8 @@ Energy: you're animated and full of life, like a fan in the pub with mates: quic
 
 Taking turns: let them finish what they're saying. A pause in the middle of a sentence isn't the end of it, so wait for them. React with little noises while they talk if you like ("ha!", "come off it"), but don't talk over them. The only time you cut in is a big match moment (a goal, a penalty, a red card, VAR), and then you cut in properly, shocked: "WHAT?! Hang on—".
 
+Questions come first: when they ask you something (about the match, another club, the league, anything football), answer it properly, straight away, with a real opinion and a reason, before anything else. "Ooh, good question" is not an answer. Never change the subject while their question is still open.
+
 You lead: you drive the conversation with digs, predictions, stories and questions. Never let it go quiet for long: if nobody has said anything for a few seconds, start something new.
 
 Talk about more than this match. Real fans bring up the whole season: what a player cost and whether he's been worth it, who's injured, the manager under pressure, how the last meetings went, things the user said last time. News and talking points arrive as quiet context; use them.
@@ -309,6 +321,21 @@ What you know:
 - {league_picture(world)}"""
 
 
+BOLD = re.compile(r"\b(win|won|beat|score|scored|finish|finishing|better|best|worst|going to|gonna|will|won't|"
+                  r"never|always|guarantee|bet|easily|rubbish|champions|title|top|bottom|relegat\w*|hat-trick)\b", re.I)
+
+
+def quotable(lines: list[str], keep: int = 6) -> list[str]:
+    """The viewer's lines worth throwing back next time: bold claims and predictions, not questions or filler.
+    Kept in the order they were said."""
+    def score(line: str) -> float:
+        words = len(line.split())
+        return (3 * len(BOLD.findall(line)) + min(words, 20) / 10
+                - (10 if QUESTION.search(line) else 0) - (5 if words < 5 else 0))
+    best = sorted(range(len(lines)), key=lambda i: score(lines[i]), reverse=True)[:keep]
+    return [lines[i].strip() for i in sorted(best)]
+
+
 def previous_meeting(user_team: str, rival: str | None = None) -> dict | None:
     """What the viewer said last time they watched with this rival: the latest saved conversation, or the
     seeded one. Without a rival, the last time with anyone."""
@@ -318,7 +345,7 @@ def previous_meeting(user_team: str, rival: str | None = None) -> dict | None:
             said = [t for who, t in saved.get("transcript", []) if who == "user" and len(t.split()) >= 5]
             if saved.get("user_team") == user_team and len(said) >= 2 and rival in (None, saved.get("rival")):
                 return {"when": "the last time you watched together", "result": saved.get("result", ""),
-                        "user_said": said[-6:], "rival": saved.get("rival"), "pacts": saved.get("pacts", [])}
+                        "user_said": quotable(said), "rival": saved.get("rival"), "pacts": saved.get("pacts", [])}
     seed = DATA_DIR / "previous_meeting.json"
     if seed.exists():
         data = json.loads(seed.read_text(encoding="utf-8"))
@@ -343,7 +370,7 @@ def ammo(world: World, match: Match, rival_club: Club, user_club: Club, dossier:
     for pact in (last_time or {}).get("pacts", [])[:2]:
         points.append(f"Bring up what you two agreed last time: {pact} Did they ever pay up?")
     if last_time:
-        quote = random.choice(last_time["user_said"])
+        quote = random.choice(quotable(last_time["user_said"], keep=2))
         points.append(f"Throw this back at them: {last_time['when']}"
                       f"{' (' + last_time['result'] + ')' if last_time.get('result') else ''}, they said "
                       f"\"{quote}\". Ask how that's working out.")
@@ -391,14 +418,29 @@ def receipt_of(quote: str, source: str, watch: "Watch") -> dict | None:
             "when": "Earlier this match" if source == "this_match" else (watch.rematch or {}).get("when", "Last time")}
 
 
-def bet_receipt(watch: "Watch") -> dict:
-    """The latest bet, as the viewer would put it: the Ammo agent notes it about "the user" and "the rival"."""
+def in_your_words(text: str, watch: "Watch") -> str:
+    """A bet as the viewer would put it: the Ammo agent notes it about "the user" and "the rival"."""
     name = watch.persona.name if watch.persona else "your rival"
-    bet = re.sub(r"\bthe user's\b", "your", watch.pacts[-1], flags=re.I)
+    bet = re.sub(r"\bthe user's\b", "your", text, flags=re.I)
     bet = re.sub(r"\bthe user\b", "you", bet, flags=re.I)
     bet = re.sub(r"\bthe rival's\b", f"{name}'s", bet, flags=re.I)
     bet = re.sub(r"\bthe rival\b", name, bet, flags=re.I)
-    return {"type": "receipt", "quote": bet[:1].upper() + bet[1:], "when": "The bet", "kind": "bet"}
+    return bet[:1].upper() + bet[1:]
+
+
+def bet_receipt(watch: "Watch") -> dict:
+    """The latest bet, in the viewer's terms."""
+    return {"type": "receipt", "quote": in_your_words(watch.pacts[-1], watch), "when": "The bet", "kind": "bet"}
+
+
+def with_memory(messages: list[dict], watch: "Watch") -> list[dict]:
+    """Each receipt among these messages also recalls the memory it came from."""
+    out = []
+    for m in messages:
+        out.append(m)
+        if m.get("type") == "receipt":
+            out.extend(watch.recalled(m))
+    return out
 
 
 def receipts(point: str, watch: "Watch") -> list[dict]:
@@ -657,6 +699,9 @@ class Watch:
     pacts: list = field(default_factory=list)  # bets, dares and promises made during the match, to call in later
     pact_chars: int = 0  # how much of the conversation the Ammo agent has read for bets
     dig_receipt: dict | None = None  # the viewer's own words in the prepared dig, to show when it's thrown back
+    question_at: float = 0.0  # when the viewer last asked the rival something...
+    answered: int = 0  # ...and how many words the rival has said since: a question isn't answered by "ooh, good one"
+    memory: list = field(default_factory=list)  # what the rival remembers about this viewer, for the demo view
 
     def ms(self) -> int:
         """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
@@ -760,19 +805,57 @@ class Watch:
         self.last_voice = time.monotonic()
         if who == "rival":
             self.last_rival = self.last_voice
+            self.answered += len(text.split())
         else:
             self.last_user = self.last_voice
         if self.transcript and self.transcript[-1][0] == who:
             self.transcript[-1] = (who, self.transcript[-1][1] + text)
         else:
             self.transcript.append((who, text))
+        if who == "user" and QUESTION.search(self.transcript[-1][1][-160:]):
+            self.question_at, self.answered = self.last_voice, 0
+
+    def question_open(self) -> bool:
+        """The viewer has asked something and the rival hasn't properly answered yet: no new topic now."""
+        return (self.question_at > 0 and self.answered < ANSWER_WORDS
+                and time.monotonic() - self.question_at < QUESTION_HOLD_S)
+
+    # -- memory, for the demo view: what the rival knows about this viewer, written and recalled -------------------
+
+    def remember(self, kind: str, text: str, source: str | None = "ammo") -> dict:
+        """A memory (a bet, something they said, last time's result); published with a dot from whoever noted it."""
+        if found := self.memory_of(text):
+            return found
+        item = {"id": len(self.memory) + 1, "kind": kind, "text": text}
+        self.memory.append(item)
+        self.publish({"type": "memory", "op": "add", **item})
+        if source:
+            self.publish(self.handoff(source, "memory"))
+        return item
+
+    def memory_of(self, text: str) -> dict | None:
+        words = set(_words(text))
+        for item in self.memory:
+            theirs = set(_words(item["text"]))
+            if words and theirs and len(words & theirs) >= 0.8 * min(len(words), len(theirs)):
+                return item
+        return None
+
+    def recalled(self, receipt: dict) -> list[dict]:
+        """When a receipt is shown, the memory it came from lights up and a dot runs from memory to the rival
+        through the Ammo agent. Something the viewer said this match is noted first."""
+        kind = "bet" if receipt.get("kind") == "bet" else (
+            "you_said" if receipt.get("when") == "Earlier this match" else "last_time")
+        item = self.memory_of(receipt["quote"]) or self.remember(kind, receipt["quote"], source=None)
+        return [{"type": "memory", "op": "recall", "id": item["id"]},
+                {"type": "handoff", "from": "memory", "to": "rival", "via": "ammo"}]
 
     def talking(self) -> bool:
         return time.monotonic() - self.last_voice < TALKING_S
 
     def state(self) -> dict:
         return {"paused": self.paused, "phase": self.phase, "minute": self.minute, "score": self.score, "user_team": self.user_team,
-                "voice": self.voice is not None, "mode": self.mode, "agents": self.agents}
+                "voice": self.voice is not None, "mode": self.mode, "agents": self.agents, "memory": self.memory}
 
 
 class Rival:
@@ -971,7 +1054,7 @@ class Rival:
             watch.agent("ammo", "Opening dig: " + dig[:90], working=False, status="Opening dig")
             await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
                                    + " The match hasn't kicked off yet; keep it short.", kind="prematch", urgent=True,
-                                   then=[watch.handoff("ammo"), *receipts(dig, watch)])
+                                   then=with_memory([watch.handoff("ammo"), *receipts(dig, watch)], watch))
         watch.director = asyncio.create_task(self._direct(watch, reader))
 
     def _catch_up(self, watch: Watch, reader: MatchReader) -> None:
@@ -1137,7 +1220,7 @@ class Rival:
             settles = self._pacts_cue(watch) if ev.type in (EventType.HALF_TIME, EventType.FULL_TIME) else ""
             bets = [bet_receipt(watch)] if settles else []
             await watch.commentary(f"{BREAK_IN}{text} {cue}{settles}", shown=text, urgent=True,
-                                   then=[watch.handoff("match"), *bets])
+                                   then=with_memory([watch.handoff("match"), *bets], watch))
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
@@ -1163,7 +1246,7 @@ class Rival:
                   + " Make them pay up, or pay up yourself if it went their way.") if watch.pacts else ""
         await watch.commentary(f"Time to go.{settle} Sign off in character: {mood}, then ask if it's the same time "
                                "next week. Two or three sentences, then say goodbye.", kind="sign_off",
-                               then=[bet_receipt(watch)] if watch.pacts else None)
+                               then=with_memory([bet_receipt(watch)], watch) if watch.pacts else None)
         watch.agent("rival", "Signing off: same time next week?", working=False, status="Signing off")
         await asyncio.sleep(15)  # let the goodbye be said
         await self.end(watch)
@@ -1188,6 +1271,14 @@ class Rival:
         watch.talking_points = ammo(self.world, self.match, rival, user, watch.dossier, watch.rematch)
         watch.agent("ammo", f"{len(watch.talking_points)} digs lined up: news, the table, last time", working=False,
                     status="Digs loaded")
+        if watch.rematch:  # what the rival remembers from last time, on the demo view's memory
+            last = watch.rematch
+            if last.get("result"):
+                watch.remember("last_time", f"{last['when'].capitalize()}: {last['result']}", source=None)
+            for quote in quotable(last.get("user_said", []), keep=2):
+                watch.remember("last_time", quote, source=None)
+            for pact in last.get("pacts", [])[:2]:
+                watch.remember("bet", in_your_words(pact, watch), source=None)
         for team in (watch.user_team, rival.id):
             await watch.thinking(club_news(watch.dossier, self.match, team, self.world), kind="news",
                                  shown=f"{self.world.club(team).short_name} news", then=[watch.handoff("news")])
@@ -1214,7 +1305,7 @@ class Rival:
             if now - watch.started > PACING[watch.mode].max_s:
                 await self.end(watch)
                 raise asyncio.CancelledError
-            if now - watch.last_voice > lull and now - watch.last_nudge > gap:
+            if now - watch.last_voice > lull and now - watch.last_nudge > gap and not watch.question_open():
                 watch.last_nudge = now
                 point, receipt = self._take_dig(watch), watch.dig_receipt
                 watch.dig_receipt = None
@@ -1226,7 +1317,7 @@ class Rival:
                 watch.used_digs.append(point)
                 found = [receipt] if receipt else receipts(point, watch)
                 await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point, ttl=8,
-                                       then=[watch.handoff("ammo"), *found])
+                                       then=with_memory([watch.handoff("ammo"), *found], watch))
                 if self.agents:
                     self._prepare_dig(watch)
 
@@ -1439,6 +1530,7 @@ class Rival:
         watch.pacts = pacts
         for pact in new:
             watch.agent("ammo", f"Noted a bet: {pact}", working=False, status="Bet noted")
+            watch.remember("bet", in_your_words(pact, watch))
             await watch.thinking(f"Remember this, and call it in when the match settles it: {pact}", kind="pact",
                                  shown=pact, then=[watch.handoff("ammo")])
 
