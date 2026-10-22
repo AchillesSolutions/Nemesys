@@ -97,11 +97,11 @@
 .opening-sub { color: var(--muted); max-width: 46ch; }
 .opening-choices { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
 .opening-choice {
-  display: grid; gap: 2px; justify-items: center; padding: 10px 22px; border-radius: 12px; cursor: pointer;
+  display: grid; gap: 4px; justify-items: center; width: 230px; padding: 14px 24px; border-radius: 14px; cursor: pointer;
   text-align: center; background: var(--glass-strong); border: 1px solid var(--faint);
 }
-.opening-choice b { font-family: var(--display); font-stretch: 80%; font-size: 1.15rem; text-transform: uppercase; }
-.opening-choice span { color: var(--muted); font-size: .76rem; }
+.opening-choice b { font-family: var(--display); font-stretch: 80%; font-size: 1.6rem; text-transform: uppercase; }
+.opening-choice span { color: var(--muted); font-size: .84rem; line-height: 1.3; }
 /* Violet: its own colour, so Start doesn't borrow either side's from the logo. */
 .opening-choice.primary { background: #7a6cff; border-color: #7a6cff; color: #fff; }
 .opening-choice.primary:hover { background: #8b7fff; }
