@@ -328,3 +328,5 @@
   to { transform: rotate(-8deg); opacity: 1; } }
 @keyframes booking-out { to { opacity: 0; } }
 @media (max-height: 960px) { .memory-text { -webkit-line-clamp: 1; } .memory-item { padding: 5px 10px; } }
+/* Testing only (?sounds=1): try each of the crowd's reactions. */
+.sound-test { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }

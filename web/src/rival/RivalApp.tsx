@@ -6,7 +6,7 @@ import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { type AgentReport, AgentsFlow } from "./Agents";
 import { type Handoff, HandoffLayer } from "./Handoffs";
 import { type MemoryItem, MemoryBox } from "./Memory";
-import { sound } from "../sound";
+import { crowd, react } from "./crowd";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
 import { hostSay, listen, prepare } from "./lobby";
@@ -54,6 +54,7 @@ const MAX_RECONNECTS = 4;
 // ?mode=live (real time) or ?mode=short (testing); the default is the ten-minute match.
 // ?from=80 joins the match at the 80th minute, for recording a particular scene.
 const QUERY = new URLSearchParams(location.search);
+const SOUND_TEST = QUERY.get("sounds") === "1"; // testing: try each of the crowd's reactions on the opening screen
 const MODE = ["live", "short"].includes(QUERY.get("mode") ?? "") ? QUERY.get("mode")! : "match";
 const FROM = Number(QUERY.get("from") ?? 0) || 0;
 // Free ways to check the screen without paying for a voice: ?replay=last plays the last recorded session back
@@ -135,6 +136,7 @@ export default function RivalApp() {
   const reconnects = useRef(0);
   const lastRivalWord = useRef(0);
   const started = useRef(0);
+  const score = useRef<{ home: number; away: number } | undefined>(undefined);
 
   useEffect(() => {
     loadStatic()
@@ -155,6 +157,7 @@ export default function RivalApp() {
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now() / 1000);
+      crowd.duck(Date.now() - lastRivalWord.current < 1500); // the crowd dips while the rival talks
       if (started.current) setSeconds((s) => Math.max(s, (Date.now() - started.current) / 1000));
     }, 500);
     return () => clearInterval(timer);
@@ -199,8 +202,13 @@ export default function RivalApp() {
       } else if (msg.type === "moment") {
         setMoments((m) => [...m, { minute: msg.minute, text: msg.text, big: msg.big, kind: msg.kind,
           team: msg.team, elapsed: msg.elapsed }]);
-        if (msg.kind === "goal" && msg.big && !msg.past) scored(msg.team);
+        if (!msg.past) {
+          // The crowd reacts (the listener hears it); a goal also flashes the screen, for the demo.
+          react(msg.kind, msg.team, data?.match.home ?? "", score.current);
+          if (msg.kind === "goal" && msg.big) scored(msg.team);
+        }
       } else if (msg.type === "event") {
+        if (msg.snapshot) score.current = { home: msg.snapshot.home.score, away: msg.snapshot.away.score };
         setPlay((p) => ({
           event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
           pace: msg.pace ?? p.pace,
@@ -214,9 +222,8 @@ export default function RivalApp() {
     setHandoffs((h) => [...h.slice(-7), { from, to, via, key: Date.now() + Math.random() }]);
   }
 
-  /** A goal: the crowd roars (the listener hears it) and, for the demo, the screen flashes the scorers' colour. */
+  /** A goal, for the demo: the screen flashes the scorers' colour. */
   function scored(team: string) {
-    sound.roar();
     const key = Date.now();
     setGoal({ colour: data?.dir.colour(team) ?? "#ffffff", key });
     setTimeout(() => setGoal((g) => (g?.key === key ? null : g)), 1600);
@@ -257,7 +264,7 @@ export default function RivalApp() {
     setEnglish({});
     setHandoffs([]);
     setMemory([]);
-    void sound.enable().catch(() => {}); // from the Connect click: browsers only allow sound after one
+    void crowd.enable().catch(() => {}); // from the Connect click: browsers only allow sound after one
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
@@ -560,6 +567,16 @@ export default function RivalApp() {
                 <b>Connect</b><span>You'll need speakers and a microphone, or similar</span>
               </button>
             </div>
+            {SOUND_TEST && (
+              <div className="sound-test" aria-label="Try the crowd (testing)">
+                {([["Murmur", () => crowd.murmurAt(0.05)], ["Cheer", () => crowd.cheer()], ["Away end", () => crowd.farCheer()],
+                   ["Groan", () => crowd.groan()], ["Boo", () => crowd.boo()], ["Jeer", () => crowd.jeer()],
+                   ["Ooh", () => crowd.ooh()], ["Applause", () => crowd.applause()], ["Quiet", () => crowd.murmurAt(0)]] as const)
+                  .map(([label, play]) => (
+                    <button key={label} className="btn" onClick={() => void crowd.enable().then(play)}>{label}</button>
+                  ))}
+              </div>
+            )}
             {error && <p className="rival-error" role="alert">{error}</p>}
           </div>
         )}
