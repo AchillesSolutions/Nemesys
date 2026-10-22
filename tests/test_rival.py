@@ -193,7 +193,7 @@ def test_the_lobby_asks_who_it_is_and_keeps_memories_per_person(world, match, tm
     assert rival.heard(max_, "hi, it's Max")["say"].startswith("Max! Welcome back.")
     assert rival.heard(max_, "Kilburn")["say"].endswith("Rematch, or someone new?"), "his rematch with Dez"
     wei = Watch("b", {"kil": 0, "hbr": 0})
-    assert rival.heard(wei, "Wei")["say"].startswith("Nice to meet you, Wei.")
+    assert rival.heard(wei, "Wei")["say"].startswith("Nice to meet you. "), "a new name isn't said: it may be mispronounced"
     step = rival.heard(wei, "Kilburn")
     assert "Rematch" not in step["say"] and "who speaks Mandarin" in step["say"], "someone new: everyone, languages said"
     assert not any(card["watched"] for card in step["online"])

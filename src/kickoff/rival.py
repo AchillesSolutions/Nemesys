@@ -951,7 +951,7 @@ class Rival:
         watch.agent("host", f"{'Welcome back' if back else 'New here'}: {name}", working=False,
                     status="Welcome back" if back else "New fan")
         watch.publish_state()
-        greeting = f"{name}! Welcome back." if back else f"Nice to meet you, {name}."
+        greeting = f"{name}! Welcome back." if back else "Nice to meet you."
         return self.lobby_state(watch, f"{greeting} {self.fixture_line()}")
 
     def online(self, watch: Watch) -> list[Persona]:
