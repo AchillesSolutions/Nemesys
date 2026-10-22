@@ -151,6 +151,9 @@ class OfflineChatClient(FunctionInvocationLayer, BaseChatClient):
                 body = _producer(brief, messages[-1].text)
             case "match":
                 body = {"storyline": f"Offline read: {brief.get('score', '')} after {brief.get('minute', '?')} minutes."}
+            case "ammo" if brief.get("task") == "pacts":
+                lines = [l["said"] for l in brief.get("conversation", []) if " if " in f" {l['said'].lower()} "]
+                body = {"pacts": list(dict.fromkeys(brief.get("noted", []) + lines))}
             case "ammo":
                 used = set(brief.get("used", []))
                 fresh = [c for c in brief.get("candidates", []) if c not in used]

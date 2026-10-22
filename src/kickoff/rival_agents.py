@@ -50,6 +50,15 @@ task "user": the brief has one thing the user just said, in any language. Show a
 task "review": the brief has the latest lines of the live conversation, in any language. Decide whether the rival needs steering: "fine" (good-natured, even if cheeky), "ease_off" (too harsh or personal, needling the same thing over and over, or edging towards anything off-limits), or "user_upset" (the user sounds genuinely upset, not playfully). If it isn't fine, write a one-sentence instruction for the rival, e.g. "Ease off the keeper jokes and give them some credit for the equaliser." """
 
 
+PACT_INSTRUCTIONS = """You are the Ammo agent's memory for a rival football fan who watches matches with the user. You keep track of the bets, dares, promises and bold predictions the two of them make to each other, so the rival can call them in later.
+
+The brief has the bets already noted and the latest lines of the conversation (in any language). Return the full, updated list: keep the ones already noted, add any new ones, and update one if they changed it. The brief says which club each of them supports: get the conditions exactly right ("if we win" from the user means the user's club). Write each as one plain English sentence saying who agreed to what and on what condition, naming the club, e.g. "If Harbour City win, the user will admit Harbour City are the better team." or "The user predicted Whitcombe will score twice." Only real agreements, dares and predictions with something at stake, not ordinary banter. If there are none, return an empty list."""
+
+
+class Pacts(BaseModel):
+    pacts: list[str] = []
+
+
 class MatchRead(BaseModel):
     storyline: str = ""
 
@@ -89,6 +98,7 @@ class RivalAgents:
         self.referee_check = agent("referee", "referee", REFEREE_INSTRUCTIONS, Check, 0.0)
         self.referee_review = agent("referee", "referee", REFEREE_INSTRUCTIONS, Verdict, 0.0)
         self.referee_user = agent("referee", "referee", REFEREE_INSTRUCTIONS, Booking, 0.0)
+        self.memory = agent("ammo", "ammo", PACT_INSTRUCTIONS, Pacts, 0.0)
 
     async def read_match(self, brief: dict) -> str:
         reply = await self.match.run(json.dumps(brief, ensure_ascii=False))
@@ -102,6 +112,12 @@ class RivalAgents:
         reply = await self.referee_check.run(json.dumps({"task": "check", "line": line, "situation": situation},
                                                         ensure_ascii=False))
         return reply.value if isinstance(reply.value, Check) else Check(ok=False, reason="no verdict")
+
+    async def pacts(self, noted: list[str], lines: list[dict], sides: dict | None = None) -> list[str]:
+        """Bets, dares and promises made so far, updated with the latest conversation."""
+        reply = await self.memory.run(json.dumps({"task": "pacts", **(sides or {}), "noted": noted,
+                                                  "conversation": lines}, ensure_ascii=False))
+        return [p.strip() for p in reply.value.pacts if p.strip()][:8] if isinstance(reply.value, Pacts) else noted
 
     async def booking(self, said: str) -> Booking:
         """Whether something the viewer said earns a yellow card."""

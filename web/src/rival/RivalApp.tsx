@@ -499,7 +499,7 @@ export default function RivalApp() {
             ) : lobby.stage === "rival" ? (
               <>
                 <p className="lobby-kicker">The lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
-                <h2>Who do you fancy?</h2>
+                <h2>Who do you want to be matched with?</h2>
                 <div className="lobby-rivals">
                   {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
                     <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>

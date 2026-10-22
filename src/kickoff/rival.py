@@ -255,8 +255,10 @@ def rival_instructions(world: World, match: Match, accent: str = "american", use
         setup = ("Setup: open by saying the match is about to kick off and asking who they are backing. Whichever club "
                  "they pick, you support the other one, passionately, for the whole match. Never be neutral and never "
                  "switch sides. If they say they support neither, pick one yourself and insist they take the other.")
-    language = ("Language: speak whatever language the user speaks, and switch straight away if they switch.\n\n"
-                + BRITISH_FAN_TALK if persona is None or persona.language == "English" else
+    language = ("Language: you speak English, whatever language the user uses; you understand other languages "
+                "perfectly.\n\n" + BRITISH_FAN_TALK if persona and persona.language == "English" else
+                "Language: speak whatever language the user speaks, and switch straight away if they switch.\n\n"
+                + BRITISH_FAN_TALK if persona is None else
                 f"Language: you always speak {persona.language}, whatever language the user uses. You understand "
                 f"English perfectly. Club and player names stay as they are.")
     return f"""{who} It's a {league} match. This is a live, spoken conversation between two fans, so sound like one: never like an assistant or a commentator. {ACCENTS.get(accent, "")}
@@ -305,7 +307,7 @@ def previous_meeting(user_team: str, rival: str | None = None) -> dict | None:
             said = [t for who, t in saved.get("transcript", []) if who == "user" and len(t.split()) >= 5]
             if saved.get("user_team") == user_team and len(said) >= 2 and rival in (None, saved.get("rival")):
                 return {"when": "the last time you watched together", "result": saved.get("result", ""),
-                        "user_said": said[-6:], "rival": saved.get("rival")}
+                        "user_said": said[-6:], "rival": saved.get("rival"), "pacts": saved.get("pacts", [])}
     seed = DATA_DIR / "previous_meeting.json"
     if seed.exists():
         data = json.loads(seed.read_text(encoding="utf-8"))
@@ -327,6 +329,8 @@ def ammo(world: World, match: Match, rival_club: Club, user_club: Club, dossier:
     if mine < their_pos:
         points.append(f"Remind them {user_club.short_name} are {their_pos}th, below your {rival_club.short_name} "
                       f"in {mine}th. Ask where they're finishing this season.")
+    for pact in (last_time or {}).get("pacts", [])[:2]:
+        points.append(f"Bring up what you two agreed last time: {pact} Did they ever pay up?")
     if last_time:
         quote = random.choice(last_time["user_said"])
         points.append(f"Throw this back at them: {last_time['when']}"
@@ -585,6 +589,8 @@ class Watch:
     last_rival: float = 0.0  # when the rival last said a word
     last_user: float = 0.0  # when the viewer last said a word
     last_steer: float = 0.0  # when the Referee last stepped in
+    pacts: list = field(default_factory=list)  # bets, dares and promises made during the match, to call in later
+    pact_chars: int = 0  # how much of the conversation the Ammo agent has read for bets
 
     def ms(self) -> int:
         """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
@@ -764,7 +770,7 @@ class Rival:
                    "Rematch, or someone new?")
         else:
             watch.offered = [p.id for p in online]
-            say = f"{club}. {self._names(online)} are online. Who do you fancy?"
+            say = f"{club}. {self._names(online)} are online. Who do you want to be matched with?"
         watch.publish_state()
         return self.lobby_state(watch, say)
 
@@ -795,7 +801,7 @@ class Rival:
             if NEW.search(text) and len(watch.offered) < len(online):
                 others = [p for p in online if p.id not in watch.offered]
                 watch.offered += [p.id for p in others]
-                return self.lobby_state(watch, f"Also online: {self._names(others)}. Who do you fancy?")
+                return self.lobby_state(watch, f"Also online: {self._names(others)}. Who do you want to be matched with?")
             if YES.search(text) and not UNSURE.search(text) and len(watch.offered) == 1:
                 return self.choose_rival(watch, watch.offered[0])
             offered = [p for p in online if p.id in watch.offered]
@@ -1043,7 +1049,8 @@ class Rival:
         if ev.type in BIG:
             watch.last_nudge = time.monotonic()
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
-            await watch.commentary(f"{BREAK_IN}{text} {cue}", shown=text, urgent=True)
+            settles = self._pacts_cue(watch) if ev.type in (EventType.HALF_TIME, EventType.FULL_TIME) else ""
+            await watch.commentary(f"{BREAK_IN}{text} {cue}{settles}", shown=text, urgent=True)
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
@@ -1065,8 +1072,10 @@ class Rival:
         lost = watch.score[rival_team] < watch.score[self.other(rival_team)]
         mood = ("gloat one last time" if won else "sulk, blame the referee, and concede through gritted teeth" if lost
                 else "call it a fair result, just about")
-        await watch.commentary(f"Time to go. Sign off in character: {mood}, then ask if it's the same time next "
-                               "week. Two or three sentences, then say goodbye.", kind="sign_off")
+        settle = (" First settle what you agreed during the match: " + " ".join(watch.pacts)
+                  + " Make them pay up, or pay up yourself if it went their way.") if watch.pacts else ""
+        await watch.commentary(f"Time to go.{settle} Sign off in character: {mood}, then ask if it's the same time "
+                               "next week. Two or three sentences, then say goodbye.", kind="sign_off")
         watch.agent("rival", "Signing off: same time next week?", working=False)
         await asyncio.sleep(15)  # let the goodbye be said
         await self.end(watch)
@@ -1316,11 +1325,36 @@ class Rival:
             "React in character, enjoying it: 'ooh, you've been booked!', then carry on. Don't repeat what they said.",
             kind="card", ttl=15)
 
+    async def _remember_pacts(self, watch: Watch) -> None:
+        """The Ammo agent notes any bet, dare or promise the two of them have just made, and reminds the rival."""
+        said = sum(len(text) for _, text in watch.transcript)
+        if said - watch.pact_chars < REVIEW_MIN_CHARS:
+            return
+        watch.pact_chars = said
+        lines = [{"who": "user" if who == "user" else "rival", "said": text.strip()[-400:]}
+                 for who, text in watch.transcript[-8:]]
+        try:
+            pacts = await self.agents.pacts(watch.pacts, lines, self._sides(watch) if watch.user_team else None)
+        except Exception:
+            log.exception("Ammo agent's bet memory failed")
+            return
+        new = [p for p in pacts if p not in watch.pacts]
+        watch.pacts = pacts
+        for pact in new:
+            watch.agent("ammo", f"Noted a bet: {pact}", working=False)
+            await watch.thinking(f"Remember this, and call it in when the match settles it: {pact}", kind="pact",
+                                 shown=pact)
+
+    def _pacts_cue(self, watch: Watch) -> str:
+        return (" Don't forget what you agreed: " + " ".join(watch.pacts) + " Call it in now.") if watch.pacts else ""
+
     async def _referee(self, watch: Watch) -> None:
         """Watch the conversation as it happens and step in if the rival goes too far or the user is upset."""
         try:
             while watch.id in self.watches:
                 await asyncio.sleep(REVIEW_EVERY_S)
+                if watch.voice is not None and not watch.paused:
+                    await self._remember_pacts(watch)
                 said = sum(len(text) for who, text in watch.transcript if who == "rival")
                 if said - watch.reviewed_chars < REVIEW_MIN_CHARS or watch.voice is None or watch.paused:
                     continue
@@ -1406,6 +1440,7 @@ class Rival:
                       f"{self.world.club(away).name}") if watch.phase != "setup" else ""
             (SAVED / f"watch-{time.strftime('%Y%m%d-%H%M%S')}-{watch.id}.json").write_text(json.dumps({
                 "user_team": watch.user_team, "rival": watch.persona.id if watch.persona else None,
+                "pacts": watch.pacts,
                 "mode": watch.mode, "recording": watch.recording,
                 "result": result, "reached": watch.minute or watch.phase,
                 "transcript": [(who, text.strip()) for who, text in watch.transcript],

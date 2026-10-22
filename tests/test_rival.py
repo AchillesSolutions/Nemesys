@@ -202,7 +202,7 @@ def test_someone_new_then_by_name(world, match, tmp_path, monkeypatch):
     rival.heard(watch, "Kilburn")
     step = rival.heard(watch, "nah, someone new")
     assert step["say"] == ("Also online: Kev from Boston, Chen from Shanghai, who speaks Mandarin, and Carlos "
-                           "from Mexico City, who speaks Spanish. Who do you fancy?")
+                           "from Mexico City, who speaks Spanish. Who do you want to be matched with?")
     step = rival.heard(watch, "the Spanish one")
     assert step["rival"]["id"] == "carlos" and not step["rival"]["watched"]
     assert watch.persona.voice == "cedar"
@@ -215,14 +215,14 @@ def test_a_rival_who_speaks_another_language_only_speaks_it(world, match):
     assert "you always speak Mandarin, whatever language the user uses" in text
     assert "Mandarin Chinese" in text
     english = rival_instructions(world, match, "american", user_team="kil", persona=ROSTER[0])
-    assert "speak whatever language the user speaks" in english
+    assert "you speak English, whatever language the user uses" in english
 
 
 def test_a_harbour_fan_meets_new_kilburn_rivals(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     step = rival.heard(watch, "the gulls")
     assert step["offered"] == ["rob", "priya", "lin", "sofia"], "nobody to rematch: everyone online is offered"
-    assert step["say"].endswith("Who do you fancy?")
+    assert step["say"].endswith("Who do you want to be matched with?")
     assert rival.heard(watch, "sophia")["rival"]["home"] == "Buenos Aires"
 
 
@@ -536,3 +536,41 @@ def test_nothing_new_reaches_the_rival_mid_sentence_except_a_big_moment(world, m
     mid, after = asyncio.run(run())
     assert mid == ["GOAL!"], "only the big moment breaks in"
     assert after == ["GOAL!", "A storyline"], "the rest waits for the gap; the stale save is dropped"
+
+
+def test_bets_are_remembered_and_called_in_at_full_time(world, match, monkeypatch, tmp_path):
+    fast(monkeypatch)
+    monkeypatch.setattr(rival_module, "SAVED", tmp_path)
+
+    async def run():
+        rival = Rival(world, match, offline_clients(), endpoint="https://example.invalid", key="test")
+        sideband = FakeSideband()
+        watch = Watch("w1", {"kil": 0, "hbr": 0}, voice=Voice("v1", sideband), mode="match",
+                      persona=next(p for p in ROSTER if p.id == "dez"))
+        rival.watches[watch.id] = watch
+        rival.choose_side(watch, "kil")
+        watch.heard("user", "Deal: if Harbour win, I'll admit Harbour are the better team")
+        watch.heard("rival", "You're on! Shake on it, mate, no backing out now.")
+        watch.heard("user", "Whitcombe is going to score twice today, you watch")
+        watch.last_rival = watch.last_user = 0.0  # they finished talking a while ago: a gap for the reminder
+        await rival._remember_pacts(watch)
+        await rival.opened(watch, resumed=False)
+        await asyncio.wait_for(watch.director, timeout=30)
+        return watch, [m.get("content", "") for m in sideband.sent]
+
+    watch, sent = asyncio.run(run())
+    assert watch.pacts == ["Deal: if Harbour win, I'll admit Harbour are the better team"]
+    assert any(s.startswith("Remember this, and call it in") for s in sent), "the rival is told to remember it"
+    assert any(s.startswith("FULL-TIME") and "Call it in now" in s or "Call it in now" in s for s in sent)
+    sign_off = next(s for s in sent if s.startswith("Time to go."))
+    assert "settle what you agreed" in sign_off and "better team" in sign_off
+    saved = json.loads(next(tmp_path.glob("watch-*.json")).read_text(encoding="utf-8"))
+    assert saved["pacts"] == watch.pacts, "kept for next time"
+    assert previous_meeting("kil", "dez")["pacts"] == watch.pacts
+
+
+def test_each_rival_keeps_to_their_own_language(world, match):
+    dez = next(p for p in ROSTER if p.id == "dez")
+    text = rival_instructions(world, match, dez.accent, user_team="kil", persona=dez)
+    assert "you speak English, whatever language the user uses" in text
+    assert "switch straight away" not in text
