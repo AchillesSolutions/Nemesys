@@ -95,21 +95,22 @@ class Persona:
         return any(re.search(rf"\b{w}\b", text) for w in (self.name.lower(), *self.aliases))
 
 
+# Every rival uses cedar (male) or marin (female): GPT-Live's newest, most natural-sounding voices.
 # Placeholder characters until the rival's personality is settled. The first for each club is the one the
 # seeded "last time" memory remembers.
 ROSTER = [
     # Aliases include how speech recognition tends to spell the names ("Des" for Dez).
     Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr", aliases=("des", "daz", "dezz", "desmond", "bristol"), manner="loud, cocky and always laughing; you take nothing seriously except your club"),
-    Persona("kev", "Kev", "Manchester", "northern", "ash", "hbr", aliases=("kevin", "kevvy", "manchester"), manner="quick, dry Manchester wit; you deliver put-downs fast and grin about them"),
-    Persona("chen", "Chen", "Shanghai", "mandarin", "verse", "hbr", "Mandarin",
+    Persona("kev", "Kev", "Manchester", "northern", "cedar", "hbr", aliases=("kevin", "kevvy", "manchester"), manner="quick, dry Manchester wit; you deliver put-downs fast and grin about them"),
+    Persona("chen", "Chen", "Shanghai", "mandarin", "cedar", "hbr", "Mandarin",
             ("chan", "chun", "shen", "chinese", "mandarin", "shanghai"), manner="excitable and quick-fire; you get carried away, then tease them about it"),
-    Persona("carlos", "Carlos", "Mexico City", "spanish", "echo", "hbr", "Spanish",
+    Persona("carlos", "Carlos", "Mexico City", "spanish", "cedar", "hbr", "Spanish",
             ("carl", "karlos", "spanish", "mexico", "mexican"), manner="passionate and theatrical; every moment is a drama, the bigger the better"),
-    Persona("rob", "Rob", "Kilburn", "london", "ballad", "kil", aliases=("robbie", "robert", "bob"), manner="a cheeky London wind-up merchant; you poke and poke, all with a grin"),
-    Persona("priya", "Priya", "Leicester", "midlands", "shimmer", "kil", aliases=("pria", "preya", "leicester"), manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
-    Persona("lin", "Lin", "Beijing", "mandarin", "sage", "kil", "Mandarin",
+    Persona("rob", "Rob", "Kilburn", "london", "cedar", "kil", aliases=("robbie", "robert", "bob"), manner="a cheeky London wind-up merchant; you poke and poke, all with a grin"),
+    Persona("priya", "Priya", "Leicester", "midlands", "marin", "kil", aliases=("pria", "preya", "leicester"), manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
+    Persona("lin", "Lin", "Beijing", "mandarin", "marin", "kil", "Mandarin",
             ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing"), manner="playful and teasing; you never miss a chance for a sly dig"),
-    Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "coral", "kil", "Spanish",
+    Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "marin", "kil", "Spanish",
             ("sofia", "sophia", "spanish", "argentina"), manner="fiery and dramatic; you love a big moment and you let everyone know it"),
 ]
 YES = re.compile(r"\b(yes|yeah|yep|yup|ya|aye|go on|rematch|sure|ok|okay|why not|same|again|let'?s go|let'?s do it|"
@@ -124,6 +125,9 @@ NEWS_WAIT_S = 20          # how long the build-up waits for the News agent befor
 TALKING_S = 2.5           # someone spoke this recently: the conversation is in full flow
 READ_EVERY_S = 15 * 60     # the Match agent also reads the game every this many match seconds
 USER_SETTLE_S = 1.2        # the viewer has stopped talking this long: the Referee hears what they said
+RIVAL_DONE_S = 1.2         # the rival has said nothing for this long: its sentence is finished
+USER_DONE_S = 1.0          # ...and the viewer likewise
+STEER_EVERY_S = 60         # the Referee steps in at most this often
 REVIEW_EVERY_S = 10        # the Referee reviews the conversation at most this often (real seconds)
 REVIEW_MIN_CHARS = 60      # ...once the rival has said at least this much more
 VOICE_GRACE_S = 90        # the voice has been gone this long: the viewer has left, stop the match
@@ -149,11 +153,11 @@ class Pacing:
     max_s: float            # the longest a watch at this pace may run, a safety net for spend
 
 
-# The match in about ten minutes: quiet play at 12x leaves 30-60 seconds of real conversation between big
+# The match in about eight minutes: quiet play at 15x leaves 25-50 seconds of real conversation between big
 # moments, which is what banter needs. The default, and what judges get.
-MATCH = Pacing(quiet=12, build=2, build_s=10, small_hold=1.5, tells_small=True, half_time=20, greeting=25, after=45,
-               max_s=20 * 60, holds={EventType.GOAL: 8, EventType.GOAL_DISALLOWED: 8, EventType.RED_CARD: 6,
-                                     EventType.VAR_CHECK: 5, EventType.PENALTY: 3})
+MATCH = Pacing(quiet=15, build=2.5, build_s=10, small_hold=1.2, tells_small=True, half_time=16, greeting=20, after=40,
+               max_s=18 * 60, holds={EventType.GOAL: 6.5, EventType.GOAL_DISALLOWED: 6.5, EventType.RED_CARD: 5,
+                                     EventType.VAR_CHECK: 4, EventType.PENALTY: 2.5})
 # Real time, as the product would run alongside a live broadcast.
 LIVE = Pacing(quiet=1, build=1, build_s=0, small_hold=0, tells_small=True, half_time=15 * 60, greeting=45, after=120,
               max_s=120 * 60, holds={})
@@ -215,6 +219,16 @@ def _club_brief(world: World, club: Club) -> str:
             f"Starting XI: {players}.")
 
 
+BRITISH_FAN_TALK = """Talk like a British football fan, not an American and not a pundit. Natural, relaxed, a bit scruffy: contractions, half-finished thoughts, "mate", "lads", "our lot", "your lot". The language fans actually use, when it fits:
+- a goal: "Get in!", "Back of the net!", "Have that!", "What a hit!", "Worldie!", "Absolute scenes!"
+- a miss or a mistake: "He's having a mare", "Shinned it", "Row Z", "How has he missed that?!", "Bottled it"
+- the referee: "Stonewall pen!", "Never a pen in a million years", "Ref's having a shocker", "He's dived!"
+- winding them up: "Get it up ya!", "Where's your lot gone?", "Sit down!", "Bit quiet over there", "You're going down"
+- nervous or losing: "Bricking it", "Not like this", "Typical", "It's the hope that kills you"
+- praise, grudging: "Fair play", "Can't argue with that", "Decent, I'll give him that"
+Use these naturally and sparingly, never all at once, never in a list."""
+
+
 def rival_instructions(world: World, match: Match, accent: str = "london", user_team: str | None = None,
                        rematch: dict | None = None, persona: Persona | None = None) -> str:
     home, away = world.club(match.home), world.club(match.away)
@@ -235,8 +249,8 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
         setup = ("Setup: open by saying the match is about to kick off and asking who they are backing. Whichever club "
                  "they pick, you support the other one, passionately, for the whole match. Never be neutral and never "
                  "switch sides. If they say they support neither, pick one yourself and insist they take the other.")
-    language = ("Language: speak whatever language the user speaks, and switch straight away if they switch."
-                if persona is None or persona.language == "English" else
+    language = ("Language: speak whatever language the user speaks, and switch straight away if they switch.\n\n"
+                + BRITISH_FAN_TALK if persona is None or persona.language == "English" else
                 f"Language: you always speak {persona.language}, whatever language the user uses. You understand "
                 f"English perfectly. Club and player names stay as they are.")
     return f"""{who} It's a {league} match. This is a live, spoken conversation between two fans, so sound like one: never like an assistant or a commentator. {ACCENTS.get(accent, "")}
@@ -558,6 +572,11 @@ class Watch:
     user_pending: str = ""  # what the viewer has said since the Referee last listened
     user_check: asyncio.Task | None = None
     cards: int = 0  # yellow cards shown to the viewer: a warning each time, never a sending-off
+    outbox: list = field(default_factory=list)  # (event, expires) held until the rival finishes its sentence
+    flusher: asyncio.Task | None = None
+    last_rival: float = 0.0  # when the rival last said a word
+    last_user: float = 0.0  # when the viewer last said a word
+    last_steer: float = 0.0  # when the Referee last stepped in
 
     def ms(self) -> int:
         """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
@@ -598,23 +617,57 @@ class Watch:
         except websockets.ConnectionClosed:
             return False
 
+    def quiet(self) -> bool:
+        """Neither of them is mid-sentence: the rival can take something new without dropping what it was saying."""
+        now = time.monotonic()
+        return now - self.last_rival >= RIVAL_DONE_S and now - self.last_user >= USER_DONE_S
+
+    async def _deliver(self, event: dict, urgent: bool, ttl: float | None) -> None:
+        """Anything handed to the rival mid-sentence makes it drop the sentence, so it waits for a gap. Only a big
+        match moment breaks in straight away. Something that's stale by the time there's a gap (a save from 20
+        seconds ago) is dropped rather than said late."""
+        if urgent or self.quiet():
+            await self._send(event)
+            return
+        self.outbox.append((event, time.monotonic() + ttl if ttl else None))
+        if not self.flusher or self.flusher.done():
+            self.flusher = asyncio.create_task(self._flush())
+
+    async def _flush(self) -> None:
+        while self.outbox:
+            await asyncio.sleep(0.2)
+            if self.voice is None or self.paused or not self.quiet():
+                continue
+            waiting, self.outbox = self.outbox, []
+            now = time.monotonic()
+            for event, expires in waiting:
+                if expires is None or expires > now:
+                    await self._send(event)
+
     async def commentary(self, text: str, kind: str = "event", delegation_id: str | None = None,
-                         shown: str | None = None) -> None:
+                         shown: str | None = None, urgent: bool = False, ttl: float | None = None) -> None:
         self.note(kind, shown or text)
-        await self._send({"type": "session.commentary.append", "delegation_id": delegation_id, "content": text})
+        await self._deliver({"type": "session.commentary.append", "delegation_id": delegation_id, "content": text},
+                            urgent, ttl)
 
     async def instruct(self, text: str, kind: str = "referee") -> None:
-        """A trusted change to how the rival behaves (the Referee stepping in)."""
+        """A trusted change to how the rival behaves (the Referee stepping in), once its sentence is finished."""
         self.note(kind, text)
-        await self._send({"type": "session.instructions.append", "delegation_id": None, "content": text})
+        await self._deliver({"type": "session.instructions.append", "delegation_id": None, "content": text},
+                            False, None)
 
     async def thinking(self, text: str, kind: str = "context", delegation_id: str | None = None,
-                       shown: str | None = None) -> None:
+                       shown: str | None = None, urgent: bool = False, ttl: float | None = None) -> None:
         self.note(kind, shown or text)
-        await self._send({"type": "session.thinking.append", "delegation_id": delegation_id, "content": text[:1800]})
+        await self._deliver({"type": "session.thinking.append", "delegation_id": delegation_id,
+                             "content": text[:1800]}, urgent, ttl)
 
     def heard(self, who: str, text: str) -> None:
         self.last_voice = time.monotonic()
+        if who == "rival":
+            self.last_rival = self.last_voice
+        else:
+            self.last_user = self.last_voice
         if self.transcript and self.transcript[-1][0] == who:
             self.transcript[-1] = (who, self.transcript[-1][1] + text)
         else:
@@ -807,7 +860,7 @@ class Rival:
         if not watch.user_team:  # no lobby (an old client): the rival asks itself
             home, away = self.world.club(self.match.home), self.world.club(self.match.away)
             await watch.commentary(f"{home.name} against {away.name} at {home.stadium} kicks off in a few minutes. "
-                                   "Open the conversation: say so, and ask who they're backing.", kind="setup")
+                                   "Open the conversation: say so, and ask who they're backing.", kind="setup", urgent=True)
             return
         await self._brief(watch, wait=4 if watch.mode == "short" else NEWS_WAIT_S)
         reader = MatchReader(self.world, self.match.home, self.match.away)
@@ -815,14 +868,14 @@ class Rival:
             self._catch_up(watch, reader)
             await watch.commentary("You've just joined, and the match is already under way. "
                                    f"{self._situation(watch)} Greet them in character and get a dig in about how "
-                                   "it's going.", kind="prematch")
+                                   "it's going.", kind="prematch", urgent=True)
         else:
             watch.phase = "prematch"
             watch.publish_state()
             dig = watch.talking_points.pop(0)
             watch.agent("ammo", "Opening dig: " + dig[:90])
             await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
-                                   + " The match hasn't kicked off yet; keep it short.", kind="prematch")
+                                   + " The match hasn't kicked off yet; keep it short.", kind="prematch", urgent=True)
         watch.director = asyncio.create_task(self._direct(watch, reader))
 
     def _catch_up(self, watch: Watch, reader: MatchReader) -> None:
@@ -853,11 +906,11 @@ class Rival:
         if paused:
             await watch._send({"type": "session.input_audio.mute"})
             await watch.thinking("The viewer has paused the match for a moment. Stay completely quiet until "
-                                 "they're back.", kind="pause")
+                                 "they're back.", kind="pause", urgent=True)
         else:
             await watch._send({"type": "session.input_audio.unmute"})
             await watch.commentary("They're back and the match is on again. Welcome them back in a few words, "
-                                   "in character, and carry on.", kind="pause")
+                                   "in character, and carry on.", kind="pause", urgent=True)
 
     async def resume(self, watch: Watch) -> None:
         """A new voice session for a watch already under way: bring it up to speed, then carry on."""
@@ -871,14 +924,15 @@ class Rival:
                                      shown=f"Club news on {self.world.club(team).short_name}, again.")
         await watch.commentary("The line dropped for a second. Pick the conversation straight back up, "
                                "naturally, as if you'd just looked away: 'sorry, where were we…'", kind="resume",
-                               shown="Pick up where you left off.")
+                               shown="Pick up where you left off.", urgent=True)
 
     async def end(self, watch: Watch) -> None:
         if watch.id not in self.watches:
             return
         if watch.director and watch.director is not asyncio.current_task():
             watch.director.cancel()
-        for task in (watch.news_task, watch.reading, watch.next_dig, watch.refereeing, watch.user_check):
+        for task in (watch.news_task, watch.reading, watch.next_dig, watch.refereeing, watch.user_check,
+                     watch.flusher):
             if task and task is not asyncio.current_task():
                 task.cancel()
         if watch.voice:
@@ -981,7 +1035,7 @@ class Rival:
         if ev.type in BIG:
             watch.last_nudge = time.monotonic()
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
-            await watch.commentary(f"{BREAK_IN}{text} {cue}", shown=text)
+            await watch.commentary(f"{BREAK_IN}{text} {cue}", shown=text, urgent=True)
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
@@ -989,12 +1043,12 @@ class Rival:
         elif watch.talking():
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
             await watch.thinking(f"(Just happened; mention it if there's a natural moment, or let it go.) {text}",
-                                 kind="aside", shown=text)
+                                 kind="aside", shown=text, ttl=20)
             await self._fill(watch, pacing.small_hold, lull=999)
         else:
             watch.last_nudge = time.monotonic()
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
-            await watch.commentary(f"{text} {cue} Keep it short.", shown=text)
+            await watch.commentary(f"{text} {cue} Keep it short.", shown=text, ttl=12)
             await self._fill(watch, pacing.small_hold, lull=999)
 
     async def _sign_off(self, watch: Watch, rival_team: str) -> None:
@@ -1061,7 +1115,7 @@ class Rival:
                              self._situation(watch) + " Needle them about how it's going, or make a bold prediction.")
                     watch.agent("ammo", point[:120], working=False)
                 watch.used_digs.append(point)
-                await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point)
+                await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point, ttl=8)
                 if self.agents:
                     self._prepare_dig(watch)
 
@@ -1252,7 +1306,7 @@ class Rival:
         await watch.commentary(
             f"The referee has just shown the user {'another' if second else 'a'} yellow card ({reason.lower()}). "
             "React in character, enjoying it: 'ooh, you've been booked!', then carry on. Don't repeat what they said.",
-            kind="card")
+            kind="card", ttl=15)
 
     async def _referee(self, watch: Watch) -> None:
         """Watch the conversation as it happens and step in if the rival goes too far or the user is upset."""
@@ -1274,6 +1328,10 @@ class Rival:
                 if verdict.verdict == "fine" or not verdict.instruction:
                     watch.agent("referee", "All good-natured", working=False)
                     continue
+                if time.monotonic() - watch.last_steer < STEER_EVERY_S:
+                    watch.agent("referee", "Already stepped in; giving the rival time to adjust", working=False)
+                    continue
+                watch.last_steer = time.monotonic()
                 watch.agent("referee", f"Stepped in: {verdict.instruction}", working=False)
                 await watch.instruct(f"The Referee says: {verdict.instruction}")
         except asyncio.CancelledError:
@@ -1304,7 +1362,7 @@ class Rival:
                 elif kind == "session.delegation.created":
                     # The rival wants to look something up. It has everything already; tell it so, at once.
                     await watch.thinking(self._situation(watch) + " You already know all this; carry on the banter.",
-                                         kind="delegation", delegation_id=ev["delegation"]["id"])
+                                         kind="delegation", delegation_id=ev["delegation"]["id"], urgent=True)
                 elif kind == "error":
                     err = ev.get("error", {})
                     if err.get("code") == "content_filter":

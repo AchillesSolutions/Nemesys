@@ -138,7 +138,7 @@ def test_every_big_moment_is_described(world, match):
 
 def test_the_short_match_fits_a_two_minute_demo(match):
     assert match_seconds(match.events, SHORT) + SHORT.greeting < 105, "with the lobby, about two minutes"
-    assert 9 * 60 < match_seconds(match.events, MATCH) < 12 * 60, "about ten minutes, with room to talk"
+    assert 7.5 * 60 < match_seconds(match.events, MATCH) < 9.5 * 60, "about eight minutes, with room to talk"
     assert match_seconds(match.events, LIVE) > 100 * 60, "real time"
 
 
@@ -204,7 +204,7 @@ def test_someone_new_then_by_name(world, match, tmp_path, monkeypatch):
                            "from Mexico City, who speaks Spanish. Who do you fancy?")
     step = rival.heard(watch, "the Spanish one")
     assert step["rival"]["id"] == "carlos" and not step["rival"]["watched"]
-    assert watch.persona.voice == "echo"
+    assert watch.persona.voice == "cedar"
     assert watch.rematch is None, "never met: no 'last time' to quote"
 
 
@@ -505,6 +505,7 @@ def test_the_referee_books_the_viewer_for_abuse_but_not_for_banter(world, match,
         for said in ("your keeper's useless, mate", "oh shut up you idiot", "and you, idiot"):
             rival.pretend(watch, said)
             await asyncio.sleep(0.05)
+        await asyncio.sleep(1.5)  # the rival's reaction waits until the viewer has finished speaking
         return watch, sideband.sent, [stream.get_nowait() for _ in range(stream.qsize())]
 
     watch, sent, messages = asyncio.run(run())
@@ -515,3 +516,22 @@ def test_the_referee_books_the_viewer_for_abuse_but_not_for_banter(world, match,
     assert any("yellow card" in t and "booked" in t for t in told), "the rival reacts to the booking"
     assert any("another yellow card" in t for t in told)
     assert watch.agents["referee"]["text"].startswith("Yellow card for the viewer")
+
+
+
+def test_nothing_new_reaches_the_rival_mid_sentence_except_a_big_moment(world, match):
+    """Anything handed to GPT-Live while it's talking makes it drop its sentence: it waits for a gap."""
+    async def run():
+        sideband = FakeSideband()
+        watch = Watch("w", {"kil": 0, "hbr": 0}, voice=Voice("v", sideband))
+        watch.heard("rival", "You lot keep the ball all you like, but")  # mid-sentence
+        await watch.thinking("A storyline", kind="storyline")
+        await watch.commentary("A save, 17'", ttl=0.3)  # a small moment that goes stale quickly
+        await watch.commentary("GOAL!", urgent=True)
+        sent_mid_sentence = [m["content"] for m in sideband.sent]
+        await asyncio.sleep(1.6)  # the rival finishes; a gap opens
+        return sent_mid_sentence, [m["content"] for m in sideband.sent]
+
+    mid, after = asyncio.run(run())
+    assert mid == ["GOAL!"], "only the big moment breaks in"
+    assert after == ["GOAL!", "A storyline"], "the rest waits for the gap; the stale save is dropped"
