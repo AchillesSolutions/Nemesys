@@ -74,6 +74,27 @@ function render(text: string, names: NameMatcher | null): ReactNode[] {
   return parts;
 }
 
+/** Why the microphone can't be used, in plain words, or null if it can. Asks for permission the first time. */
+async function microphoneProblem(): Promise<string | null> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return "This browser can't use a microphone here. Try Edge or Chrome, on an https address.";
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop()); // just checking: the lobby and the rival open their own
+    return null;
+  } catch (e) {
+    const name = e instanceof DOMException ? e.name : "";
+    if (name === "NotFoundError" || name === "OverconstrainedError") {
+      return "No microphone found. Nemesys is a conversation: connect a microphone or headset, then press Connect again.";
+    }
+    if (name === "NotReadableError") {
+      return "Your microphone is busy in another app. Close it there, then press Connect again.";
+    }
+    return "Nemesys needs your microphone. Allow access in the browser, then press Connect again.";
+  }
+}
+
 export default function RivalApp() {
   const [data, setData] = useState<{ dir: Directory; match: MatchInfo & { lineup?: Record<string, number[]> } } | null>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -223,13 +244,19 @@ export default function RivalApp() {
     setPhase("lobby");
     setEnglish({});
     setHandoffs([]);
-    void sound.enable().catch(() => {}); // from the Start click: browsers only allow sound after one
+    void sound.enable().catch(() => {}); // from the Connect click: browsers only allow sound after one
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
     started.current = 0;
     stream.current?.close();
     if (REPLAY || DRY) return startWithoutVoice();
+    // Nemesys is a conversation: without a microphone there's nothing to do, so say so before the host starts.
+    const missing = await microphoneProblem();
+    if (missing) {
+      setError(missing);
+      return;
+    }
     setStatus("lobby");
     // The welcome starts the moment Start is pressed, while the watch is set up behind it.
     const greeting = welcome.current ? speak(welcome.current, "Asking who you support") : null;
@@ -333,7 +360,7 @@ export default function RivalApp() {
       return;
     }
     if (reconnects.current >= MAX_RECONNECTS || !watchId.current) {
-      setError("Lost the rival's voice and couldn't get it back. Press Start again.");
+      setError("Lost the rival's voice and couldn't get it back. Press Connect again.");
       setStatus("ended");
       return;
     }
@@ -499,10 +526,7 @@ export default function RivalApp() {
             {(REPLAY || DRY) && <p className="curtain-mode">{REPLAY ? "Replay of the last recorded session (free)" : "Dry run: text stand-in for the rival's voice"}</p>}
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
-                <b>{status === "ended" ? "Play again" : "Start"}</b><span>Talk to your rival</span>
-              </button>
-              <button className="opening-choice" disabled title="Coming next">
-                <b>Listen in</b><span>Two fans, hands-free</span>
+                <b>{status === "ended" ? "Play again" : "Connect"}</b><span>You'll need speakers and a microphone, or similar</span>
               </button>
             </div>
             {error && <p className="rival-error" role="alert">{error}</p>}
