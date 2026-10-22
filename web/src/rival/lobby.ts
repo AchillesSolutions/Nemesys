@@ -56,20 +56,26 @@ export async function hostSay(text: string): Promise<void> {
  * Listen for the viewer's answer. Each phrase heard goes to ``onHeard``; ``onPartial`` shows words as they
  * come. Returns a function that stops listening, or null if Azure speech isn't available (the crests still work).
  */
-export async function listen(onHeard: (text: string) => void, onPartial: (text: string) => void): Promise<(() => void) | null> {
+export async function listen(onHeard: (text: string, lang?: string) => void, onPartial: (text: string) => void): Promise<(() => void) | null> {
   const res = await fetch("/api/speech/token").catch(() => null);
   if (!res?.ok) return null;
   const { token, region } = (await res.json()) as { token: string; region: string };
   const sdk = await import("microsoft-cognitiveservices-speech-sdk");
   const config = sdk.SpeechConfig.fromAuthorizationToken(token, region);
-  config.speechRecognitionLanguage = "en-GB";
   config.setProperty(sdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "500");
-  const recognizer = new sdk.SpeechRecognizer(config, sdk.AudioConfig.fromDefaultMicrophoneInput());
+  // English, Mandarin or Spanish, whichever they speak, phrase by phrase: the language they answer in tells
+  // the host which one to carry on in.
+  config.setProperty(sdk.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
+  const languages = sdk.AutoDetectSourceLanguageConfig.fromLanguages(["en-GB", "zh-CN", "es-MX"]);
+  const recognizer = sdk.SpeechRecognizer.FromConfig(config, languages, sdk.AudioConfig.fromDefaultMicrophoneInput());
   const phrases = sdk.PhraseListGrammar.fromRecognizer(recognizer);
-  ["Kilburn", "Kilburn Athletic", "Harbour City", "Harbour", "the Otters", "the Gulls"].forEach((p) => phrases.addPhrase(p));
+  ["Kilburn", "Kilburn Athletic", "Harbour City", "Harbour", "the Otters", "the Gulls", "English", "Español", "中文",
+   "基尔本", "港城"].forEach((p) => phrases.addPhrase(p));
   recognizer.recognizing = (_, e) => onPartial(e.result.text);
   recognizer.recognized = (_, e) => {
-    if (e.result.reason === sdk.ResultReason.RecognizedSpeech && e.result.text) onHeard(e.result.text);
+    if (e.result.reason === sdk.ResultReason.RecognizedSpeech && e.result.text) {
+      onHeard(e.result.text, sdk.AutoDetectSourceLanguageResult.fromResult(e.result).language);
+    }
   };
   try {
     await new Promise<void>((resolve, reject) => recognizer.startContinuousRecognitionAsync(resolve, reject));

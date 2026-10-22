@@ -188,17 +188,42 @@ def lobby(world, match, tmp_path, monkeypatch):
 
 def test_the_lobby_asks_who_it_is_and_keeps_memories_per_person(world, match, tmp_path, monkeypatch):
     rival, _ = lobby(world, match, tmp_path, monkeypatch)
-    assert rival.welcome().endswith("Who am I talking to?")
     max_ = Watch("a", {"kil": 0, "hbr": 0})
+    assert rival.heard(max_, "English please")["say"].endswith("Who am I talking to?")
     assert rival.heard(max_, "hi, it's Max")["say"].startswith("Max! Welcome back.")
     assert rival.heard(max_, "Kilburn")["say"].endswith("Rematch, or someone new?"), "his rematch with Dez"
-    wei = Watch("b", {"kil": 0, "hbr": 0})
-    assert rival.heard(wei, "Wei")["say"].startswith("Nice to meet you. "), "a new name isn't said: it may be mispronounced"
-    step = rival.heard(wei, "Kilburn")
-    assert "Rematch" not in step["say"] and "who speaks Mandarin" in step["say"], "someone new: everyone, languages said"
+    sam = Watch("b", {"kil": 0, "hbr": 0})
+    rival.heard(sam, "English")
+    assert rival.heard(sam, "Sam")["say"].startswith("Nice to meet you. "), "a new name isn't said: it may be mispronounced"
+    step = rival.heard(sam, "Kilburn")
+    assert "Rematch" not in step["say"] and step["offered"] == ["dez", "kev"], "someone new: the English speakers"
     assert not any(card["watched"] for card in step["online"])
-    chen = rival.heard(wei, "Chen please")
-    assert chen["rival"]["id"] == "chen" and wei.rematch is None, "nobody else's memories"
+    dez = rival.heard(sam, "Dez please")
+    assert dez["rival"]["id"] == "dez" and sam.rematch is None, "nobody else's memories"
+
+
+def test_the_lobby_speaks_mandarin_to_a_mandarin_speaker(world, match, tmp_path, monkeypatch):
+    rival, _ = lobby(world, match, tmp_path, monkeypatch)
+    assert "中文" in rival.welcome() and "español" in rival.welcome(), "the welcome offers all three"
+    wei = Watch("c", {"kil": 0, "hbr": 0})
+    step = rival.heard(wei, "中文", "zh-CN")
+    assert wei.language == "Mandarin" and step["say"] == "[zh]好的，我们说中文。请问怎么称呼？[/zh]"
+    assert rival.heard(wei, "我叫伟")["say"].startswith("[zh]很高兴认识你。[/zh] [zh]基尔本竞技对港城")
+    step = rival.heard(wei, "基尔本")
+    assert step["offered"] == ["chen"] and "来自上海的陈在线" in step["say"], "the Mandarin-speaking rival"
+    assert rival.heard(wei, "不要，换个人")["say"].startswith("[zh]现在只有陈在线"), "nobody else speaks Mandarin"
+    assert rival.heard(wei, "好的")["rival"]["id"] == "chen"
+
+
+def test_the_lobby_speaks_spanish_to_a_spanish_speaker(world, match, tmp_path, monkeypatch):
+    rival, _ = lobby(world, match, tmp_path, monkeypatch)
+    ana = Watch("d", {"kil": 0, "hbr": 0})
+    rival.heard(ana, "Español", "es-MX")
+    assert ana.language == "Spanish"
+    rival.heard(ana, "me llamo Ana")
+    step = rival.heard(ana, "las gaviotas")
+    assert step["offered"] == ["sofia"] and "Buenos Aires" in step["say"]
+    assert rival.heard(ana, "sí, claro")["rival"]["id"] == "sofia"
 
 
 def test_a_name_is_heard_however_it_is_said():
@@ -207,6 +232,7 @@ def test_a_name_is_heard_however_it_is_said():
     assert name_from("um, my name is jean-paul") == "Jean-Paul"
     assert name_from("yeah it's sofia") == "Sofia"
     assert name_from("hello there my friend how are you") is None
+    assert name_from("我叫伟") == "伟" and name_from("me llamo Ana") == "Ana"
 
 
 def test_the_lobby_offers_a_rematch_first(world, match, tmp_path, monkeypatch):
@@ -224,10 +250,9 @@ def test_someone_new_then_by_name(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     rival.heard(watch, "Kilburn")
     step = rival.heard(watch, "nah, someone new")
-    assert step["say"] == ("Also online: Kev from Boston, Chen from Shanghai, who speaks Mandarin, and Carlos "
-                           "from Mexico City, who speaks Spanish. Who do you want to be matched with?")
-    step = rival.heard(watch, "the Spanish one")
-    assert step["rival"]["id"] == "carlos" and not step["rival"]["watched"]
+    assert step["say"] == "Also online: Kev from Boston. Who do you want to be matched with?"
+    step = rival.heard(watch, "Kev then")
+    assert step["rival"]["id"] == "kev" and not step["rival"]["watched"]
     assert watch.persona.voice == "cedar"
     assert watch.rematch is None, "never met: no 'last time' to quote"
 
@@ -244,9 +269,9 @@ def test_a_rival_who_speaks_another_language_only_speaks_it(world, match):
 def test_a_harbour_fan_meets_new_kilburn_rivals(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     step = rival.heard(watch, "the gulls")
-    assert step["offered"] == ["rob", "priya", "lin", "sofia"], "nobody to rematch: everyone online is offered"
+    assert step["offered"] == ["rob", "priya"], "nobody to rematch: everyone online in their language is offered"
     assert step["say"].endswith("Who do you want to be matched with?")
-    assert rival.heard(watch, "sophia")["rival"]["home"] == "Buenos Aires"
+    assert rival.heard(watch, "priya")["rival"]["home"] == "New York"
 
 
 def run_match(world, match, monkeypatch, tmp_path, drop_voice_at: str | None = None, mode: str = "match",
@@ -446,7 +471,7 @@ def test_asking_for_someone_else(world, match, tmp_path, monkeypatch, said):
     ("Uh, let's, let's speak with Des again.", "dez"),  # how speech recognition spelt it on the day
     ("yeah go on, same again", "dez"),
     ("Kevin please", "kev"),
-    ("the Mandarin one", "chen"),
+    ("Kev", "kev"),
 ])
 def test_picking_a_rival_by_how_people_actually_say_it(world, match, tmp_path, monkeypatch, said, rival_id):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)

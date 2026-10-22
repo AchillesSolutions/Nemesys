@@ -48,6 +48,7 @@ from urllib.parse import urlsplit
 import httpx
 import websockets
 
+from . import lobby_lines as lines
 from . import news
 from .agents.llm import ClientFactory
 from .data_store import DATA_DIR
@@ -91,7 +92,8 @@ class Persona:
     manner: str = ""  # how they come across: each rival has their own energy
 
     def heard_in(self, text: str) -> bool:
-        return any(re.search(rf"\b{w}\b", text) for w in (self.name.lower(), *self.aliases))
+        return any(w in text if not w.isascii() else re.search(rf"\b{w}\b", text)
+                   for w in (self.name.lower(), *self.aliases))
 
 
 # Every rival uses cedar (male) or marin (female): GPT-Live's newest, most natural-sounding voices.
@@ -105,7 +107,7 @@ ROSTER = [
     Persona("kev", "Kev", "Boston", "american", "cedar", "hbr", aliases=("kevin", "kevvy", "boston"),
             manner="quick, dry wit; you deliver put-downs fast and grin about them"),
     Persona("chen", "Chen", "Shanghai", "mandarin", "cedar", "hbr", "Mandarin",
-            ("chan", "chun", "shen", "chinese", "mandarin", "shanghai"), manner="excitable and quick-fire; you get carried away, then tease them about it"),
+            ("陈", "小陈", "chan", "chun", "shen", "chinese", "mandarin", "shanghai"), manner="excitable and quick-fire; you get carried away, then tease them about it"),
     Persona("carlos", "Carlos", "Mexico City", "spanish", "cedar", "hbr", "Spanish",
             ("carl", "karlos", "spanish", "mexico", "mexican"), manner="passionate and theatrical; every moment is a drama, the bigger the better"),
     Persona("rob", "Rob", "Chicago", "american", "cedar", "kil", aliases=("robbie", "robert", "bob", "chicago"),
@@ -113,7 +115,7 @@ ROSTER = [
     Persona("priya", "Priya", "New York", "american", "marin", "kil", aliases=("pria", "preya", "new york"),
             manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
     Persona("lin", "Lin", "Beijing", "mandarin", "marin", "kil", "Mandarin",
-            ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing"), manner="playful and teasing; you never miss a chance for a sly dig"),
+            ("林", "小林", "lynn", "linn", "lyn", "chinese", "mandarin", "beijing"), manner="playful and teasing; you never miss a chance for a sly dig"),
     Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "marin", "kil", "Spanish",
             ("sofia", "sophia", "spanish", "argentina"), manner="fiery and dramatic; you love a big moment and you let everyone know it"),
 ]
@@ -176,7 +178,8 @@ SHORT = Pacing(quiet=240, build=3, build_s=6, small_hold=0, tells_small=False, h
 PACING = {"match": MATCH, "live": LIVE, "short": SHORT}
 
 # Words that tell us which club the viewer picked.
-SIDE_WORDS = {"kil": ("kilburn", "otters"), "hbr": ("harbour", "harbor", "gulls")}
+SIDE_WORDS = {"kil": ("kilburn", "otters", "基尔本", "水獭", "nutria"),
+              "hbr": ("harbour", "harbor", "gulls", "港城", "海鸥", "gaviota")}
 
 BREAK_IN = ("Break in right now, even mid-sentence, the way a fan does when something happens: "
             "'hang on!', 'what's this?', 'oh, here we go…'. Then: ")
@@ -374,13 +377,18 @@ def known_viewer(viewer: str) -> bool:
     return seed.exists() and same_person(json.loads(seed.read_text(encoding="utf-8")).get("viewer"), viewer)
 
 
-NAME_INTRO = re.compile(r"\b(?:i'm|i am|it's|its|this is|my name is|my name's|call me|name's|it is)\s+([^\W\d_][\w'-]*)",
-                        re.I)
-NAME_FILLER = re.compile(r"^(?:hi|hello|hey|hiya|yeah|yes|um+|uh+|erm+|so|well|oh|ok|okay)\b[\s,.!]*", re.I)
+NAME_INTRO = re.compile(r"\b(?:i'm|i am|it's|its|this is|my name is|my name's|call me|name's|it is|me llamo|soy|"
+                        r"mi nombre es)\s+([^\W\d_][\w'-]*)", re.I)
+NAME_FILLER = re.compile(r"^(?:hi|hello|hey|hiya|yeah|yes|um+|uh+|erm+|so|well|oh|ok|okay|hola|pues|bueno|s[ií])\b"
+                         r"[\s,.!¡]*", re.I)
 
 
 def name_from(heard: str) -> str | None:
-    """The viewer's name from what they told the host: "it's Wei", "Max", "hi, I'm Sofia"."""
+    """The viewer's name from what they told the host: "it's Wei", "Max", "hi, I'm Sofia", "我叫伟", "me llamo Ana"."""
+    if m := lines.NAME_INTRO_ZH.search(heard):
+        return m.group(1)
+    if lines.CJK.match(chinese := re.sub(r"[\s。，！？、.,!?]", "", heard)):
+        return chinese
     if m := NAME_INTRO.search(heard):
         name = m.group(1)
     else:
@@ -693,7 +701,8 @@ class Watch:
     mode: str = "match"  # the pace: match (about ten minutes) | live (real time) | short (testing)
     start: int = 0  # the event the match starts from: a later one to join a match already under way
     persona: Persona | None = None
-    lobby: str = "name"  # name (who's this?) | side (which club?) | rival (which rival?) | done
+    lobby: str = "language"  # language | name (who's this?) | side (which club?) | rival (which rival?) | done
+    language: str = "English"  # the lobby's language, and the rivals it offers
     viewer: str = ""  # the viewer's name, as they told the host: their memories are kept under it
     offered: list[str] = field(default_factory=list)  # rivals the host has offered so far
     reprompted: float = 0.0  # when the host last asked again after not understanding
@@ -937,26 +946,50 @@ class Rival:
         return watch
 
     def welcome(self) -> str:
-        return "Welcome to Nemesys. Who am I talking to?"
+        return lines.WELCOME
 
-    def fixture_line(self) -> str:
-        home, away = self.world.club(self.match.home), self.world.club(self.match.away)
-        return f"{home.name} against {away.name} is about to kick off. Who are you supporting?"
+    def say(self, watch: Watch, key: str, **values: str) -> str:
+        """A line for the host, in the viewer's language."""
+        return lines.spoken(lines.LINES[watch.language][key].format(**values), watch.language)
+
+    def club_name(self, watch: Watch, team: str, short: bool = False) -> str:
+        club = self.world.club(team)
+        return lines.CLUB.get(watch.language, {}).get(team) or (club.short_name if short else club.name)
+
+    def rival_name(self, watch: Watch, persona: Persona) -> str:
+        return lines.RIVAL.get(watch.language, {}).get(persona.id, persona.name)
+
+    def town(self, watch: Watch, persona: Persona) -> str:
+        return lines.TOWN.get(watch.language, {}).get(persona.home, persona.home)
+
+    def fixture_line(self, watch: Watch) -> str:
+        return self.say(watch, "fixture", home=self.club_name(watch, self.match.home),
+                        away=self.club_name(watch, self.match.away))
+
+    def choose_language(self, watch: Watch, language: str) -> dict:
+        """The viewer's language: the rest of the lobby is in it, and so are the rivals offered."""
+        watch.language = language
+        watch.lobby = "name"
+        watch.agent("host", f"Speaking {language}", working=False, status=language)
+        watch.publish_state()
+        return self.lobby_state(watch, self.say(watch, "ask_name"))
 
     def choose_name(self, watch: Watch, name: str) -> dict:
-        """The viewer has said who they are: welcome them back, or meet them, then ask who they support."""
+        """The viewer has said who they are: welcome them back, or meet them, then ask who they support.
+        A new name isn't said aloud: the host might well mispronounce it."""
         watch.viewer = name
         watch.lobby = "side"
         back = known_viewer(name)
         watch.agent("host", f"{'Welcome back' if back else 'New here'}: {name}", working=False,
                     status="Welcome back" if back else "New fan")
         watch.publish_state()
-        greeting = f"{name}! Welcome back." if back else "Nice to meet you."
-        return self.lobby_state(watch, f"{greeting} {self.fixture_line()}")
+        greeting = self.say(watch, "back", name=name) if back else self.say(watch, "nice")
+        return self.lobby_state(watch, f"{greeting} {self.fixture_line(watch)}")
 
     def online(self, watch: Watch) -> list[Persona]:
-        """The rivals online for this viewer: fans of the other club, the one they watched with last time first."""
-        fans = [p for p in ROSTER if p.club == self.other(watch.user_team)]
+        """The rivals online for this viewer: fans of the other club who speak their language, the one they
+        watched with last time first."""
+        fans = [p for p in ROSTER if p.club == self.other(watch.user_team) and p.language == watch.language]
         return sorted(fans, key=lambda p: previous_meeting(watch.user_team, p.id, watch.viewer) is None)
 
     def card(self, watch: Watch, persona: Persona) -> dict:
@@ -968,6 +1001,7 @@ class Rival:
     def lobby_state(self, watch: Watch, say: str | None = None) -> dict:
         """What the lobby screen shows, and what the host should say next."""
         return {"stage": watch.lobby, "team": watch.user_team, "say": say, "viewer": watch.viewer,
+                "language": watch.language,
                 "online": [self.card(watch, p) for p in self.online(watch)] if watch.user_team else [],
                 "offered": watch.offered,
                 "rival": self.card(watch, watch.persona) if watch.persona else None}
@@ -981,15 +1015,17 @@ class Rival:
         watch.agent("host", f"Supporting {self.world.club(team).short_name}; offering rivals", working=False,
                     status="Team chosen")
         online = self.online(watch)
-        club = self.world.club(team).short_name
-        if previous_meeting(team, online[0].id, watch.viewer):
-            first = online[0]
+        club = self.club_name(watch, team, short=True)
+        first = online[0]
+        if previous_meeting(team, first.id, watch.viewer):
             watch.offered = [first.id]
-            say = (f"{club}. {first.name} from {first.home} is online, and you watched together last time. "
-                   "Rematch, or someone new?")
+            say = self.say(watch, "rematch", club=club, rival=self.rival_name(watch, first), town=self.town(watch, first))
+        elif len(online) == 1:
+            watch.offered = [first.id]
+            say = self.say(watch, "one", club=club, rival=self.rival_name(watch, first), town=self.town(watch, first))
         else:
             watch.offered = [p.id for p in online]
-            say = f"{club}. {self._names(online)} are online. Who do you want to be matched with?"
+            say = self.say(watch, "online", club=club, rivals=self._names(online))
         watch.publish_state()
         return self.lobby_state(watch, say)
 
@@ -1001,56 +1037,71 @@ class Rival:
         watch.rematch = previous_meeting(watch.user_team, persona.id, watch.viewer)
         watch.lobby = "done"
         watch.publish_state()
-        return self.lobby_state(watch, f"Connecting you to {persona.name}.")
+        return self.lobby_state(watch, self.say(watch, "connecting", rival=self.rival_name(watch, persona)))
 
-    def heard(self, watch: Watch, text: str) -> dict:
-        """Something the viewer said in the lobby: their name, their club, then their rival."""
+    def heard(self, watch: Watch, text: str, detected: str | None = None) -> dict:
+        """Something the viewer said in the lobby: their language, their name, their club, then their rival.
+        ``detected``: the language speech recognition heard it in."""
+        if watch.lobby == "language":
+            if language := lines.language_from(text, detected):
+                return self.choose_language(watch, language)
+            if team := self.side_from(text.lower()):  # straight to their club, in English
+                watch.lobby = "side"
+                return self.choose_side(watch, team)
+            return self._again(watch, text.lower(), lines.LANGUAGE_AGAIN, english=True)
         if watch.lobby == "name":
             if team := self.side_from(text.lower()):  # straight to their club: no name, so no memories
                 watch.lobby = "side"
                 return self.choose_side(watch, team)
             if text.strip().lower() == "skip":  # testing, without speech: carry on without a name
                 watch.lobby = "side"
-                return self.lobby_state(watch, self.fixture_line())
+                return self.lobby_state(watch, self.fixture_line(watch))
             if name := name_from(text):
                 return self.choose_name(watch, name)
-            return self._again(watch, text.lower(), "What's your name?")
+            return self._again(watch, text.lower(), self.say(watch, "name_again"))
         text = text.lower()
         if watch.lobby == "side":
             team = self.side_from(text)
             if team:
                 return self.choose_side(watch, team)
-            home, away = self.world.club(self.match.home), self.world.club(self.match.away)
-            return self._again(watch, text, f"{home.name}, or {away.name}?")
+            return self._again(watch, text, self.say(watch, "side_again", home=self.club_name(watch, self.match.home),
+                                                     away=self.club_name(watch, self.match.away)))
         if watch.lobby == "rival":
             online = self.online(watch)
-            named = [p for p in online if p.heard_in(text)]
+            named = [p for p in online if p.heard_in(text) or self.rival_name(watch, p) in text]
             if len(named) == 1:
                 return self.choose_rival(watch, named[0].id)
-            if NEW.search(text) and len(watch.offered) < len(online):
-                others = [p for p in online if p.id not in watch.offered]
-                watch.offered += [p.id for p in others]
-                return self.lobby_state(watch, f"Also online: {self._names(others)}. Who do you want to be matched with?")
-            if YES.search(text) and not UNSURE.search(text) and len(watch.offered) == 1:
+            yes, new = lines.YES.get(watch.language, YES), lines.NEW.get(watch.language, NEW)
+            if new.search(text):
+                if len(watch.offered) < len(online):
+                    others = [p for p in online if p.id not in watch.offered]
+                    watch.offered += [p.id for p in others]
+                    return self.lobby_state(watch, self.say(watch, "also", rivals=self._names(others)))
+                if len(online) == 1:  # nobody else speaks their language: it's this rival or no one
+                    return self.lobby_state(watch, self.say(watch, "only", rival=self.rival_name(watch, online[0])))
+            if yes.search(text) and not UNSURE.search(text) and len(watch.offered) == 1:
                 return self.choose_rival(watch, watch.offered[0])
             offered = [p for p in online if p.id in watch.offered]
-            question = (f"Rematch with {offered[0].name}, or someone new?" if len(offered) == 1
-                        else f"Who would you like: {self._names(offered).replace(' and ', ' or ')}?")
+            if len(offered) == 1:
+                key = "rematch_again" if previous_meeting(watch.user_team, offered[0].id, watch.viewer) else "only"
+                question = self.say(watch, key, rival=self.rival_name(watch, offered[0]))
+            else:
+                question = self.say(watch, "which", rivals=self._names(offered).replace(" and ", " or "))
             return self._again(watch, text, question)
         return self.lobby_state(watch)
 
-    def _again(self, watch: Watch, text: str, question: str) -> dict:
+    def _again(self, watch: Watch, text: str, question: str, english: bool = False) -> dict:
         """Not understood: the host asks again rather than leaving the viewer waiting. A stray word or a cough
         doesn't count, and it never asks twice within a few seconds."""
-        if len(text.split()) < 2 or time.monotonic() - watch.reprompted < 6:
+        if (len(text.split()) < 2 and not re.search(r"[一-鿿]{2}", text)) or time.monotonic() - watch.reprompted < 6:
             return self.lobby_state(watch)
         watch.reprompted = time.monotonic()
-        return self.lobby_state(watch, f"Sorry, I didn't catch that. {question}")
+        sorry = lines.LINES["English" if english else watch.language]["sorry"]
+        return self.lobby_state(watch, f"{lines.spoken(sorry, 'English' if english else watch.language)} {question}")
 
     @staticmethod
     def _names(people: list[Persona]) -> str:
-        names = [f"{p.name} from {p.home}" + (f", who speaks {p.language}" if p.language != "English" else "")
-                 for p in people]
+        names = [f"{p.name} from {p.home}" for p in people]
         if len(names) == 1:
             return names[0]
         return ", ".join(names[:-1]) + ("," if len(names) > 2 else "") + f" and {names[-1]}"
@@ -1709,5 +1760,6 @@ class Rival:
 
     @staticmethod
     def side_from(heard: str) -> str | None:
-        found = [team for team, words in SIDE_WORDS.items() if any(re.search(rf"\b{w}", heard) for w in words)]
+        found = [team for team, words in SIDE_WORDS.items()
+                 if any(w in heard if not w.isascii() else re.search(rf"\b{w}", heard) for w in words)]
         return found[0] if len(found) == 1 else None

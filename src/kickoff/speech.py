@@ -29,8 +29,9 @@ VOICES = {
     "en": ("en-US", "en-US-Olivia:MAI-Voice-2.1-Flash"),
     "zh": ("zh-CN", "zh-CN-YunjianNeural"),
     "es": ("es-MX", "es-MX-Valeria:MAI-Voice-2.1-Flash"),
-    # The Rival's lobby host: a crisp British system voice, deliberately not the rival's.
-    "host": ("en-GB", "en-GB-SoniaNeural"),
+    # The Rival's lobby host: a crisp British system voice, deliberately not the rival's. Multilingual, so the
+    # same voice greets in English, Mandarin and Spanish and carries on in whichever the viewer chooses.
+    "host": ("en-GB", "en-GB-AdaMultilingualNeural"),
 }
 
 # For each tone, the styles to try in order; the first one the voice supports wins.
@@ -139,7 +140,32 @@ def aloud(text: str, language: str) -> str:
     return NOUGHT.sub("nil", text)
 
 
+LANG_RUN = re.compile(r"\[(zh|es)\](.*?)\[/\1\]", re.S)
+RUN_LOCALE = {"zh": "zh-CN", "es": "es-MX"}
+
+
+def runs(text: str) -> list[tuple[str | None, str]]:
+    """A host line in runs of one language each: [zh]...[/zh] and [es]...[/es] mark Mandarin and Spanish."""
+    out, at = [], 0
+    for m in LANG_RUN.finditer(text):
+        if text[at:m.start()].strip():
+            out.append((None, text[at:m.start()]))
+        out.append((RUN_LOCALE[m[1]], m[2]))
+        at = m.end()
+    if text[at:].strip():
+        out.append((None, text[at:]))
+    return out
+
+
 def build_ssml(text: str, locale: str, voice: str, tone: str, supported: set[str]) -> str:
+    if LANG_RUN.search(text):  # a multilingual line: each run in its own language, all in the one voice
+        rate = TONE_RATE.get(tone, "0%")
+        body = "".join(f'<lang xml:lang="{run_locale}"><prosody rate="{rate}">{escape(run)}</prosody></lang>'
+                       if run_locale else f'<prosody rate="{rate}">{escape(run)}</prosody>'
+                       for run_locale, run in runs(text))
+        return (f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+                f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{locale}">'
+                f'<voice name="{voice}">{body}</voice></speak>')
     # VAR is said letter by letter, never as a word. The Spanish voice repeats words around a say-as
     # tag, so it gets the letters' names instead.
     letters = "uve a erre" if locale.startswith("es") else '<say-as interpret-as="characters">VAR</say-as>'

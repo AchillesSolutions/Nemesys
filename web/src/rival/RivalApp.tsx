@@ -6,10 +6,10 @@ import type { MatchEvent, MatchInfo, Snapshot } from "../types";
 import { type AgentReport, AgentsFlow } from "./Agents";
 import { type Handoff, HandoffLayer } from "./Handoffs";
 import { type MemoryItem, MemoryBox } from "./Memory";
-import { crowd, react } from "./crowd";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
 import { hostSay, listen, prepare } from "./lobby";
+import { LanguagePick } from "./LanguagePick";
 import { Logo } from "./Logo";
 
 const ECHO_MS = 900; // without headphones the recogniser hears the host's voice for a moment after it stops
@@ -17,8 +17,9 @@ const TRANSLATE_AFTER_MS = 1200; // a rival's line in another language is transl
 
 /** Mostly the host's own words, heard back through the speakers? */
 function echoOf(heard: string, said: string): boolean {
-  const words = (t: string) => t.toLowerCase().match(/[a-z']+/g) ?? [];
-  const h = words(heard), s = new Set(words(said));
+  // Words, or (in Chinese, which has no spaces) characters.
+  const words = (t: string) => t.toLowerCase().match(/[a-z\u00e0-\u00ff']+|[\u4e00-\u9fff]/g) ?? [];
+  const h = words(heard), s = new Set(words(said.replace(/\[\/?(zh|es)\]/g, "")));
   // A short answer is always the viewer's: "Kilburn" is in the host's question, but it's also the answer to it.
   return h.length >= 4 && h.filter((w) => s.has(w)).length / h.length >= 0.7;
 }
@@ -36,7 +37,7 @@ import { Timeline, type TimelineMoment } from "./Timeline";
 
 type Moment = TimelineMoment & { big: boolean };
 interface RivalCard { id: string; name: string; home: string; club: string; language: string; watched: boolean; last: string | null }
-interface Lobby { stage: "name" | "side" | "rival" | "done"; viewer?: string; team: string | null; say: string | null; online: RivalCard[];
+interface Lobby { stage: "language" | "name" | "side" | "rival" | "done"; viewer?: string; language?: string; team: string | null; say: string | null; online: RivalCard[];
   offered: string[]; rival: RivalCard | null }
 interface Play {
   event: MatchEvent | null; snapshot: Snapshot | null; arrivedAt: number; nextGap: number | null;
@@ -54,7 +55,6 @@ const MAX_RECONNECTS = 4;
 // ?mode=live (real time) or ?mode=short (testing); the default is the ten-minute match.
 // ?from=80 joins the match at the 80th minute, for recording a particular scene.
 const QUERY = new URLSearchParams(location.search);
-const SOUND_TEST = QUERY.get("sounds") === "1"; // testing: try each of the crowd's reactions on the opening screen
 const MODE = ["live", "short"].includes(QUERY.get("mode") ?? "") ? QUERY.get("mode")! : "match";
 const FROM = Number(QUERY.get("from") ?? 0) || 0;
 // Free ways to check the screen without paying for a voice: ?replay=last plays the last recorded session back
@@ -98,6 +98,33 @@ async function microphoneProblem(): Promise<string | null> {
   }
 }
 
+/** The lobby's questions on screen, in the viewer's language, with English beneath for anyone watching. */
+const ASKED: Record<string, Record<string, string>> = {
+  English: { name: "Who am I talking to?", side: "Who are you supporting?", rival: "Who do you want to be matched with?",
+             one: "Who do you want to be matched with?" },
+  Mandarin: { name: "请问怎么称呼？", side: "你支持哪个队？", rival: "你想和谁一起看？", one: "要一起看吗？" },
+  Spanish: { name: "¿Cómo te llamas?", side: "¿Con quién vas?", rival: "¿Con quién quieres ver el partido?",
+             one: "¿Quieres ver el partido juntos?" },
+};
+const SAY: Record<string, Record<string, string>> = {
+  English: { name: "Say your name", side: "Say your club" },
+  Mandarin: { name: "说出你的名字", side: "说出你的球队" },
+  Spanish: { name: "Di tu nombre", side: "Di tu equipo" },
+};
+
+function Asked({ lang = "English", what }: { lang?: string; what: string }) {
+  return (
+    <>
+      <h2>{ASKED[lang]?.[what] ?? ASKED.English[what]}</h2>
+      {lang !== "English" && <p className="lobby-english">{ASKED.English[what]}</p>}
+    </>
+  );
+}
+
+function said(lang = "English", what: string): string {
+  return SAY[lang]?.[what] ?? SAY.English[what];
+}
+
 export default function RivalApp() {
   const [data, setData] = useState<{ dir: Directory; match: MatchInfo & { lineup?: Record<string, number[]> } } | null>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -136,7 +163,6 @@ export default function RivalApp() {
   const reconnects = useRef(0);
   const lastRivalWord = useRef(0);
   const started = useRef(0);
-  const score = useRef<{ home: number; away: number } | undefined>(undefined);
 
   useEffect(() => {
     loadStatic()
@@ -157,7 +183,6 @@ export default function RivalApp() {
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now() / 1000);
-      crowd.duck(Date.now() - lastRivalWord.current < 1500); // the crowd dips while the rival talks
       if (started.current) setSeconds((s) => Math.max(s, (Date.now() - started.current) / 1000));
     }, 500);
     return () => clearInterval(timer);
@@ -202,13 +227,8 @@ export default function RivalApp() {
       } else if (msg.type === "moment") {
         setMoments((m) => [...m, { minute: msg.minute, text: msg.text, big: msg.big, kind: msg.kind,
           team: msg.team, elapsed: msg.elapsed }]);
-        if (!msg.past) {
-          // The crowd reacts (the listener hears it); a goal also flashes the screen, for the demo.
-          react(msg.kind, msg.team, data?.match.home ?? "", score.current);
-          if (msg.kind === "goal" && msg.big) scored(msg.team);
-        }
+        if (!msg.past && msg.kind === "goal" && msg.big) scored(msg.team);
       } else if (msg.type === "event") {
-        if (msg.snapshot) score.current = { home: msg.snapshot.home.score, away: msg.snapshot.away.score };
         setPlay((p) => ({
           event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
           pace: msg.pace ?? p.pace,
@@ -264,7 +284,6 @@ export default function RivalApp() {
     setEnglish({});
     setHandoffs([]);
     setMemory([]);
-    void crowd.enable().catch(() => {}); // from the Connect click: browsers only allow sound after one
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
@@ -279,7 +298,7 @@ export default function RivalApp() {
     }
     setStatus("lobby");
     // The welcome starts the moment Start is pressed, while the watch is set up behind it.
-    const greeting = welcome.current ? speak(welcome.current, "Asking your name") : null;
+    const greeting = welcome.current ? speak(welcome.current, "Asking your language") : null;
     let first: Lobby & { id: string };
     try {
       first = await fetch(`/api/rival/watch?mode=${MODE}&start=${FROM}`, { method: "POST" }).then((r) => r.json());
@@ -290,11 +309,11 @@ export default function RivalApp() {
     watchId.current = first.id;
     follow(first.id);
     void update(greeting ? { ...first, say: null } : first); // the welcome is already being said
-    stopListening.current = await listen((text) => {
+    stopListening.current = await listen((text, lang) => {
       if (hostTalking.current || joining.current) return; // the host's own voice, or too late
       if (Date.now() - hostEndedAt.current < ECHO_MS || echoOf(text, hostLine.current)) return;
       setHeard(text);
-      void post("heard", { text });
+      void post("heard", { text, lang });
     }, (text) => { if (!hostTalking.current) setHeard(text); });
     if (!stopListening.current) setNotice("Speech recognition isn't available here; tap to choose (testing only).");
   }
@@ -317,7 +336,8 @@ export default function RivalApp() {
       void join(next.rival, next.say);
       return;
     }
-    if (next.say) await speak(next.say, next.stage === "name" ? "Asking your name"
+    if (next.say) await speak(next.say, next.stage === "language" ? "Asking your language"
+      : next.stage === "name" ? "Asking your name"
       : next.stage === "side" ? "Asking who you support" : "Offering you a rival");
     setHost({ working: true, text: "Listening" });
   }
@@ -569,32 +589,28 @@ export default function RivalApp() {
               </button>
             </div>
             <p className="opening-note">You'll need speakers and a microphone, or similar</p>
-            {SOUND_TEST && (
-              <div className="sound-test" aria-label="Try the crowd (testing)">
-                {([["Murmur", () => crowd.murmurAt(0.05)], ["Cheer", () => crowd.cheer()], ["Away end", () => crowd.farCheer()],
-                   ["Groan", () => crowd.groan()], ["Boo", () => crowd.boo()], ["Jeer", () => crowd.jeer()],
-                   ["Ooh", () => crowd.ooh()], ["Applause", () => crowd.applause()], ["Quiet", () => crowd.murmurAt(0)]] as const)
-                  .map(([label, play]) => (
-                    <button key={label} className="btn" onClick={() => void crowd.enable().then(play)}>{label}</button>
-                  ))}
-              </div>
-            )}
             {error && <p className="rival-error" role="alert">{error}</p>}
           </div>
         )}
         {inLobby && lobby && (
           <div className="curtain-body">
-            {lobby.stage === "name" ? (
+            {lobby.stage === "language" ? (
               <>
                 <p className="lobby-kicker">The lobby</p>
-                <h2>Who am I talking to?</h2>
-                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your name"}</p>
+                <h2>Your language</h2>
+                <LanguagePick heard={heard} onPick={(_, label) => void post("heard", { text: label })} />
+              </>
+            ) : lobby.stage === "name" ? (
+              <>
+                <p className="lobby-kicker">The lobby</p>
+                <Asked lang={lobby.language} what="name" />
+                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : said(lobby.language, "name")}</p>
                 {notice && <button className="btn" onClick={() => void post("heard", { text: "skip" })}>Carry on without a name</button>}
               </>
             ) : lobby.stage === "side" ? (
               <>
                 <p className="lobby-kicker">The lobby</p>
-                <h2>Who are you supporting?</h2>
+                <Asked lang={lobby.language} what="side" />
                 <div className="lobby-crests">
                   {[home, away].map((c) => (
                     <button key={c.id} className="lobby-crest" onClick={() => void post("side", { team: c.id })}>
@@ -603,12 +619,12 @@ export default function RivalApp() {
                     </button>
                   ))}
                 </div>
-                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your club"}</p>
+                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : said(lobby.language, "side")}</p>
               </>
             ) : lobby.stage === "rival" ? (
               <>
                 <p className="lobby-kicker">The lobby · {dir.club(lobby.online[0]?.club)?.short_name} fans online</p>
-                <h2>Who do you want to be matched with?</h2>
+                <Asked lang={lobby.language} what={lobby.offered.length === 1 ? "one" : "rival"} />
                 <div className="lobby-rivals">
                   {lobby.online.filter((r) => lobby.offered.includes(r.id)).map((r) => (
                     <button key={r.id} className="lobby-rival" onClick={() => void post("rival", { id: r.id })}>

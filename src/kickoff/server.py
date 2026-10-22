@@ -76,6 +76,7 @@ class RivalPick(BaseModel):
 
 class Heard(BaseModel):
     text: str = Field(max_length=500)
+    lang: str | None = Field(default=None, max_length=16)  # the language speech recognition heard it in
 
 
 class Translation(BaseModel):
@@ -348,7 +349,7 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     @app.post("/api/rival/{watch_id}/heard")
     async def rival_heard(watch_id: str, req: Heard) -> dict:
         """What the viewer said to the lobby host: their club, then which rival. Returns what the host says next."""
-        return rival.heard(watch_for(watch_id), req.text)
+        return rival.heard(watch_for(watch_id), req.text, req.lang)
 
     @app.post("/api/rival/{watch_id}/side")
     async def rival_side(watch_id: str, req: RivalSide) -> dict:

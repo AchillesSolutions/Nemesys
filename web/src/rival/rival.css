@@ -129,6 +129,27 @@
   border-radius: 999px; border: 1px solid var(--faint); color: var(--muted); }
 .lobby-rival-tag.seen { color: var(--night); background: var(--warn); border-color: var(--warn); }
 .lobby-heard { color: var(--muted); font-style: italic; min-height: 1.4em; }
+.lobby-english { color: var(--muted); font-size: .9rem; margin-top: -8px; }
+
+/* The language: three picked out, the world's languages faint behind them. */
+.language-pick { position: relative; width: min(820px, calc(100vw - 32px)); height: 320px; margin-bottom: 34px; display: grid;
+  place-items: center; }
+.language-cloud { position: absolute; inset: 0; pointer-events: none; }
+.language-cloud span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text, #f4f6f0);
+  animation: drift 9s ease-in-out infinite alternate; }
+.language-cloud span:nth-child(3n) { animation-duration: 12s; }
+.language-cloud span:nth-child(3n+1) { animation-duration: 7s; animation-delay: -3s; }
+@keyframes drift { from { margin-top: -4px; } to { margin-top: 4px; } }
+.language-picks { position: relative; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.language-tile { display: grid; gap: 2px; justify-items: center; min-width: 140px; padding: 14px 20px; border-radius: 14px;
+  cursor: pointer; color: #fff; background: #7a6cff; border: 1px solid #7a6cff;
+  box-shadow: 0 0 34px -8px #7a6cff; animation: arrive .4s ease-out both; }
+.language-tile:nth-child(2) { animation-delay: .08s; } .language-tile:nth-child(3) { animation-delay: .16s; }
+.language-tile:hover { background: #8b7fff; }
+.language-tile b { font-family: var(--display); font-stretch: 80%; font-size: 1.6rem; font-weight: 800; }
+.language-tile span { font-size: .8rem; color: rgba(255, 255, 255, .78); }
+.language-heard { position: absolute; bottom: -40px; left: 0; right: 0; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .language-cloud span { animation: none; } }
 .dots { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
 .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: dot 1.2s infinite ease-in-out; }
 .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
@@ -274,7 +295,7 @@
   to { transform: translate(-50%, 0) rotate(-1.5deg); opacity: 1; } }
 @keyframes receipt-out { to { transform: translate(-50%, 0) rotate(-1.5deg); opacity: 0; } }
 
-/* ---------- A goal: the screen flashes the scorers' colour (demo view; the listener hears the crowd) ---------- */
+/* ---------- A goal: the screen flashes the scorers' colour (demo view) ---------- */
 .goal-flash {
   position: fixed; inset: 0; z-index: 35; pointer-events: none;
   background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--flash) 55%, transparent), transparent 70%);
@@ -328,6 +349,4 @@
   to { transform: rotate(-8deg); opacity: 1; } }
 @keyframes booking-out { to { opacity: 0; } }
 @media (max-height: 960px) { .memory-text { -webkit-line-clamp: 1; } .memory-item { padding: 5px 10px; } }
-/* Testing only (?sounds=1): try each of the crowd's reactions. */
-.sound-test { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }
 .opening-note { color: var(--muted); font-size: .84rem; margin-top: -4px; }
