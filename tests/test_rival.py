@@ -70,21 +70,22 @@ def _quick(sleep):
 
 
 def test_instructions_cover_both_clubs_the_boundaries_and_the_accent(world, match):
-    text = rival_instructions(world, match, "london")
+    text = rival_instructions(world, match, "american")
     assert "Kilburn Athletic" in text and "Harbour City" in text
-    assert "London accent" in text
+    assert "own natural American voice" in text
     assert "never mention real clubs" in text
     assert "no violent metaphors" in text
     assert "a The" not in text and ".." not in text
-    assert "London accent" not in rival_instructions(world, match, "none")
+    assert "American voice" not in rival_instructions(world, match, "none")
 
 
 def test_the_rival_knows_who_it_is_after_the_lobby(world, match):
     rematch = {"when": "last season, at The Quay", "result": "Harbour City 2-1 Kilburn Athletic"}
     dez = next(p for p in ROSTER if p.id == "dez")
     text = rival_instructions(world, match, dez.accent, user_team="kil", rematch=rematch, persona=dez)
-    assert "You are Dez from Bristol, a lifelong Harbour City fan" in text
-    assert "Bristol, West Country accent" in text
+    assert "You are Dez from San Diego, a lifelong Harbour City fan" in text
+    assert "followed Harbour City from San Diego for years" in text
+    assert "own natural American voice" in text and "single breath" in text
     assert "matched you with a Kilburn Athletic fan" in text
     assert "it's YOU again" in text and "Harbour City 2-1 Kilburn Athletic" in text
     assert "asking who they are backing" not in text, "the lobby has already asked"
@@ -190,7 +191,7 @@ def test_the_lobby_offers_a_rematch_first(world, match, tmp_path, monkeypatch):
     assert rival.heard(watch, "erm, not sure")["say"].startswith("Sorry, I didn't catch that"), "nothing named: ask again"
     step = rival.heard(watch, "Kilburn, obviously")
     assert step["stage"] == "rival" and step["offered"] == ["dez"]
-    assert "Dez from Bristol" in step["say"] and "Rematch, or someone new?" in step["say"]
+    assert "Dez from San Diego" in step["say"] and "Rematch, or someone new?" in step["say"]
     step = rival.heard(watch, "go on then, rematch")
     assert step["stage"] == "done" and step["rival"]["id"] == "dez" and step["rival"]["watched"]
     assert watch.persona.voice == "cedar" and watch.rematch["result"] == "Harbour City 2-1 Kilburn Athletic"
@@ -200,7 +201,7 @@ def test_someone_new_then_by_name(world, match, tmp_path, monkeypatch):
     rival, watch = lobby(world, match, tmp_path, monkeypatch)
     rival.heard(watch, "Kilburn")
     step = rival.heard(watch, "nah, someone new")
-    assert step["say"] == ("Also online: Kev from Manchester, Chen from Shanghai, who speaks Mandarin, and Carlos "
+    assert step["say"] == ("Also online: Kev from Boston, Chen from Shanghai, who speaks Mandarin, and Carlos "
                            "from Mexico City, who speaks Spanish. Who do you fancy?")
     step = rival.heard(watch, "the Spanish one")
     assert step["rival"]["id"] == "carlos" and not step["rival"]["watched"]
@@ -213,7 +214,7 @@ def test_a_rival_who_speaks_another_language_only_speaks_it(world, match):
     text = rival_instructions(world, match, chen.accent, user_team="kil", persona=chen)
     assert "you always speak Mandarin, whatever language the user uses" in text
     assert "Mandarin Chinese" in text
-    english = rival_instructions(world, match, "west", user_team="kil", persona=ROSTER[0])
+    english = rival_instructions(world, match, "american", user_team="kil", persona=ROSTER[0])
     assert "speak whatever language the user speaks" in english
 
 

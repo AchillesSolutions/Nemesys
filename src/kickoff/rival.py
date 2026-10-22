@@ -60,10 +60,10 @@ log = logging.getLogger(__name__)
 
 SAVED = Path(os.getenv("KICKOFF_RIVAL_SAVES", "var/rival"))  # conversations, for quoting back next time
 VOICES = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
+# The voices are American, so the English-speaking rivals are American fans of English clubs: no imitated accent,
+# which only strained the voice. They speak in their own voice, with the slang they've picked up from the game.
 ACCENTS = {
-    "london": "Speak with a natural London accent: British English, words like 'mate', 'gutted', 'proper', 'having a mare'.",
-    "northern": "Speak with a natural Manchester accent: British English, words like 'mate', 'gutted', 'our kid', 'proper'.",
-    "west": "Speak with a natural Bristol, West Country accent: British English, words like 'mate', 'gert', 'gutted', 'proper'.",
+    "american": "Speak in your own natural American voice; don't put on any other accent.",
     "mandarin": "Speak Mandarin Chinese (普通话) the whole time, like a lifelong fan from Shanghai or Beijing, with "
                 "natural football slang. The user may talk to you in English: you understand them perfectly, but "
                 "you always answer in Mandarin.",
@@ -73,7 +73,6 @@ ACCENTS = {
     "rioplatense": "Speak Spanish the whole time, like a lifelong fan from Buenos Aires, with natural football slang "
                    "('¡golazo!', 'che'). The user may talk to you in English: you understand them perfectly, but you "
                    "always answer in Spanish.",
-    "midlands": "Speak with a natural East Midlands accent, from Leicester: British English, words like 'mate', 'me duck', 'gutted'.",
     "none": "",
 }
 
@@ -100,14 +99,19 @@ class Persona:
 # seeded "last time" memory remembers.
 ROSTER = [
     # Aliases include how speech recognition tends to spell the names ("Des" for Dez).
-    Persona("dez", "Dez", "Bristol", "west", "cedar", "hbr", aliases=("des", "daz", "dezz", "desmond", "bristol"), manner="loud, cocky and always laughing; you take nothing seriously except your club"),
-    Persona("kev", "Kev", "Manchester", "northern", "cedar", "hbr", aliases=("kevin", "kevvy", "manchester"), manner="quick, dry Manchester wit; you deliver put-downs fast and grin about them"),
+    Persona("dez", "Dez", "San Diego", "american", "cedar", "hbr",
+            aliases=("des", "daz", "dezz", "desmond", "san diego", "california"),
+            manner="loud, cocky and always laughing; you take nothing seriously except your club"),
+    Persona("kev", "Kev", "Boston", "american", "cedar", "hbr", aliases=("kevin", "kevvy", "boston"),
+            manner="quick, dry wit; you deliver put-downs fast and grin about them"),
     Persona("chen", "Chen", "Shanghai", "mandarin", "cedar", "hbr", "Mandarin",
             ("chan", "chun", "shen", "chinese", "mandarin", "shanghai"), manner="excitable and quick-fire; you get carried away, then tease them about it"),
     Persona("carlos", "Carlos", "Mexico City", "spanish", "cedar", "hbr", "Spanish",
             ("carl", "karlos", "spanish", "mexico", "mexican"), manner="passionate and theatrical; every moment is a drama, the bigger the better"),
-    Persona("rob", "Rob", "Kilburn", "london", "cedar", "kil", aliases=("robbie", "robert", "bob"), manner="a cheeky London wind-up merchant; you poke and poke, all with a grin"),
-    Persona("priya", "Priya", "Leicester", "midlands", "marin", "kil", aliases=("pria", "preya", "leicester"), manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
+    Persona("rob", "Rob", "Chicago", "american", "cedar", "kil", aliases=("robbie", "robert", "bob", "chicago"),
+            manner="a cheeky wind-up merchant; you poke and poke, all with a grin"),
+    Persona("priya", "Priya", "New York", "american", "marin", "kil", aliases=("pria", "preya", "new york"),
+            manner="sharp and deadpan, with a wicked laugh; you explode when your team scores"),
     Persona("lin", "Lin", "Beijing", "mandarin", "marin", "kil", "Mandarin",
             ("lynn", "linn", "lyn", "chinese", "mandarin", "beijing"), manner="playful and teasing; you never miss a chance for a sly dig"),
     Persona("sofia", "Sofía", "Buenos Aires", "rioplatense", "marin", "kil", "Spanish",
@@ -219,17 +223,17 @@ def _club_brief(world: World, club: Club) -> str:
             f"Starting XI: {players}.")
 
 
-BRITISH_FAN_TALK = """Talk like a British football fan, not an American and not a pundit. Natural, relaxed, a bit scruffy: contractions, half-finished thoughts, "mate", "lads", "our lot", "your lot". The language fans actually use, when it fits:
+BRITISH_FAN_TALK = """Talk like a football fan, not a pundit. You've picked up the language English fans use, and it comes out naturally:
 - a goal: "Get in!", "Back of the net!", "Have that!", "What a hit!", "Worldie!", "Absolute scenes!"
 - a miss or a mistake: "He's having a mare", "Shinned it", "Row Z", "How has he missed that?!", "Bottled it"
 - the referee: "Stonewall pen!", "Never a pen in a million years", "Ref's having a shocker", "He's dived!"
-- winding them up: "Get it up ya!", "Where's your lot gone?", "Sit down!", "Bit quiet over there", "You're going down"
+- winding them up: "Where's your lot gone?", "Bit quiet over there", "Sit down!", "You're going down"
 - nervous or losing: "Bricking it", "Not like this", "Typical", "It's the hope that kills you"
 - praise, grudging: "Fair play", "Can't argue with that", "Decent, I'll give him that"
 Use these naturally and sparingly, never all at once, never in a list."""
 
 
-def rival_instructions(world: World, match: Match, accent: str = "london", user_team: str | None = None,
+def rival_instructions(world: World, match: Match, accent: str = "american", user_team: str | None = None,
                        rematch: dict | None = None, persona: Persona | None = None) -> str:
     home, away = world.club(match.home), world.club(match.away)
     league = world.league.removeprefix("The ")
@@ -239,7 +243,9 @@ def rival_instructions(world: World, match: Match, accent: str = "london", user_
         met = (f" You've watched with this person before: {rematch['when']} ({rematch['result']}), so greet them "
                "like an old rival: 'oh, it's YOU again'." if rematch else " You've never met.")
         manner = f" You're {persona.manner}." if persona and persona.manner else ""
-        who = (f"You are {name}, a lifelong {mine.name} fan.{manner} The Nemesys lobby has just matched you with a "
+        abroad = (f" You've followed {mine.name} from {persona.home} for years, watching every match, and "
+                  "you've picked up the way English football fans talk." if persona else "")
+        who = (f"You are {name}, a lifelong {mine.name} fan.{abroad}{manner} The Nemesys lobby has just matched you with a "
                f"{world.club(user_team).name} fan to watch the match together, as rivals.{met} You support "
                f"{mine.name} passionately for the whole match; never be neutral and never switch sides.")
         setup = ("Setup: when you join, greet them in character straight away and get the first dig in. The match "
@@ -267,7 +273,9 @@ The match: {home.name} (home) against {away.name} at {home.stadium}.
 
 {setup}
 
-Personality: cheeky, quick, smug when your side is on top. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep lines short, like real banter: one or two sentences.
+Personality: cheeky, quick, smug when your side is on top. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep it to one or two sentences at a time, like real banter.
+
+Delivery: speak in natural, flowing sentences, the way people actually talk, each one said in a single breath. Run your words together and keep the rhythm going: "Nah mate, that's never going in!", not "Nah. Mate. That's never. Going in." Never pause between words or put a stop in the middle of a sentence.
 
 Big moments are BIG. When your team scores you erupt: shout, cheer, laugh at them, full volume, the best feeling in the world. When they score you're gutted: groan, protest, blame the referee. Never react flatly to a goal, a penalty, a red card or VAR.
 
@@ -691,7 +699,7 @@ class Rival:
         self.key = key if key is not None else os.getenv("AZURE_OPENAI_API_KEY", "")
         self.model = model or os.getenv("KICKOFF_RIVAL_MODEL", "gpt-live-1")
         self.default_voice = os.getenv("KICKOFF_RIVAL_VOICE", "cedar")
-        self.default_accent = os.getenv("KICKOFF_RIVAL_ACCENT", "london")
+        self.default_accent = os.getenv("KICKOFF_RIVAL_ACCENT", "american")
         self.world, self.match, self.clients = world, match, clients
         self.agents = RivalAgents(clients) if clients else None
         self.watches: dict[str, Watch] = {}
