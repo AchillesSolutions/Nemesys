@@ -47,7 +47,8 @@ export function AgentsFlow({ reports, active, now, beforeDone = false }: {
     const working = direct?.working ?? (report ? report.working && now - report.at < LIT_S : false);
     const latest = direct?.text ?? report?.text ?? a.idle;
     return (
-      <article key={a.id} className={`agent-card ${working ? "is-working" : ""}`} aria-label={`${a.name}: ${a.role}`}>
+      <article key={a.id} className={`agent-card ${working ? "is-working" : "is-idle"}`}
+               aria-label={`${a.name}: ${a.role}${working ? " (working)" : ""}`}>
         <h3>{a.name}</h3>
         <div className="agent-tech">
           <span className="agent-icon" aria-hidden>{ICONS[a.id]}</span>
@@ -58,12 +59,13 @@ export function AgentsFlow({ reports, active, now, beforeDone = false }: {
       </article>
     );
   };
-  // One grid of six equal columns: the labels above their groups, an arrow in each gap during the match.
+  // Five equal columns: the two before-kick-off agents share the first, one above the other (their work is done
+  // once the match starts); the four match agents follow, with an arrow in each gap. Only agents at work are lit.
   return (
     <section className="agents-flow" aria-label="The agents">
       <p className="agents-label before">Before kick-off</p>
       <p className="agents-label during">During the match</p>
-      {BEFORE.map((a) => <div key={a.id} className={`agents-cell ${beforeDone ? "done" : ""}`}>{card(a)}</div>)}
+      <div className={`agents-cell stack ${beforeDone ? "done" : ""}`}>{BEFORE.map(card)}</div>
       {DURING.map((a, i) => (
         <div key={a.id} className={`agents-cell ${i > 0 ? "flows" : ""}`}>{card(a)}</div>
       ))}

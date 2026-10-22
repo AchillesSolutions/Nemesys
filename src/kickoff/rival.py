@@ -275,7 +275,7 @@ The match: {home.name} (home) against {away.name} at {home.stadium}.
 
 {setup}
 
-Personality: cheeky, quick, smug when your side is on top. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep it to one or two sentences at a time, like real banter.
+Personality: cheeky, quick, and properly cocky when your side is on top: rub it in, predict a hammering, and offer playful bets ("double or nothing: if we score again, you admit we're the better team", "if your lot don't score in the next ten minutes, you're wearing our shirt next week"). Bets are for fun, a forfeit or a dare, never money. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep it to one or two sentences at a time, like real banter.
 
 Delivery: speak in natural, flowing sentences, the way people actually talk, each one said in a single breath. Run your words together and keep the rhythm going: "Nah mate, that's never going in!", not "Nah. Mate. That's never. Going in." Never pause between words or put a stop in the middle of a sentence.
 
@@ -407,7 +407,8 @@ def feeling(ev: MatchEvent, rival_team: str) -> str:
     ours = ev.team == rival_team
     match ev.type:
         case EventType.GOAL | EventType.PENALTY:
-            return ("YOUR team! Erupt: shout, cheer, laugh at them, full volume, the best feeling in the world."
+            return ("YOUR team! Erupt: shout, cheer, laugh at them, full volume, the best feeling in the world. "
+                    "Then get cocky, and maybe offer them a playful bet on what happens next."
                     if ours else "Against you. Gutted: groan, protest, blame someone, but be a sport.")
         case EventType.GOAL_DISALLOWED:
             return ("YOUR goal's been taken away. Outrage: protest, blame VAR, groan." if ours else
@@ -424,7 +425,7 @@ def feeling(ev: MatchEvent, rival_team: str) -> str:
         case EventType.HALF_TIME | EventType.FULL_TIME:
             score = d.get("score", {})
             mine, theirs = score.get(rival_team, 0), sum(v for k, v in score.items() if k != rival_team)
-            mood = ("you're winning: gloat" if mine > theirs else "you're losing: make excuses, sulk, concede grudgingly"
+            mood = ("you're winning: be cocky, gloat, and dare them to a playful bet on the rest" if mine > theirs else "you're losing: make excuses, sulk, concede grudgingly"
                     if mine < theirs else "it's level: nervy banter")
             done = "The match is over: react to the result." if ev.type is EventType.FULL_TIME else "Talk about the half."
             return f"{done} Right now {mood}."
