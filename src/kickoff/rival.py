@@ -254,7 +254,7 @@ Use these naturally and sparingly, never all at once, never in a list."""
 
 
 def rival_instructions(world: World, match: Match, accent: str = "american", user_team: str | None = None,
-                       rematch: dict | None = None, persona: Persona | None = None) -> str:
+                       rematch: dict | None = None, persona: Persona | None = None, viewer: str = "") -> str:
     home, away = world.club(match.home), world.club(match.away)
     league = world.league.removeprefix("The ")
     if user_team:
@@ -262,6 +262,8 @@ def rival_instructions(world: World, match: Match, accent: str = "american", use
         name = f"{persona.name} from {persona.home}" if persona else "a fan"
         met = (f" You've watched with this person before: {rematch['when']} ({rematch['result']}), so greet them "
                "like an old rival: 'oh, it's YOU again'." if rematch else " You've never met.")
+        if viewer:
+            met += f" Their name is {viewer}: use it now and then, the way a mate would."
         manner = f" You're {persona.manner}." if persona and persona.manner else ""
         abroad = (f" You've followed {mine.name} from {persona.home} for years, watching every match, and "
                   "you've picked up the way English football fans talk." if persona else "")
@@ -336,22 +338,60 @@ def quotable(lines: list[str], keep: int = 6) -> list[str]:
     return [lines[i].strip() for i in sorted(best)]
 
 
-def previous_meeting(user_team: str, rival: str | None = None) -> dict | None:
-    """What the viewer said last time they watched with this rival: the latest saved conversation, or the
-    seeded one. Without a rival, the last time with anyone."""
+def same_person(a: str | None, b: str | None) -> bool:
+    return bool(a) and bool(b) and a.strip().casefold() == b.strip().casefold()
+
+
+def previous_meeting(user_team: str, rival: str | None = None, viewer: str | None = None) -> dict | None:
+    """What this viewer said last time they watched with this rival: the latest saved conversation, or the
+    seeded one. Without a rival, the last time with anyone. Memory belongs to a person: given a ``viewer``,
+    only their own sessions count (someone new, or someone whose name wasn't caught, starts fresh)."""
+    def theirs(record: dict) -> bool:
+        return viewer is None or same_person(record.get("viewer"), viewer)
     for path in sorted(SAVED.glob("watch-*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if SAVED.exists() else []:
         with suppress(Exception):
             saved = json.loads(path.read_text(encoding="utf-8"))
             said = [t for who, t in saved.get("transcript", []) if who == "user" and len(t.split()) >= 5]
-            if saved.get("user_team") == user_team and len(said) >= 2 and rival in (None, saved.get("rival")):
+            if (saved.get("user_team") == user_team and len(said) >= 2 and rival in (None, saved.get("rival"))
+                    and theirs(saved)):
                 return {"when": "the last time you watched together", "result": saved.get("result", ""),
                         "user_said": quotable(said), "rival": saved.get("rival"), "pacts": saved.get("pacts", [])}
     seed = DATA_DIR / "previous_meeting.json"
     if seed.exists():
         data = json.loads(seed.read_text(encoding="utf-8"))
-        if data.get("user_backed") == user_team and rival in (None, data.get("rival")):
+        if data.get("user_backed") == user_team and rival in (None, data.get("rival")) and theirs(data):
             return data
     return None
+
+
+def known_viewer(viewer: str) -> bool:
+    """Has this person watched with any rival before?"""
+    for path in SAVED.glob("watch-*.json") if SAVED.exists() else []:
+        with suppress(Exception):
+            if same_person(json.loads(path.read_text(encoding="utf-8")).get("viewer"), viewer):
+                return True
+    seed = DATA_DIR / "previous_meeting.json"
+    return seed.exists() and same_person(json.loads(seed.read_text(encoding="utf-8")).get("viewer"), viewer)
+
+
+NAME_INTRO = re.compile(r"\b(?:i'm|i am|it's|its|this is|my name is|my name's|call me|name's|it is)\s+([^\W\d_][\w'-]*)",
+                        re.I)
+NAME_FILLER = re.compile(r"^(?:hi|hello|hey|hiya|yeah|yes|um+|uh+|erm+|so|well|oh|ok|okay)\b[\s,.!]*", re.I)
+
+
+def name_from(heard: str) -> str | None:
+    """The viewer's name from what they told the host: "it's Wei", "Max", "hi, I'm Sofia"."""
+    if m := NAME_INTRO.search(heard):
+        name = m.group(1)
+    else:
+        rest = heard.strip()
+        while (stripped := NAME_FILLER.sub("", rest)) != rest:
+            rest = stripped
+        words = re.findall(r"[^\W\d_][\w'-]*", rest)
+        if not 1 <= len(words) <= 2:
+            return None
+        name = words[0]
+    return "-".join(part[:1].upper() + part[1:].lower() for part in name.split("-")) if name.isascii() else name
 
 
 def ammo(world: World, match: Match, rival_club: Club, user_club: Club, dossier: news.Dossier,
@@ -653,7 +693,8 @@ class Watch:
     mode: str = "match"  # the pace: match (about ten minutes) | live (real time) | short (testing)
     start: int = 0  # the event the match starts from: a later one to join a match already under way
     persona: Persona | None = None
-    lobby: str = "side"  # side (which club?) | rival (which rival?) | done
+    lobby: str = "name"  # name (who's this?) | side (which club?) | rival (which rival?) | done
+    viewer: str = ""  # the viewer's name, as they told the host: their memories are kept under it
     offered: list[str] = field(default_factory=list)  # rivals the host has offered so far
     reprompted: float = 0.0  # when the host last asked again after not understanding
     phase: str = "lobby"  # lobby | prematch | first_half | half_time | second_half | full_time
@@ -896,23 +937,37 @@ class Rival:
         return watch
 
     def welcome(self) -> str:
+        return "Welcome to Nemesys. Who am I talking to?"
+
+    def fixture_line(self) -> str:
         home, away = self.world.club(self.match.home), self.world.club(self.match.away)
-        return f"Welcome to Nemesys. {home.name} against {away.name} is about to kick off. Who are you supporting?"
+        return f"{home.name} against {away.name} is about to kick off. Who are you supporting?"
+
+    def choose_name(self, watch: Watch, name: str) -> dict:
+        """The viewer has said who they are: welcome them back, or meet them, then ask who they support."""
+        watch.viewer = name
+        watch.lobby = "side"
+        back = known_viewer(name)
+        watch.agent("host", f"{'Welcome back' if back else 'New here'}: {name}", working=False,
+                    status="Welcome back" if back else "New fan")
+        watch.publish_state()
+        greeting = f"{name}! Welcome back." if back else f"Nice to meet you, {name}."
+        return self.lobby_state(watch, f"{greeting} {self.fixture_line()}")
 
     def online(self, watch: Watch) -> list[Persona]:
         """The rivals online for this viewer: fans of the other club, the one they watched with last time first."""
         fans = [p for p in ROSTER if p.club == self.other(watch.user_team)]
-        return sorted(fans, key=lambda p: previous_meeting(watch.user_team, p.id) is None)
+        return sorted(fans, key=lambda p: previous_meeting(watch.user_team, p.id, watch.viewer) is None)
 
     def card(self, watch: Watch, persona: Persona) -> dict:
-        last = previous_meeting(watch.user_team, persona.id)
+        last = previous_meeting(watch.user_team, persona.id, watch.viewer)
         return {"id": persona.id, "name": persona.name, "home": persona.home, "club": persona.club,
                 "language": persona.language,
                 "watched": bool(last), "last": last.get("result") if last else None}
 
     def lobby_state(self, watch: Watch, say: str | None = None) -> dict:
         """What the lobby screen shows, and what the host should say next."""
-        return {"stage": watch.lobby, "team": watch.user_team, "say": say,
+        return {"stage": watch.lobby, "team": watch.user_team, "say": say, "viewer": watch.viewer,
                 "online": [self.card(watch, p) for p in self.online(watch)] if watch.user_team else [],
                 "offered": watch.offered,
                 "rival": self.card(watch, watch.persona) if watch.persona else None}
@@ -927,7 +982,7 @@ class Rival:
                     status="Team chosen")
         online = self.online(watch)
         club = self.world.club(team).short_name
-        if previous_meeting(team, online[0].id):
+        if previous_meeting(team, online[0].id, watch.viewer):
             first = online[0]
             watch.offered = [first.id]
             say = (f"{club}. {first.name} from {first.home} is online, and you watched together last time. "
@@ -943,13 +998,23 @@ class Rival:
         if persona is None or watch.persona:
             return self.lobby_state(watch)
         watch.persona = persona
-        watch.rematch = previous_meeting(watch.user_team, persona.id)
+        watch.rematch = previous_meeting(watch.user_team, persona.id, watch.viewer)
         watch.lobby = "done"
         watch.publish_state()
         return self.lobby_state(watch, f"Connecting you to {persona.name}.")
 
     def heard(self, watch: Watch, text: str) -> dict:
-        """Something the viewer said in the lobby: their club, then their rival."""
+        """Something the viewer said in the lobby: their name, their club, then their rival."""
+        if watch.lobby == "name":
+            if team := self.side_from(text.lower()):  # straight to their club: no name, so no memories
+                watch.lobby = "side"
+                return self.choose_side(watch, team)
+            if text.strip().lower() == "skip":  # testing, without speech: carry on without a name
+                watch.lobby = "side"
+                return self.lobby_state(watch, self.fixture_line())
+            if name := name_from(text):
+                return self.choose_name(watch, name)
+            return self._again(watch, text.lower(), "What's your name?")
         text = text.lower()
         if watch.lobby == "side":
             team = self.side_from(text)
@@ -1006,7 +1071,7 @@ class Rival:
             "session": {
                 "model": self.model,
                 "instructions": rival_instructions(self.world, self.match, accent, watch.user_team, watch.rematch,
-                                                   persona),
+                                                   persona, watch.viewer),
                 "audio": {"output": {"voice": voice}},
                 "delegation": {"type": "client"},
             },
@@ -1366,6 +1431,9 @@ class Rival:
         as text. Only the agents' model calls cost anything (pennies): for checking the screen and the flow."""
         watch = self.new_watch(mode, minute)
         watch.rehearsal = True
+        seed = DATA_DIR / "previous_meeting.json"
+        watch.viewer = json.loads(seed.read_text(encoding="utf-8")).get("viewer", "") if seed.exists() else ""
+        watch.lobby = "side"
         self.choose_side(watch, team)
         persona = next((p for p in ROSTER if p.id == rival and p.club == self.other(team)), None)
         persona = persona or next(p for p in ROSTER if p.club == self.other(team))
@@ -1630,7 +1698,8 @@ class Rival:
             result = (f"{self.world.club(home).name} {watch.score[home]}-{watch.score[away]} "
                       f"{self.world.club(away).name}") if watch.phase != "setup" else ""
             (SAVED / f"watch-{time.strftime('%Y%m%d-%H%M%S')}-{watch.id}.json").write_text(json.dumps({
-                "user_team": watch.user_team, "rival": watch.persona.id if watch.persona else None,
+                "viewer": watch.viewer, "user_team": watch.user_team,
+                "rival": watch.persona.id if watch.persona else None,
                 "pacts": watch.pacts,
                 "mode": watch.mode, "recording": watch.recording,
                 "result": result, "reached": watch.minute or watch.phase,

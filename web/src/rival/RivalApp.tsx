@@ -36,7 +36,7 @@ import { Timeline, type TimelineMoment } from "./Timeline";
 
 type Moment = TimelineMoment & { big: boolean };
 interface RivalCard { id: string; name: string; home: string; club: string; language: string; watched: boolean; last: string | null }
-interface Lobby { stage: "side" | "rival" | "done"; team: string | null; say: string | null; online: RivalCard[];
+interface Lobby { stage: "name" | "side" | "rival" | "done"; viewer?: string; team: string | null; say: string | null; online: RivalCard[];
   offered: string[]; rival: RivalCard | null }
 interface Play {
   event: MatchEvent | null; snapshot: Snapshot | null; arrivedAt: number; nextGap: number | null;
@@ -279,7 +279,7 @@ export default function RivalApp() {
     }
     setStatus("lobby");
     // The welcome starts the moment Start is pressed, while the watch is set up behind it.
-    const greeting = welcome.current ? speak(welcome.current, "Asking who you support") : null;
+    const greeting = welcome.current ? speak(welcome.current, "Asking your name") : null;
     let first: Lobby & { id: string };
     try {
       first = await fetch(`/api/rival/watch?mode=${MODE}&start=${FROM}`, { method: "POST" }).then((r) => r.json());
@@ -317,7 +317,8 @@ export default function RivalApp() {
       void join(next.rival, next.say);
       return;
     }
-    if (next.say) await speak(next.say, next.stage === "side" ? "Asking who you support" : "Offering you a rival");
+    if (next.say) await speak(next.say, next.stage === "name" ? "Asking your name"
+      : next.stage === "side" ? "Asking who you support" : "Offering you a rival");
     setHost({ working: true, text: "Listening" });
   }
 
@@ -583,7 +584,14 @@ export default function RivalApp() {
         )}
         {inLobby && lobby && (
           <div className="curtain-body">
-            {lobby.stage === "side" ? (
+            {lobby.stage === "name" ? (
+              <>
+                <p className="lobby-kicker">The lobby</p>
+                <h2>Who am I talking to?</h2>
+                <p className="lobby-heard">{heard ? `\u201c${heard}\u201d` : "Say your name"}</p>
+                {notice && <button className="btn" onClick={() => void post("heard", { text: "skip" })}>Carry on without a name</button>}
+              </>
+            ) : lobby.stage === "side" ? (
               <>
                 <p className="lobby-kicker">The lobby</p>
                 <h2>Who are you supporting?</h2>

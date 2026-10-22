@@ -182,8 +182,31 @@ def test_side_comes_from_what_the_user_says(heard, team):
 def lobby(world, match, tmp_path, monkeypatch):
     monkeypatch.setattr(rival_module, "SAVED", tmp_path)
     rival = Rival(world, match, endpoint="https://example.invalid", key="test")
-    watch = Watch("w1", {"kil": 0, "hbr": 0})
+    watch = Watch("w1", {"kil": 0, "hbr": 0}, lobby="side", viewer="Max")  # Max: the seeded last meeting is his
     return rival, watch
+
+
+def test_the_lobby_asks_who_it_is_and_keeps_memories_per_person(world, match, tmp_path, monkeypatch):
+    rival, _ = lobby(world, match, tmp_path, monkeypatch)
+    assert rival.welcome().endswith("Who am I talking to?")
+    max_ = Watch("a", {"kil": 0, "hbr": 0})
+    assert rival.heard(max_, "hi, it's Max")["say"].startswith("Max! Welcome back.")
+    assert rival.heard(max_, "Kilburn")["say"].endswith("Rematch, or someone new?"), "his rematch with Dez"
+    wei = Watch("b", {"kil": 0, "hbr": 0})
+    assert rival.heard(wei, "Wei")["say"].startswith("Nice to meet you, Wei.")
+    step = rival.heard(wei, "Kilburn")
+    assert "Rematch" not in step["say"] and "who speaks Mandarin" in step["say"], "someone new: everyone, languages said"
+    assert not any(card["watched"] for card in step["online"])
+    chen = rival.heard(wei, "Chen please")
+    assert chen["rival"]["id"] == "chen" and wei.rematch is None, "nobody else's memories"
+
+
+def test_a_name_is_heard_however_it_is_said():
+    from kickoff.rival import name_from
+    assert name_from("Max") == "Max"
+    assert name_from("um, my name is jean-paul") == "Jean-Paul"
+    assert name_from("yeah it's sofia") == "Sofia"
+    assert name_from("hello there my friend how are you") is None
 
 
 def test_the_lobby_offers_a_rematch_first(world, match, tmp_path, monkeypatch):

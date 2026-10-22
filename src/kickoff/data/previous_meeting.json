@@ -1,5 +1,6 @@
 {
-  "_note": "Seed memory for the demo: the last time this viewer and the rival watched the fixture together. Fictional, like the rest of the world. Real sessions are saved to var/rival/ and quoted in preference to this.",
+  "_note": "Seed memory for the demo: the last time this viewer and the rival watched the fixture together. Fictional, like the rest of the world. Real sessions are saved to var/rival/ and quoted in preference to this. It belongs to the viewer named here: someone else starts fresh.",
+  "viewer": "Max",
   "when": "last season, watching together online",
   "result": "Harbour City 2-1 Kilburn Athletic",
   "user_backed": "kil",
