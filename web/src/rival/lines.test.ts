@@ -20,12 +20,26 @@ describe("the conversation's order", () => {
     expect(lines[0].text).toBe("Oh yes!");
   });
 
-  it("keeps each speaker's line whole while they talk over each other", () => {
+  it("shows a cut-in where it happened, in the middle of the other's line", () => {
     let lines: Line[] = [];
     lines = say(lines, "rival", "That's never", 1000);
     lines = say(lines, "user", "It was", 1200);
     lines = say(lines, "rival", " a penalty", 1500);
-    expect(lines.map((l) => l.text)).toEqual(["That's never a penalty", "It was"]);
+    expect(lines.map((l) => l.text)).toEqual(["That's never", "It was", "a penalty"]);
+  });
+
+  it("splits the rival's line at the viewer's interjection, though the viewer's words arrive last", () => {
+    let lines: Line[] = [];
+    lines = say(lines, "rival", "Your keeper", 1000);
+    lines = say(lines, "rival", " couldn't catch", 1300);
+    lines = say(lines, "rival", " a cold, and", 1700); // said after the viewer cut in...
+    lines = say(lines, "rival", " he knows it.", 2000);
+    lines = say(lines, "user", "Rubbish!", 1500); // ...but the viewer's words are transcribed afterwards
+    expect(lines.map((l) => [l.who, l.text])).toEqual([
+      ["rival", "Your keeper couldn't catch"], ["user", "Rubbish!"], ["rival", "a cold, and he knows it."],
+    ]);
+    lines = say(lines, "rival", " Two nil soon.", 2400);
+    expect(lines.at(-1)!.text).toBe("a cold, and he knows it. Two nil soon.");
   });
 
   it("starts a new line after a pause", () => {

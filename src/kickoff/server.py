@@ -21,7 +21,9 @@ Messages to the server, as {"action": ...}:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from contextlib import suppress
 from pathlib import Path
 from typing import Literal
@@ -37,6 +39,7 @@ from .chapters import build_chapters
 from .data_store import load
 from .models import Match, World
 from .player import MatchPlayer
+from . import rival as rival_module
 from .rival import Rival, RivalUnavailable, Watch
 from .speech import Speech, SpeechUnavailable
 from .translate import Translator, TranslatorUnavailable
@@ -282,6 +285,21 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
         w = watch_for(watch_id)
         await rival.pause(w, paused)
         return {"paused": w.paused}
+
+    @app.post("/api/rival/{watch_id}/audio")
+    async def rival_audio(watch_id: str, sample: dict) -> dict:
+        """How well the rival's voice is reaching the browser, every few seconds, for finding the cause of any
+        stutter: packets lost or jitter (the network), concealment with nothing lost (GPT-Live's audio arriving
+        late), or long tasks (a busy page)."""
+        sample = {k: v for k, v in sample.items() if isinstance(v, (int, float))}
+        rough = sample.get("concealed_pct", 0) >= 2 or sample.get("lost", 0) > 0 or sample.get("stretched_pct", 0) >= 5
+        if rough:
+            log.warning("Rival audio rough in %s: %s", watch_id, sample)
+        rival_module.SAVED.mkdir(parents=True, exist_ok=True)
+        with open(rival_module.SAVED / "audio.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": time.strftime("%Y-%m-%d %H:%M:%S"), "watch": watch_id, "rough": rough,
+                                **sample}) + "\n")
+        return {}
 
     @app.post("/api/translate")
     async def translate(req: Translation) -> dict:

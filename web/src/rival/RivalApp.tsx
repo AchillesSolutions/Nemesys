@@ -513,6 +513,10 @@ export default function RivalApp() {
             {started.current > 0 && <p className="rival-meter">{Math.round(seconds)}s · ~${(seconds * COST_PER_S).toFixed(2)}</p>}
             {live && notice && <p className="rival-notice">{notice}</p>}
           </section>}
+          <section className="demo-note" aria-label="About this screen">
+            <p className="demo-note-title"><span className="demo-dot" aria-hidden />Demo view</p>
+            <p>Nemesys is audio only: you just talk with your rival. This screen is for the demo, to show what's happening behind the voice.</p>
+          </section>
         </aside>
       </main>
 
@@ -520,13 +524,26 @@ export default function RivalApp() {
           reveal the match once the rival is with you, and comes back down when the match is over. */}
       <div className={`curtain ${inLobby || status === "idle" || status === "ended" ? "down" : "up"}`}>
         <Logo />
-        {(status === "idle" || status === "ended") && (
+        {status === "ended" && play.snapshot && (
+          // The match is over: the result, who you watched it with, and that's it.
+          <div className="curtain-body game-over">
+            <p className="game-over-result">
+              <span>{home.name}</span>
+              <b>{play.snapshot.home.score}<i>-</i>{play.snapshot.away.score}</b>
+              <span>{away.name}</span>
+            </p>
+            {rival && <p className="curtain-fixture">Your rival: <b style={{ color: dir.colour(rival.club) }}>{rival.name}</b>, from {rival.home}</p>}
+            <h1>Game over</h1>
+            {error && <p className="rival-error" role="alert">{error}</p>}
+          </div>
+        )}
+        {(status === "idle" || (status === "ended" && !play.snapshot)) && (
           <div className="curtain-body">
             <h1>Enjoy football with a rival</h1>
             {(REPLAY || DRY) && <p className="curtain-mode">{REPLAY ? "Replay of the last recorded session (free)" : "Dry run: text stand-in for the rival's voice"}</p>}
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
-                <b>{status === "ended" ? "Play again" : "Connect"}</b><span>You'll need speakers and a microphone, or similar</span>
+                <b>Connect</b><span>You'll need speakers and a microphone, or similar</span>
               </button>
             </div>
             {error && <p className="rival-error" role="alert">{error}</p>}

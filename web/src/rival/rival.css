@@ -5,9 +5,8 @@
   --player: #8fd0ff;   /* player names in the conversation, and the agents' models */
   --club: #ffb15c;     /* club names and nicknames */
   position: relative; height: 100vh; min-height: 640px; overflow: hidden;
-  /* The conversation and the agents share the space below the fixture: the agents get nearly as much room,
-     since the conversation fades by half-way anyway. */
-  display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(0, .85fr); gap: 16px; padding: 0 20px 18px;
+  /* Below the fixture the conversation takes the room; the agents take only the height their cards need. */
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px; padding: 0 20px 18px;
   background:
     radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(0, 0, 0, .55) 100%),
     repeating-linear-gradient(90deg, #17382a 0 6.25%, #1a3e2f 6.25% 12.5%);
@@ -73,6 +72,14 @@
   font-size: clamp(26px, 3vw, 44px); line-height: 1; }
 .curtain-mode { color: var(--warn); font-size: .85rem; letter-spacing: .04em; }
 .curtain-fixture { color: var(--muted); font-size: .9rem; letter-spacing: .04em; }
+/* Game over: the result, your rival, and nothing to press. */
+.game-over { gap: 18px; }
+.game-over-result { display: flex; align-items: center; gap: 22px; font-family: var(--display); font-stretch: 80%;
+  font-weight: 800; text-transform: uppercase; font-size: clamp(18px, 2.4vw, 30px); }
+.game-over-result b { font-size: clamp(40px, 6vw, 76px); font-variant-numeric: tabular-nums; }
+.game-over-result i { font-style: normal; color: var(--muted); margin: 0 .2em; }
+.game-over .curtain-fixture { font-size: 1.05rem; }
+@media (max-width: 640px) { .game-over-result { flex-direction: column; gap: 4px; } }
 
 /* ---------- Nemesys ---------- */
 .logo { display: flex; align-items: center; gap: .45em; }
@@ -128,7 +135,7 @@
 @keyframes dot { 0%, 80%, 100% { opacity: .2; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 @keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-.rival-side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.rival-side { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: hidden; }
 .rival-profile, .rival-controls {
   border-radius: 16px; padding: 16px 18px; background: rgba(8, 16, 13, .55); border: 1px solid var(--faint);
   display: grid; gap: 8px;
@@ -139,13 +146,24 @@
 .rival-card-club { font-weight: 600; font-size: .9rem; }
 .rival-profile-line { color: var(--muted); font-size: .88rem; }
 .rival-sides { font-size: .95rem; }
+/* What this screen is: a window onto an audio experience, for the demo. */
+.demo-note {
+  margin-top: auto; flex: none; display: grid; gap: 5px; padding: 11px 14px; border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, #7a6cff 60%, transparent); background: color-mix(in srgb, #7a6cff 8%, transparent);
+  font-size: .8rem; line-height: 1.4; color: var(--muted);
+}
+.demo-note-title { display: flex; align-items: center; gap: 8px; color: #b3abff; font-size: .68rem; font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase; }
+/* On a short screen, just the label: the conversation needs the room. */
+@media (max-height: 820px) { .demo-note p:not(.demo-note-title) { display: none; } }
+.demo-dot { width: 7px; height: 7px; border-radius: 50%; background: #8b7fff; }
 .rival-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .rival-meter { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
 
 /* ---------- Bottom: the agents, in the order work flows through them ---------- */
 .agents-flow {
   display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: auto 1fr;
-  column-gap: 22px; row-gap: 6px; max-width: 1500px; margin: 0 auto; width: 100%; height: 100%;
+  column-gap: 22px; row-gap: 6px; max-width: 1500px; margin: 0 auto; width: 100%;
 }
 .agents-label { font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-left: 2px; }
 .agents-label.before { grid-column: 1; }
@@ -153,9 +171,15 @@
 .agents-cell { position: relative; display: flex; min-width: 0; min-height: 0; }
 /* The two before-kick-off agents share one column's height. */
 .agents-cell.stack { flex-direction: column; gap: 8px; }
-.agents-cell.stack .agent-card { height: auto; flex: 1 1 0; padding: 10px 14px; gap: 5px; }
+/* Compact: the name and model on one line, the status beneath. */
+.agents-cell.stack .agent-card { height: auto; flex: 1 1 0; padding: 9px 14px; display: grid;
+  grid-template-columns: auto minmax(0, 1fr); align-content: space-between; column-gap: 10px; row-gap: 2px; }
+.agents-cell.stack .agent-tech { justify-content: flex-end; text-align: right; }
+.agents-cell.stack .agent-status { grid-column: 1 / -1; }
+.agents-cell.stack .agent-icon { display: none; }
+.agents-cell.stack .agent-status { border-top: 0; }
 .agents-cell.stack .agent-role { display: none; }
-.agents-cell.stack .agent-status { font-size: 1.05rem; padding-top: 5px; }
+.agents-cell.stack .agent-status { font-size: 1rem; padding-top: 4px; }
 .agents-cell.flows::before {
   content: "→"; position: absolute; left: -17px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1rem;
 }

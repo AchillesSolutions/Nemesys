@@ -223,6 +223,16 @@ def _club_brief(world: World, club: Club) -> str:
             f"Starting XI: {players}.")
 
 
+def league_picture(world: World) -> str:
+    """The whole table, so the rival can talk about the title race, the relegation scrap and every other club,
+    not only the two playing. In fan terms: positions, points and form in words."""
+    rows = "; ".join(f"{i}. {row.club}, {row.points} pts, {form_words(row.form)}"
+                     for i, row in enumerate(world.table, 1))
+    return (f"The rest of the {world.league.removeprefix('The ')}, {world.table[0].played} games into the {world.season} season, so it's "
+            f"early days: {rows}. If they ask about other clubs, who'll win the league or who's going down, give a "
+            "fan's opinion from this, never a refusal (and take a swipe at their club's chances while you're at it).")
+
+
 BRITISH_FAN_TALK = """Talk like a football fan, not a pundit. You've picked up the language English fans use, and it comes out naturally:
 - a goal: "Get in!", "Back of the net!", "Have that!", "What a hit!", "Worldie!", "Absolute scenes!"
 - a miss or a mistake: "He's having a mare", "Shinned it", "Row Z", "How has he missed that?!", "Bottled it"
@@ -295,7 +305,8 @@ Boundaries, always: banter is about football only: clubs, results, the table, pl
 
 What you know:
 - {_club_brief(world, home)}
-- {_club_brief(world, away)}"""
+- {_club_brief(world, away)}
+- {league_picture(world)}"""
 
 
 def previous_meeting(user_team: str, rival: str | None = None) -> dict | None:

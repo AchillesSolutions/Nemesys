@@ -75,7 +75,7 @@ export class LiveCall {
       handlers.onClosed(reason);
       call.end();
     };
-    channel.onopen = () => onOpen(call);
+    channel.onopen = () => { onOpen(call); call.watchAudio(); };
     channel.onclose = () => finish("connection_lost");
     channel.onmessage = ({ data }) => {
       const ev = JSON.parse(data);
@@ -93,6 +93,56 @@ export class LiveCall {
     return call;
   }
 
+  private statsTimer = 0;
+
+  /**
+   * Every few seconds, how well the rival's voice is arriving, sent to the server's log: so when it stutters we
+   * can tell the network (packets lost, jitter) from audio arriving late from GPT-Live (concealment with nothing
+   * lost) or a busy page (long tasks on the main thread).
+   */
+  watchAudio(every = 5000) {
+    let last: Record<string, number> = {};
+    let longTasks = 0, longest = 0;
+    try {
+      new PerformanceObserver((list) => list.getEntries().forEach((e) => {
+        longTasks += 1;
+        longest = Math.max(longest, e.duration);
+      })).observe({ type: "longtask", buffered: false });
+    } catch { /* not supported here */ }
+    this.statsTimer = window.setInterval(async () => {
+      const report = await this.pc.getStats().catch(() => null);
+      if (!report) return;
+      const now: Record<string, number> = {};
+      let rtt = 0;
+      report.forEach((s) => {
+        if (s.type === "inbound-rtp" && s.kind === "audio") {
+          for (const k of ["packetsReceived", "packetsLost", "concealedSamples", "silentConcealedSamples",
+            "concealmentEvents", "totalSamplesReceived", "insertedSamplesForDeceleration",
+            "removedSamplesForAcceleration", "jitterBufferDelay", "jitterBufferEmittedCount"]) now[k] = s[k] ?? 0;
+          now.jitter_ms = (s.jitter ?? 0) * 1000;
+        }
+        if (s.type === "candidate-pair" && s.nominated && s.currentRoundTripTime) rtt = s.currentRoundTripTime * 1000;
+      });
+      const d = (k: string) => (now[k] ?? 0) - (last[k] ?? 0);
+      const samples = d("totalSamplesReceived");
+      const sample = {
+        packets: d("packetsReceived"), lost: d("packetsLost"),
+        concealed_pct: samples > 0 ? Math.round((1000 * (d("concealedSamples") - d("silentConcealedSamples"))) / samples) / 10 : 0,
+        concealment_events: d("concealmentEvents"),
+        stretched_pct: samples > 0 ? Math.round((1000 * (d("insertedSamplesForDeceleration") + d("removedSamplesForAcceleration"))) / samples) / 10 : 0,
+        buffer_ms: d("jitterBufferEmittedCount") > 0 ? Math.round((1000 * d("jitterBufferDelay")) / d("jitterBufferEmittedCount")) : 0,
+        jitter_ms: Math.round(now.jitter_ms ?? 0), rtt_ms: Math.round(rtt), long_tasks: longTasks, longest_task_ms: Math.round(longest),
+      };
+      last = now;
+      longTasks = 0;
+      longest = 0;
+      if (sample.packets === 0) return; // paused, or nothing playing
+      void fetch(`/api/rival/${this.watchId}/audio`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sample),
+      }).catch(() => {});
+    }, every);
+  }
+
   /** Paused: the rival can't hear you and you don't hear the rival. */
   setPaused(paused: boolean) {
     this.mic.enabled = !paused;
@@ -105,6 +155,7 @@ export class LiveCall {
   }
 
   end() {
+    window.clearInterval(this.statsTimer);
     this.mic.stop();
     this.audio.srcObject = null;
     this.pc.close();
