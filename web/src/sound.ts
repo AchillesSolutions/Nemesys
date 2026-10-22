@@ -117,6 +117,12 @@ export class MatchSound {
     }
   }
 
+  /** A goal in the rival's ear: the crowd erupts out of nothing and dies away, under the voices. */
+  roar(): void {
+    if (!this.enabled || !this.ctx) return;
+    this.swell(0.22, 3.5, 1500);
+  }
+
   /** Lower the crowd while commentary is speaking, and bring it back afterwards. */
   duck(on: boolean): void {
     if (!this.ctx || !this.ducker) return;

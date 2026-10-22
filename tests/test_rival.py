@@ -574,3 +574,46 @@ def test_each_rival_keeps_to_their_own_language(world, match):
     text = rival_instructions(world, match, dez.accent, user_team="kil", persona=dez)
     assert "you speak English, whatever language the user uses" in text
     assert "switch straight away" not in text
+
+
+def test_a_handoff_shows_only_once_the_rival_really_has_it(world, match):
+    """The demo view draws a dot from one agent to the next; it must not fire while the send is still held back."""
+    async def run():
+        sideband = FakeSideband()
+        watch = Watch("w", {"kil": 0, "hbr": 0}, voice=Voice("v", sideband))
+        stream: asyncio.Queue = asyncio.Queue()
+        watch.listeners.add(stream)
+        watch.heard("rival", "You lot keep the ball all you like, but")  # mid-sentence
+        await watch.thinking("A storyline", kind="storyline", then=[watch.handoff("match")])
+        before = [stream.get_nowait() for _ in range(stream.qsize())]
+        await asyncio.sleep(1.6)
+        after = [stream.get_nowait() for _ in range(stream.qsize())]
+        return before, after
+
+    before, after = asyncio.run(run())
+    assert not [m for m in before if m["type"] == "handoff"]
+    assert {"type": "handoff", "from": "match", "to": "rival"} in after
+
+
+def test_a_receipt_is_only_ever_the_viewers_own_words():
+    from kickoff.rival import receipt_of, receipts
+    watch = Watch("w", {"kil": 0, "hbr": 0})
+    watch.heard("user", "Mwangi won't score all season, mark my words.")
+    watch.heard("rival", "Our keeper is the best in the league.")
+    watch.rematch = {"when": "last season", "user_said": ["Whitcombe is going to bag a hat-trick, just watch."]}
+
+    mine = receipt_of("Mwangi won't score all season", "this_match", watch)
+    assert mine and mine["quote"] == "Mwangi won't score all season" and mine["when"] == "Earlier this match"
+    assert receipt_of("Our keeper is the best in the league", "this_match", watch) is None, "the rival's words"
+    assert receipt_of("Mwangi won't score all season", "news", watch) is None
+    point = 'Throw this back at them: last season, they said "Whitcombe is going to bag a hat-trick, just watch."'
+    assert receipts(point, watch) == [{"type": "receipt", "quote": "Whitcombe is going to bag a hat-trick, just watch.",
+                                       "when": "last season"}]
+    assert receipts("Wind them up about the table.", watch) == []
+
+
+def test_a_bet_receipt_reads_as_the_viewer_would_put_it():
+    from kickoff.rival import bet_receipt
+    watch = Watch("w", {"kil": 0, "hbr": 0}, persona=next(p for p in ROSTER if p.id == "dez"))
+    watch.pacts = ["If Kilburn lose, the user will wear the rival's Harbour City shirt next week."]
+    assert bet_receipt(watch)["quote"] == "If Kilburn lose, you will wear Dez's Harbour City shirt next week."

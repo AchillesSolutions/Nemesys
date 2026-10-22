@@ -349,6 +349,59 @@ def ammo(world: World, match: Match, rival_club: Club, user_club: Club, dossier:
     return lead + rest
 
 
+def _words(text: str) -> list[str]:
+    return re.findall(r"[\w']+", text.lower())
+
+
+def _said_by_user(quote: str, said: list[str]) -> str | None:
+    """The line the viewer really said that this quote comes from, if any: most of its words, in one line. A receipt
+    is only ever shown for words the viewer actually said."""
+    words = set(_words(quote))
+    if len(words) < 3:
+        return None
+    for line in said:
+        if len(words & set(_words(line))) >= 0.8 * len(words):
+            return line
+    return None
+
+
+def receipt_of(quote: str, source: str, watch: "Watch") -> dict | None:
+    """A receipt for the demo view: the viewer's own words, when the rival is about to throw them back."""
+    if not quote or source not in ("this_match", "last_time"):
+        return None
+    if source == "this_match":
+        said = [text for who, text in watch.transcript if who == "user"]
+    else:
+        said = list((watch.rematch or {}).get("user_said", []))
+    if (line := _said_by_user(quote, said)) is None:
+        return None
+    exact = quote.strip().strip('"\u201c\u201d')
+    return {"type": "receipt", "quote": exact if len(exact) <= len(line) + 5 else line.strip(),
+            "when": "Earlier this match" if source == "this_match" else (watch.rematch or {}).get("when", "Last time")}
+
+
+def bet_receipt(watch: "Watch") -> dict:
+    """The latest bet, as the viewer would put it: the Ammo agent notes it about "the user" and "the rival"."""
+    name = watch.persona.name if watch.persona else "your rival"
+    bet = re.sub(r"\bthe user's\b", "your", watch.pacts[-1], flags=re.I)
+    bet = re.sub(r"\bthe user\b", "you", bet, flags=re.I)
+    bet = re.sub(r"\bthe rival's\b", f"{name}'s", bet, flags=re.I)
+    bet = re.sub(r"\bthe rival\b", name, bet, flags=re.I)
+    return {"type": "receipt", "quote": bet[:1].upper() + bet[1:], "when": "The bet", "kind": "bet"}
+
+
+def receipts(point: str, watch: "Watch") -> list[dict]:
+    """Receipts for a talking point that quotes the viewer (the rule-based "throw this back at them" points)."""
+    found = []
+    for quote in re.findall(r'"([^"]{8,})"|\u201c([^\u201d]{8,})\u201d', point):
+        quote = quote[0] or quote[1]
+        for source in ("last_time", "this_match"):
+            if receipt := receipt_of(quote, source, watch):
+                found.append(receipt)
+                break
+    return found[:1]
+
+
 def club_news(dossier: news.Dossier, match: Match, team: str, world: World) -> str:
     """Quiet context: everything in the news about one club, so the rival can bring it up or defend it."""
     side = "home" if team == match.home else "away"
@@ -592,6 +645,7 @@ class Watch:
     last_steer: float = 0.0  # when the Referee last stepped in
     pacts: list = field(default_factory=list)  # bets, dares and promises made during the match, to call in later
     pact_chars: int = 0  # how much of the conversation the Ammo agent has read for bets
+    dig_receipt: dict | None = None  # the viewer's own words in the prepared dig, to show when it's thrown back
 
     def ms(self) -> int:
         """Milliseconds since the watch began: the one timeline everything is recorded and ordered on."""
@@ -611,17 +665,23 @@ class Watch:
     def note(self, kind: str, text: str) -> None:
         self.feed.append({"kind": kind, "text": text, "minute": self.minute})
 
-    def agent(self, agent_id: str, text: str, working: bool = True) -> None:
-        """Report what an agent is doing, for the agents strip under the pitch."""
-        self.agents[agent_id] = {"text": text, "working": working, "at": time.time()}
+    def agent(self, agent_id: str, text: str, working: bool = True, status: str = "") -> None:
+        """Report what an agent is doing, for the agents strip: a two-word status, large, and the detail."""
+        self.agents[agent_id] = {"text": text, "working": working, "at": time.time(),
+                                 "status": status or ("Working" if working else "")}
         self.publish({"type": "agent", "id": agent_id, **self.agents[agent_id]})
 
-    def moment(self, ev: MatchEvent, text: str) -> None:
-        """A moment on the match feed: what the Match agent saw."""
+    @staticmethod
+    def handoff(source: str, target: str = "rival") -> dict:
+        """One agent passing its work to the next, drawn on the demo view as a dot travelling between cards."""
+        return {"type": "handoff", "from": source, "to": target}
+
+    def moment(self, ev: MatchEvent, text: str, past: bool = False) -> None:
+        """A moment on the match feed: what the Match agent saw. ``past``: caught up on, not happening now."""
         if ev.type in BIG:
             self.moments.append(text)
         self.publish({"type": "moment", "minute": ev.minute, "text": text, "big": ev.type in BIG,
-                      "kind": ev.type.value, "team": ev.team, "elapsed": ev.elapsed})
+                      "kind": ev.type.value, "team": ev.team, "elapsed": ev.elapsed, "past": past})
 
     async def _send(self, event: dict) -> bool:
         if self.voice is None:
@@ -637,14 +697,14 @@ class Watch:
         now = time.monotonic()
         return now - self.last_rival >= RIVAL_DONE_S and now - self.last_user >= USER_DONE_S
 
-    async def _deliver(self, event: dict, urgent: bool, ttl: float | None) -> None:
+    async def _deliver(self, event: dict, urgent: bool, ttl: float | None, then: list[dict] | None = None) -> None:
         """Anything handed to the rival mid-sentence makes it drop the sentence, so it waits for a gap. Only a big
         match moment breaks in straight away. Something that's stale by the time there's a gap (a save from 20
         seconds ago) is dropped rather than said late."""
         if urgent or self.quiet():
-            await self._send(event)
+            await self._sent(event, then)
             return
-        self.outbox.append((event, time.monotonic() + ttl if ttl else None))
+        self.outbox.append((event, time.monotonic() + ttl if ttl else None, then))
         if not self.flusher or self.flusher.done():
             self.flusher = asyncio.create_task(self._flush())
 
@@ -655,27 +715,35 @@ class Watch:
                 continue
             waiting, self.outbox = self.outbox, []
             now = time.monotonic()
-            for event, expires in waiting:
+            for event, expires, then in waiting:
                 if expires is None or expires > now:
-                    await self._send(event)
+                    await self._sent(event, then)
+
+    async def _sent(self, event: dict, then: list[dict] | None) -> None:
+        """Send, and only once the rival really has it, show the hand-off (and any receipt) on the demo view."""
+        if await self._send(event):
+            for message in then or ():
+                self.publish(message)
 
     async def commentary(self, text: str, kind: str = "event", delegation_id: str | None = None,
-                         shown: str | None = None, urgent: bool = False, ttl: float | None = None) -> None:
+                         shown: str | None = None, urgent: bool = False, ttl: float | None = None,
+                         then: list[dict] | None = None) -> None:
         self.note(kind, shown or text)
         await self._deliver({"type": "session.commentary.append", "delegation_id": delegation_id, "content": text},
-                            urgent, ttl)
+                            urgent, ttl, then)
 
     async def instruct(self, text: str, kind: str = "referee") -> None:
         """A trusted change to how the rival behaves (the Referee stepping in), once its sentence is finished."""
         self.note(kind, text)
         await self._deliver({"type": "session.instructions.append", "delegation_id": None, "content": text},
-                            False, None)
+                            False, None, [self.handoff("referee")])
 
     async def thinking(self, text: str, kind: str = "context", delegation_id: str | None = None,
-                       shown: str | None = None, urgent: bool = False, ttl: float | None = None) -> None:
+                       shown: str | None = None, urgent: bool = False, ttl: float | None = None,
+                       then: list[dict] | None = None) -> None:
         self.note(kind, shown or text)
         await self._deliver({"type": "session.thinking.append", "delegation_id": delegation_id,
-                             "content": text[:1800]}, urgent, ttl)
+                             "content": text[:1800]}, urgent, ttl, then)
 
     def heard(self, who: str, text: str) -> None:
         self.last_voice = time.monotonic()
@@ -761,7 +829,8 @@ class Rival:
             return self.lobby_state(watch)
         watch.user_team = team
         watch.lobby = "rival"
-        watch.agent("host", f"Supporting {self.world.club(team).short_name}; offering rivals", working=False)
+        watch.agent("host", f"Supporting {self.world.club(team).short_name}; offering rivals", working=False,
+                    status="Team chosen")
         online = self.online(watch)
         club = self.world.club(team).short_name
         if previous_meeting(team, online[0].id):
@@ -888,9 +957,10 @@ class Rival:
             watch.phase = "prematch"
             watch.publish_state()
             dig = watch.talking_points.pop(0)
-            watch.agent("ammo", "Opening dig: " + dig[:90])
+            watch.agent("ammo", "Opening dig: " + dig[:90], working=False, status="Opening dig")
             await watch.commentary("You've just joined. Greet them in character, then get your first dig in: " + dig
-                                   + " The match hasn't kicked off yet; keep it short.", kind="prematch", urgent=True)
+                                   + " The match hasn't kicked off yet; keep it short.", kind="prematch", urgent=True,
+                                   then=[watch.handoff("ammo"), *receipts(dig, watch)])
         watch.director = asyncio.create_task(self._direct(watch, reader))
 
     def _catch_up(self, watch: Watch, reader: MatchReader) -> None:
@@ -901,7 +971,7 @@ class Rival:
         for ev in events[:watch.start]:
             update = reader.apply(ev)
             if ev.type in BIG and (text := describe(self.world, ev)):
-                watch.moment(ev, text)
+                watch.moment(ev, text, past=True)
         if update is None:
             return
         watch.minute, watch.snapshot = update.event.minute, update.snapshot
@@ -978,15 +1048,17 @@ class Rival:
     async def _news(self, watch: Watch) -> news.Dossier | None:
         if self.clients is None:
             return None
-        watch.agent("news", "Writing the fortnight's club news…")
+        watch.agent("news", "Writing the fortnight's club news…", status="Writing news")
         try:
             dossier = await news.write_news(self.world, self.match, self.clients)
         except Exception:
             log.exception("News agent failed; the build-up will use the last good stories")
-            watch.agent("news", "Couldn't write today; using the last good stories", working=False)
+            watch.agent("news", "Couldn't write today; using the last good stories", working=False,
+                        status="Using archive")
             return None
         lead = next((x for x in dossier.stories if x.kind == "transfer"), dossier.stories[0])
-        watch.agent("news", f"{len(dossier.stories)} stories, e.g. “{lead.headline}”", working=False)
+        watch.agent("news", f"{len(dossier.stories)} stories, e.g. “{lead.headline}”", working=False,
+                    status="News ready")
         return dossier
 
     async def _direct(self, watch: Watch, reader: MatchReader) -> None:
@@ -1047,24 +1119,27 @@ class Rival:
     async def _tell(self, watch: Watch, ev: MatchEvent, text: str, rival_team: str, pacing: Pacing) -> None:
         """Big moments break in; small ones wait for a gap in the conversation, or pass unremarked."""
         cue = feeling(ev, rival_team)
+        spotted = f"{ev.type.value.replace('_', ' ').capitalize()} spotted"
         if ev.type in BIG:
             watch.last_nudge = time.monotonic()
-            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
+            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}", status=spotted)
             settles = self._pacts_cue(watch) if ev.type in (EventType.HALF_TIME, EventType.FULL_TIME) else ""
-            await watch.commentary(f"{BREAK_IN}{text} {cue}{settles}", shown=text, urgent=True)
+            bets = [bet_receipt(watch)] if settles else []
+            await watch.commentary(f"{BREAK_IN}{text} {cue}{settles}", shown=text, urgent=True,
+                                   then=[watch.handoff("match"), *bets])
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
                 await self._fill(watch, pacing.holds.get(ev.type, 0), lull=999)
         elif watch.talking():
-            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
+            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}", status=spotted)
             await watch.thinking(f"(Just happened; mention it if there's a natural moment, or let it go.) {text}",
-                                 kind="aside", shown=text, ttl=20)
+                                 kind="aside", shown=text, ttl=20, then=[watch.handoff("match")])
             await self._fill(watch, pacing.small_hold, lull=999)
         else:
             watch.last_nudge = time.monotonic()
-            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}")
-            await watch.commentary(f"{text} {cue} Keep it short.", shown=text, ttl=12)
+            watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}", status=spotted)
+            await watch.commentary(f"{text} {cue} Keep it short.", shown=text, ttl=12, then=[watch.handoff("match")])
             await self._fill(watch, pacing.small_hold, lull=999)
 
     async def _sign_off(self, watch: Watch, rival_team: str) -> None:
@@ -1076,8 +1151,9 @@ class Rival:
         settle = (" First settle what you agreed during the match: " + " ".join(watch.pacts)
                   + " Make them pay up, or pay up yourself if it went their way.") if watch.pacts else ""
         await watch.commentary(f"Time to go.{settle} Sign off in character: {mood}, then ask if it's the same time "
-                               "next week. Two or three sentences, then say goodbye.", kind="sign_off")
-        watch.agent("rival", "Signing off: same time next week?", working=False)
+                               "next week. Two or three sentences, then say goodbye.", kind="sign_off",
+                               then=[bet_receipt(watch)] if watch.pacts else None)
+        watch.agent("rival", "Signing off: same time next week?", working=False, status="Signing off")
         await asyncio.sleep(15)  # let the goodbye be said
         await self.end(watch)
 
@@ -1095,13 +1171,15 @@ class Rival:
         if dossier:
             news.save(dossier, SAVED / news.LAST)  # the next build-up can fall back on these
         elif watch.news_task and not watch.news_task.done():
-            watch.agent("news", "Still writing; the rival starts with the last good stories", working=False)
+            watch.agent("news", "Still writing; the rival starts with the last good stories", working=False,
+                        status="Using archive")
         user, rival = self.world.club(watch.user_team), self.world.club(self.other(watch.user_team))
         watch.talking_points = ammo(self.world, self.match, rival, user, watch.dossier, watch.rematch)
-        watch.agent("ammo", f"{len(watch.talking_points)} digs lined up: news, the table, last time", working=False)
+        watch.agent("ammo", f"{len(watch.talking_points)} digs lined up: news, the table, last time", working=False,
+                    status="Digs loaded")
         for team in (watch.user_team, rival.id):
             await watch.thinking(club_news(watch.dossier, self.match, team, self.world), kind="news",
-                                 shown=f"{self.world.club(team).short_name} news")
+                                 shown=f"{self.world.club(team).short_name} news", then=[watch.handoff("news")])
         if self.agents:
             self._prepare_dig(watch)
             watch.refereeing = asyncio.create_task(self._referee(watch))
@@ -1127,13 +1205,17 @@ class Rival:
                 raise asyncio.CancelledError
             if now - watch.last_voice > lull and now - watch.last_nudge > gap:
                 watch.last_nudge = now
-                point = self._take_dig(watch)
+                point, receipt = self._take_dig(watch), watch.dig_receipt
+                watch.dig_receipt = None
                 if point is None:
                     point = (watch.talking_points.pop(0) if watch.talking_points else
                              self._situation(watch) + " Needle them about how it's going, or make a bold prediction.")
-                    watch.agent("ammo", point[:120], working=False)
+                    receipt = None
+                watch.agent("ammo", point[:120], working=False, status="Dig sent")
                 watch.used_digs.append(point)
-                await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point, ttl=8)
+                found = [receipt] if receipt else receipts(point, watch)
+                await watch.commentary("It's gone quiet. " + point, kind="nudge", shown=point, ttl=8,
+                                       then=[watch.handoff("ammo"), *found])
                 if self.agents:
                     self._prepare_dig(watch)
 
@@ -1229,7 +1311,7 @@ class Rival:
                                "scorers": [f"{self._player(g.player)} {g.minute}'" for g in t.goals]}
                       for t in (home, away)},
         }
-        watch.agent("match", "Reading the game…")
+        watch.agent("match", "Reading the game…", status="Reading game")
         watch.reading = asyncio.create_task(self._reading(watch, brief))
 
     async def _reading(self, watch: Watch, brief: dict) -> None:
@@ -1240,8 +1322,9 @@ class Rival:
             return
         if story and story != watch.storyline:
             watch.storyline = story
-            watch.agent("match", story, working=False)
-            await watch.thinking(f"The Match agent's read: {story}", kind="storyline", shown=story)
+            watch.agent("match", story, working=False, status="Storyline found")
+            await watch.thinking(f"The Match agent's read: {story}", kind="storyline", shown=story,
+                                 then=[watch.handoff("match")])
 
     def _prepare_dig(self, watch: Watch) -> None:
         """Have the Ammo agent choose the next dig and the Referee check it, ahead of the next lull."""
@@ -1259,7 +1342,7 @@ class Rival:
             "rival_said_recently": [text.strip()[-300:] for who, text in watch.transcript if who == "rival"][-4:],
             "used": watch.used_digs[-12:],
         }
-        watch.agent("ammo", "Choosing the next dig…")
+        watch.agent("ammo", "Choosing the next dig…", status="Choosing dig")
         try:
             choice = await self.agents.next_dig(brief)
         except Exception:
@@ -1267,18 +1350,20 @@ class Rival:
             return None
         if choice is None:
             return None
-        watch.agent("ammo", f"{choice.dig} ({choice.source.replace('_', ' ')})", working=False)
-        watch.agent("referee", "Checking the dig…")
+        watch.agent("ammo", f"{choice.dig} ({choice.source.replace('_', ' ')})", working=False, status="Dig ready")
+        watch.publish(watch.handoff("ammo", "referee"))
+        watch.agent("referee", "Checking the dig…", status="Checking dig")
         try:
             verdict = await self.agents.check(choice.dig, self._situation(watch))
         except Exception:
             log.exception("Referee check failed")
             return None
         if verdict.ok:
-            watch.agent("referee", "Dig checked: fine", working=False)
+            watch.agent("referee", "Dig checked: fine", working=False, status="Dig approved")
+            watch.dig_receipt = receipt_of(choice.quote, choice.source, watch)
             return choice.dig
         watch.agent("referee", f"Rewrote a dig: {verdict.reason}" if verdict.line else f"Blocked a dig: {verdict.reason}",
-                    working=False)
+                    working=False, status="Dig rewritten" if verdict.line else "Dig blocked")
         return verdict.line or None
 
     def _take_dig(self, watch: Watch) -> str | None:
@@ -1320,11 +1405,11 @@ class Rival:
         reason = booking.reason or "Language"
         watch.publish({"type": "card", "colour": "yellow", "reason": reason, "count": watch.cards})
         watch.agent("referee", f"Yellow card for the viewer: {reason}" + (" (another warning)" if second else ""),
-                    working=False)
+                    working=False, status="Yellow card!")
         await watch.commentary(
             f"The referee has just shown the user {'another' if second else 'a'} yellow card ({reason.lower()}). "
             "React in character, enjoying it: 'ooh, you've been booked!', then carry on. Don't repeat what they said.",
-            kind="card", ttl=15)
+            kind="card", ttl=15, then=[watch.handoff("referee")])
 
     async def _remember_pacts(self, watch: Watch) -> None:
         """The Ammo agent notes any bet, dare or promise the two of them have just made, and reminds the rival."""
@@ -1342,9 +1427,9 @@ class Rival:
         new = [p for p in pacts if p not in watch.pacts]
         watch.pacts = pacts
         for pact in new:
-            watch.agent("ammo", f"Noted a bet: {pact}", working=False)
+            watch.agent("ammo", f"Noted a bet: {pact}", working=False, status="Bet noted")
             await watch.thinking(f"Remember this, and call it in when the match settles it: {pact}", kind="pact",
-                                 shown=pact)
+                                 shown=pact, then=[watch.handoff("ammo")])
 
     def _pacts_cue(self, watch: Watch) -> str:
         return (" Don't forget what you agreed: " + " ".join(watch.pacts) + " Call it in now.") if watch.pacts else ""
@@ -1362,20 +1447,21 @@ class Rival:
                 watch.reviewed_chars = said
                 lines = [{"who": "user" if who == "user" else "rival", "said": text.strip()[-400:]}
                          for who, text in watch.transcript[-8:]]
-                watch.agent("referee", "Listening in on the conversation…")
+                watch.agent("referee", "Listening in on the conversation…", status="Listening in")
                 try:
                     verdict = await self.agents.review(lines, self._situation(watch))
                 except Exception:
                     log.exception("Referee review failed")
                     continue
                 if verdict.verdict == "fine" or not verdict.instruction:
-                    watch.agent("referee", "All good-natured", working=False)
+                    watch.agent("referee", "All good-natured", working=False, status="All good")
                     continue
                 if time.monotonic() - watch.last_steer < STEER_EVERY_S:
-                    watch.agent("referee", "Already stepped in; giving the rival time to adjust", working=False)
+                    watch.agent("referee", "Already stepped in; giving the rival time to adjust", working=False,
+                                status="Letting it settle")
                     continue
                 watch.last_steer = time.monotonic()
-                watch.agent("referee", f"Stepped in: {verdict.instruction}", working=False)
+                watch.agent("referee", f"Stepped in: {verdict.instruction}", working=False, status="Stepped in")
                 await watch.instruct(f"The Referee says: {verdict.instruction}")
         except asyncio.CancelledError:
             pass
@@ -1412,7 +1498,8 @@ class Rival:
                         lines = " / ".join(f"{who}: {text.strip()[-160:]}" for who, text in watch.transcript[-3:])
                         log.warning("Content filter stopped a line in %s. Last lines: %s", watch.id, lines)
                         watch.note("filter", "Azure's content filter stopped a line. The match carries on.")
-                        watch.agent("referee", "Azure AI Content Safety stopped a line; the match carries on")
+                        watch.agent("referee", "Azure AI Content Safety stopped a line; the match carries on",
+                                    status="Line stopped")
                     else:
                         log.warning("GPT-Live error in %s: %s", watch.id, err)
                 elif kind == "session.closed":

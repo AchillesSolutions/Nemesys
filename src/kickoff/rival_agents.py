@@ -37,7 +37,7 @@ AMMO_INSTRUCTIONS = """You are the Ammo agent for a rival football fan who watch
 
 The brief gives you the clubs (who the rival supports, who the user supports), the score and minute, the Match agent's latest read, candidate talking points (club news, the table, what the user said last time they watched together), what the user has said in this match, what the rival itself said recently, and the digs already used.
 
-Pick what will land best right now. Best of all is throwing the user's own words from this match back at them when the match has proved them wrong; then the live match situation; then news and history. Only ever quote "user_said_this_match" as the user's words: never put the rival's own lines in the user's mouth. If the user hasn't said anything worth quoting, don't pretend they did. Never repeat a used dig or a point the rival has just made. Write it as an instruction to the rival, one or two sentences, e.g. "Remind them they said Whitcombe would score a hat-trick, and ask how that's going."
+Pick what will land best right now. Best of all is throwing the user's own words from this match back at them when the match has proved them wrong; then the live match situation; then news and history. Only ever quote "user_said_this_match" as the user's words: never put the rival's own lines in the user's mouth. If the user hasn't said anything worth quoting, don't pretend they did. Never repeat a used dig or a point the rival has just made. Write it as an instruction to the rival, one or two sentences, e.g. "Remind them they said Whitcombe would score a hat-trick, and ask how that's going." If the dig throws the user's own words back at them (source "this_match", or "last_time" from a candidate that quotes them), put those words in "quote", exactly as they said them; otherwise leave "quote" empty.
 
 Football banter only: nothing about the user personally, no protected characteristics, no swearing, no violent words. Everything is fictional; never mention real clubs, players or the Premier League."""
 
@@ -66,6 +66,7 @@ class MatchRead(BaseModel):
 class DigChoice(BaseModel):
     dig: str
     source: Literal["this_match", "last_time", "news", "table", "match"]
+    quote: str = ""  # the viewer's own words the dig throws back, exactly as they said them; empty otherwise
 
 
 class Check(BaseModel):

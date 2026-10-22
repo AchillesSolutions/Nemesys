@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Directory, loadStatic } from "../api";
 import { Crest } from "../components/Crest";
 import { Fixture, Score } from "../components/Fixture";
 import type { MatchEvent, MatchInfo, Snapshot } from "../types";
-import { type AgentReport, AgentsFlow } from "./Agents";
+import { type AgentReport, AgentsFlow, type Handoff } from "./Agents";
+import { sound } from "../sound";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
 import { hostSay, listen, prepare } from "./lobby";
@@ -80,6 +81,9 @@ export default function RivalApp() {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [paused, setPaused] = useState(false);
   const [booking, setBooking] = useState<{ reason: string; count: number; key: number } | null>(null);
+  const [handoffs, setHandoffs] = useState<Handoff[]>([]);
+  const [receipt, setReceipt] = useState<{ quote: string; when: string; bet: boolean; key: number } | null>(null);
+  const [goal, setGoal] = useState<{ colour: string; key: number } | null>(null);
   const pausedAt = useRef(0);
   const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({}); // by line id
   const translating = useRef(new Set<number>());
@@ -151,10 +155,18 @@ export default function RivalApp() {
         setPhase(msg.phase);
         if (msg.agents) setReports(msg.agents);
       } else if (msg.type === "agent") {
-        setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at } }));
+        setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at, status: msg.status } }));
+      } else if (msg.type === "handoff") {
+        handOff(msg.from, msg.to);
+      } else if (msg.type === "receipt") {
+        // Demo only: the viewer's own words, on screen as the rival throws them back.
+        const key = Date.now() + Math.random();
+        setReceipt({ quote: msg.quote, when: msg.when, bet: msg.kind === "bet", key });
+        setTimeout(() => setReceipt((r) => (r?.key === key ? null : r)), 7000);
       } else if (msg.type === "moment") {
         setMoments((m) => [...m, { minute: msg.minute, text: msg.text, big: msg.big, kind: msg.kind,
           team: msg.team, elapsed: msg.elapsed }]);
+        if (msg.kind === "goal" && msg.big && !msg.past) scored(msg.team);
       } else if (msg.type === "event") {
         setPlay((p) => ({
           event: msg.event, snapshot: msg.snapshot, arrivedAt: performance.now(), nextGap: msg.next_gap,
@@ -162,6 +174,19 @@ export default function RivalApp() {
         }));
       }
     };
+  }
+
+  /** One agent passing its work to the next: a dot on the demo view. */
+  function handOff(from: string, to: string) {
+    setHandoffs((h) => [...h.slice(-7), { from, to, key: Date.now() + Math.random() }]);
+  }
+
+  /** A goal: the crowd roars (the listener hears it) and, for the demo, the screen flashes the scorers' colour. */
+  function scored(team: string) {
+    sound.roar();
+    const key = Date.now();
+    setGoal({ colour: data?.dir.colour(team) ?? "#ffffff", key });
+    setTimeout(() => setGoal((g) => (g?.key === key ? null : g)), 1600);
   }
 
   // -- the lobby -----------------------------------------------------------------------------------
@@ -197,6 +222,8 @@ export default function RivalApp() {
     setSeconds(0);
     setPhase("lobby");
     setEnglish({});
+    setHandoffs([]);
+    void sound.enable().catch(() => {}); // from the Start click: browsers only allow sound after one
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
@@ -290,6 +317,7 @@ export default function RivalApp() {
         await beforeJoin?.();
         if (!started.current) started.current = Date.now();
         setHost({ working: false, text: "Matched" });
+        if (!c.resumed) handOff("host", "rival");
         setStatus("live");
         setNotice(c.resumed ? "Reconnected. The rival's picking up where it left off." : null);
         await fetch(`/api/rival/${c.watchId}/opened?resumed=${c.resumed}`, { method: "POST" });
@@ -536,11 +564,24 @@ export default function RivalApp() {
         </div>
       )}
 
+      {receipt && (
+        <aside className="receipt" key={receipt.key} aria-live="polite">
+          <p className="receipt-label">Receipts</p>
+          {receipt.bet
+            ? <p className="receipt-quote">{receipt.quote}</p>
+            : <blockquote className="receipt-quote">{"\u201c"}{receipt.quote.replace(/^["\u201c]|["\u201d]$/g, "")}{"\u201d"}</blockquote>}
+          <p className="receipt-when">{receipt.bet ? "The bet: time to pay up" : `You, ${receipt.when.charAt(0).toLowerCase()}${receipt.when.slice(1)}`}</p>
+        </aside>
+      )}
+
+      {goal && <div className="goal-flash" key={goal.key} aria-hidden style={{ "--flash": goal.colour } as CSSProperties} />}
+
       <footer className="rival-agents">
-        <AgentsFlow reports={reports} now={now} beforeDone={live && phase !== "lobby"} active={{
-          host: host,
+        <AgentsFlow reports={reports} now={now} handoffs={handoffs} beforeDone={live && phase !== "lobby"} active={{
+          host: host && { ...host, status: host.working && host.text !== "Listening" ? "Talking" : host.text },
           match: lastMoment && reports.match === undefined ? { working: false, text: `${lastMoment.minute}\u2019 ${lastMoment.text}` } : undefined,
-          rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening" } : undefined,
+          rival: live ? { working: rivalSpeaking, text: rivalSpeaking ? "Talking" : "Listening",
+                          status: rivalSpeaking ? "Talking" : "Listening" } : undefined,
         }} />
       </footer>
     </div>
