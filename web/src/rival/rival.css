@@ -104,7 +104,7 @@
 .opening-sub { color: var(--muted); max-width: 46ch; }
 .opening-choices { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
 .opening-choice {
-  display: grid; gap: 4px; justify-items: center; width: 230px; padding: 14px 24px; border-radius: 14px; cursor: pointer;
+  display: grid; gap: 4px; justify-items: center; width: 200px; padding: 12px 24px; border-radius: 14px; cursor: pointer;
   text-align: center; background: var(--glass-strong); border: 1px solid var(--faint);
 }
 .opening-choice b { font-family: var(--display); font-stretch: 80%; font-size: 1.6rem; text-transform: uppercase; }
@@ -330,3 +330,4 @@
 @media (max-height: 960px) { .memory-text { -webkit-line-clamp: 1; } .memory-item { padding: 5px 10px; } }
 /* Testing only (?sounds=1): try each of the crowd's reactions. */
 .sound-test { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }
+.opening-note { color: var(--muted); font-size: .84rem; margin-top: -4px; }

@@ -564,9 +564,10 @@ export default function RivalApp() {
             {(REPLAY || DRY) && <p className="curtain-mode">{REPLAY ? "Replay of the last recorded session (free)" : "Dry run: text stand-in for the rival's voice"}</p>}
             <div className="opening-choices">
               <button className="opening-choice primary" onClick={() => void start()}>
-                <b>Connect</b><span>You'll need speakers and a microphone, or similar</span>
+                <b>Connect</b>
               </button>
             </div>
+            <p className="opening-note">You'll need speakers and a microphone, or similar</p>
             {SOUND_TEST && (
               <div className="sound-test" aria-label="Try the crowd (testing)">
                 {([["Murmur", () => crowd.murmurAt(0.05)], ["Cheer", () => crowd.cheer()], ["Away end", () => crowd.farCheer()],
