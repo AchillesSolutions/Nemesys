@@ -729,3 +729,24 @@ def test_a_bet_is_shown_two_way_in_the_viewers_words():
                    "the rival wears a Kilburn Athletic shirt.", "Prediction: the user said Kilburn will finish first."]
     assert bet_receipt(watch)["quote"] == ("If Harbour City win, you wear a Harbour City shirt next week; if Kilburn "
                                            "Athletic win, Dez wears a Kilburn Athletic shirt."), "the bet, not the prediction"
+
+
+def test_spending_guards_limit_sessions_and_daily_minutes(world, match, monkeypatch):
+    """On a public deployment: only so many rivals at once, and only so many minutes a day. A reconnect mid-match
+    is always allowed."""
+    from kickoff.rival import RivalUnavailable
+    monkeypatch.setenv("KICKOFF_MAX_VOICES", "1")
+    monkeypatch.setenv("KICKOFF_DAILY_VOICE_MINUTES", "10")
+    rival = Rival(world, match, endpoint="https://example.invalid", key="test")
+    busy = Watch("a", {"kil": 0, "hbr": 0}, voice=Voice("v1", FakeSideband(), opened=0.0), voices=1)
+    rival.watches[busy.id] = busy
+    new = Watch("b", {"kil": 0, "hbr": 0})
+    with pytest.raises(RivalUnavailable, match="busy"):
+        rival._check_limits(new)
+    rival._check_limits(busy)  # a reconnect: fine
+    busy.voice = None
+    rival.voice_s_today = 10 * 60
+    with pytest.raises(RivalUnavailable, match="today's minutes"):
+        rival._check_limits(new)
+    rival.voice_day = "2000-01-01"  # a new day: the minutes start again
+    rival._check_limits(new)

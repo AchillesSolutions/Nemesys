@@ -706,6 +706,7 @@ class Voice:
     id: str
     sideband: websockets.ClientConnection
     watcher: asyncio.Task | None = None
+    opened: float | None = None  # when it started (monotonic), so its seconds count towards the daily limit
 
 
 @dataclass
@@ -942,6 +943,10 @@ class Rival:
         self.world, self.match, self.clients = world, match, clients
         self.agents = RivalAgents(clients) if clients else None
         self.watches: dict[str, Watch] = {}
+        # Spending guards for a public deployment: GPT-Live is billed by the second. 0 means no limit.
+        self.max_voices = int(os.getenv("KICKOFF_MAX_VOICES", "0"))
+        self.daily_voice_s = float(os.getenv("KICKOFF_DAILY_VOICE_MINUTES", "0")) * 60
+        self.voice_day, self.voice_s_today = time.strftime("%Y-%m-%d"), 0.0
 
     @property
     def available(self) -> bool:
@@ -1135,6 +1140,7 @@ class Rival:
         watch = self.watches.get(watch_id)
         if watch is None:
             raise RivalUnavailable("That match has finished")
+        self._check_limits(watch)
         persona = watch.persona
         voice = voice if voice in VOICES else persona.voice if persona else self.default_voice
         accent = accent if accent in ACCENTS else persona.accent if persona else self.default_accent
@@ -1161,10 +1167,36 @@ class Rival:
         watch.voices += 1
         watch.voice_began_ms = watch.ms()
         watch.voice = Voice(session_id, sideband)
+        watch.voice.opened = time.monotonic()
         watch.voice_lost = None
         watch.voice.watcher = asyncio.create_task(self._listen(watch, watch.voice))
         watch.publish_state()
         return watch, answer, watch.voices > 1
+
+    def _check_limits(self, watch: Watch) -> None:
+        """Before a voice session starts: how many are running, and how many minutes have been used today. A
+        reconnect to a match already under way is always allowed: the viewer is mid-match."""
+        if watch.voices:
+            return
+        live = [w for w in self.watches.values() if w.voice is not None and w.voice.id != "dry-run"]
+        if self.max_voices and len(live) >= self.max_voices:
+            raise RivalUnavailable("Every rival is busy right now: please try again in a few minutes.")
+        if self.daily_voice_s:
+            self._new_day()
+            running = sum(time.monotonic() - getattr(w.voice, "opened", time.monotonic()) for w in live)
+            if self.voice_s_today + running >= self.daily_voice_s:
+                raise RivalUnavailable("Nemesys has used today's minutes: please come back tomorrow.")
+
+    def _new_day(self) -> None:
+        if (today := time.strftime("%Y-%m-%d")) != self.voice_day:
+            self.voice_day, self.voice_s_today = today, 0.0
+
+    def _count_voice(self, voice: Voice) -> None:
+        """A voice session has closed: its seconds count towards today's."""
+        if opened := getattr(voice, "opened", None):
+            self._new_day()
+            self.voice_s_today += time.monotonic() - opened
+            voice.opened = None
 
     async def opened(self, watch: Watch, resumed: bool) -> None:
         """The rival's voice is connected: join the viewer and start the match, or pick back up after a drop."""
@@ -1841,6 +1873,7 @@ class Rival:
         finally:
             with suppress(Exception):
                 await voice.sideband.close()
+            self._count_voice(voice)
             if watch.voice is voice:
                 watch.voice = None
                 watch.voice_lost = time.monotonic()

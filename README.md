@@ -138,6 +138,13 @@ You'll need speakers and a microphone (headphones are best). For working on the 
 - `/?dry=1&auto=1`: the real match and agents, with a text stand-in for the rival's voice.
 - `/?replay=last&auto=1`: a recorded session played back exactly, with no model calls at all.
 
+### On Azure
+
+The live demo runs on **Azure Container Apps** (one container: the web page and the server), built with
+`az acr build` from the `Dockerfile`. Secrets are Container Apps secrets. Because GPT-Live is billed by the second,
+the deployment sets two guards: `KICKOFF_MAX_VOICES` (rivals talking at once) and `KICKOFF_DAILY_VOICE_MINUTES`
+(minutes of voice per day); a reconnect mid-match is always allowed.
+
 Tests run offline, with no keys: `pytest` (Python) and `cd web && npm test` (web). The Python package is called
 `kickoff`, the project's working name.
 
