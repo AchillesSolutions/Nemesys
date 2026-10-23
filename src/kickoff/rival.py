@@ -49,8 +49,8 @@ import httpx
 import websockets
 
 from . import lobby_lines as lines
-from . import news, safety
-from .agents.llm import ClientFactory
+from . import news, safety, tracing
+from .agents.llm import ClientFactory, model_for
 from .data_store import DATA_DIR
 from .match_reader import MatchReader, event_message
 from .models import Club, EventType, Match, MatchEvent, Position, World
@@ -476,6 +476,13 @@ def receipt_of(quote: str, source: str, watch: "Watch") -> dict | None:
             "when": "Earlier this match" if source == "this_match" else (watch.rematch or {}).get("when", "Last time")}
 
 
+async def traced(watch: "Watch", name: str, role: str | None, work):
+    """Run one piece of an agent's work as a step in the match's trace, labelled with the model it runs on."""
+    with tracing.step(watch.span, name, **{"nemesys.agent": name.split(":")[0],
+                                           "gen_ai.request.model": model_for(role) if role else None}):
+        return await work
+
+
 def in_your_words(text: str, watch: "Watch") -> str:
     """A bet as the viewer would put it: the Ammo agent notes it about "the user" and "the rival"."""
     name = watch.persona.name if watch.persona else "your rival"
@@ -707,6 +714,7 @@ class Voice:
     sideband: websockets.ClientConnection
     watcher: asyncio.Task | None = None
     opened: float | None = None  # when it started (monotonic), so its seconds count towards the daily limit
+    span: object | None = None  # the voice session, in the match's trace
 
 
 @dataclass
@@ -770,6 +778,7 @@ class Watch:
     keeping: asyncio.Task | None = None
     keepsake: dict | None = None  # the Memory Keeper's notes on the viewer, saved for next time
     report: dict | None = None  # the match report, at full time
+    span: object | None = None  # this match's trace: every agent's work hangs off it
     question_at: float = 0.0  # when the viewer last asked the rival something...
     answered: int = 0  # ...and how many words the rival has said since: a question isn't answered by "ooh, good one"
     memory: list = field(default_factory=list)  # what the rival remembers about this viewer, for the demo view
@@ -967,6 +976,7 @@ class Rival:
                       mode=mode if mode in PACING else "match",
                       start=start_index(self.match.events, minute) if 0 < minute <= 95 else 0)
         self.watches[watch.id] = watch
+        watch.span = tracing.start_watch(watch.id, watch.mode)
         watch.news_task = asyncio.create_task(self._news(watch))
         return watch
 
@@ -1168,6 +1178,10 @@ class Rival:
         watch.voice_began_ms = watch.ms()
         watch.voice = Voice(session_id, sideband)
         watch.voice.opened = time.monotonic()
+        watch.voice.span = tracing.tracer.start_span(
+            "The Rival: GPT-Live voice session", context=tracing.trace.set_span_in_context(watch.span) if watch.span else None,
+            attributes={"gen_ai.request.model": self.model, "nemesys.voice_session": session_id,
+                        "nemesys.resumed": watch.voices > 1})
         watch.voice_lost = None
         watch.voice.watcher = asyncio.create_task(self._listen(watch, watch.voice))
         watch.publish_state()
@@ -1291,6 +1305,9 @@ class Rival:
         watch.publish({"type": "ended"})  # the screen goes to Game Over, voice or no voice (a dry run has none)
         self.watches.pop(watch.id, None)
         self._save(watch)
+        if watch.span is not None:
+            watch.span.set_attribute("nemesys.result", self._situation(watch))
+            watch.span.end()
 
     async def event(self, watch: Watch, kind: str, team: str) -> str:
         """A made-up moment fired from the test bench. Returns the text sent."""
@@ -1316,7 +1333,8 @@ class Rival:
             return None
         watch.agent("news", "Writing the fortnight's club news…", status="Writing news")
         try:
-            dossier = await news.write_news(self.world, self.match, self.clients)
+            dossier = await traced(watch, "News Agent: write the club news", "news",
+                                   news.write_news(self.world, self.match, self.clients))
         except Exception:
             log.exception("News agent failed; the build-up will use the last good stories")
             watch.agent("news", "Couldn't write today; using the last good stories", working=False,
@@ -1435,7 +1453,7 @@ class Rival:
                  "stats": self._stats(watch).strip(), "bets": watch.pacts}
         watch.agent("match", "Writing your match report…", status="Writing report")
         try:
-            report = await self.agents.report(brief)
+            report = await traced(watch, "Match Agent: write the match report", "match", self.agents.report(brief))
         except Exception:
             log.exception("Match report failed")
             return
@@ -1457,7 +1475,8 @@ class Rival:
                                   for who, text in watch.transcript][-40:]}
         watch.agent("ammo", "The Memory Keeper (Phi-4) is noting what to remember about you", status="Remembering")
         try:
-            keepsake = await asyncio.wait_for(self.agents.keep(brief), 40)
+            keepsake = await traced(watch, "Memory Keeper: remember the viewer", "keeper",
+                                    asyncio.wait_for(self.agents.keep(brief), 40))
         except Exception:
             log.exception("Memory Keeper failed")
             return
@@ -1667,7 +1686,7 @@ class Rival:
 
     async def _reading(self, watch: Watch, brief: dict) -> None:
         try:
-            story = await self.agents.read_match(brief)
+            story = await traced(watch, "Match Agent: read the game", "match", self.agents.read_match(brief))
         except Exception:
             log.exception("Match agent failed")
             return
@@ -1696,7 +1715,7 @@ class Rival:
         }
         watch.agent("ammo", "Choosing the next dig…", status="Choosing dig")
         try:
-            choice = await self.agents.next_dig(brief)
+            choice = await traced(watch, "Ammo Agent: choose the next dig", "ammo", self.agents.next_dig(brief))
         except Exception:
             log.exception("Ammo agent failed")
             return None
@@ -1706,7 +1725,8 @@ class Rival:
         watch.publish(watch.handoff("ammo", "referee"))
         watch.agent("referee", "Checking the dig…", status="Checking dig")
         try:
-            verdict = await self.agents.check(choice.dig, self._situation(watch))
+            verdict = await traced(watch, "Referee: check the dig", "referee",
+                                   self.agents.check(choice.dig, self._situation(watch)))
         except Exception:
             log.exception("Referee check failed")
             return None
@@ -1748,12 +1768,13 @@ class Rival:
             return
         # Two stages: Azure AI Content Safety stops anything severe at once; the model judges banter from abuse.
         watch.agent("referee", f"Checking what you said: {said[:80]}", status="Checking line")
-        rating = None if self.agents.offline else await safety.rate(said)
+        rating = None if self.agents.offline else await traced(
+            watch, "Referee: Azure AI Content Safety gate", None, safety.rate(said))
         if rating and rating.severe:
             reason = rating.reason
         else:
             try:
-                booking = await self.agents.booking(said)
+                booking = await traced(watch, "Referee: card or banter?", "referee", self.agents.booking(said))
             except Exception:
                 log.exception("Referee booking check failed")
                 return
@@ -1780,7 +1801,8 @@ class Rival:
         lines = [{"who": "user" if who == "user" else "rival", "said": text.strip()[-400:]}
                  for who, text in watch.transcript[-8:]]
         try:
-            pacts = await self.agents.pacts(watch.pacts, lines, self._sides(watch) if watch.user_team else None)
+            pacts = await traced(watch, "Memory: note bets and predictions", "memory",
+                                 self.agents.pacts(watch.pacts, lines, self._sides(watch) if watch.user_team else None))
         except Exception:
             log.exception("Ammo agent's bet memory failed")
             return
@@ -1811,7 +1833,8 @@ class Rival:
                          for who, text in watch.transcript[-8:]]
                 watch.agent("referee", "Listening in on the conversation…", status="Listening in")
                 try:
-                    verdict = await self.agents.review(lines, self._situation(watch))
+                    verdict = await traced(watch, "Referee: review the conversation", "referee",
+                                           self.agents.review(lines, self._situation(watch)))
                 except Exception:
                     log.exception("Referee review failed")
                     continue
@@ -1874,6 +1897,9 @@ class Rival:
             with suppress(Exception):
                 await voice.sideband.close()
             self._count_voice(voice)
+            if voice.span is not None:
+                voice.span.set_attribute("nemesys.closed", reason)
+                voice.span.end()
             if watch.voice is voice:
                 watch.voice = None
                 watch.voice_lost = time.monotonic()

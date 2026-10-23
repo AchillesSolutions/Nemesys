@@ -34,7 +34,9 @@ def main() -> None:
     elif args.command == "serve":
         import uvicorn
 
+        from . import tracing
         from .server import create_app
+        tracing.setup()
         uvicorn.run(create_app(), host=args.host, port=args.port)
 
 
