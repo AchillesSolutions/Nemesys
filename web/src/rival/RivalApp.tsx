@@ -225,6 +225,12 @@ export default function RivalApp() {
         if (msg.report) setReport(msg.report);
       } else if (msg.type === "agent") {
         setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at, status: msg.status } }));
+      } else if (msg.type === "ended") {
+        // The match is over and the server has closed the watch: Game Over, without trying to reconnect.
+        stopping.current = true;
+        stopListening.current?.();
+        call.current?.close();
+        setStatus("ended");
       } else if (msg.type === "report") {
         const { type: _, ...r } = msg;
         setReport(r as MatchReport);

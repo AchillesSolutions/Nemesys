@@ -37,7 +37,7 @@ export function ReportCard({ report }: { report: MatchReport }) {
       {report.bets.length > 0 && (
         <ul className="report-bets">
           {report.bets.map((b, i) => (
-            <li key={i}><span className="report-bet-tag">Bet</span><Both className="report-bet" text={b} en={report.bets_en[i] ?? ""} /></li>
+            <li key={i}><span className="report-bet-tag">Settled</span><Both className="report-bet" text={b} en={report.bets_en[i] ?? ""} /></li>
           ))}
         </ul>
       )}

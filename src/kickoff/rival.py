@@ -1244,6 +1244,7 @@ class Rival:
         if watch.voice:
             with suppress(Exception):
                 await watch.voice.sideband.send(json.dumps({"type": "session.close"}))
+        watch.publish({"type": "ended"})  # the screen goes to Game Over, voice or no voice (a dry run has none)
         self.watches.pop(watch.id, None)
         self._save(watch)
 

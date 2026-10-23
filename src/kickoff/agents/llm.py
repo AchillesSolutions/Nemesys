@@ -40,7 +40,7 @@ ROLE_MODELS = {
     "match": "gpt-5.5",       # reads the stats into a storyline: the only candidates with every fact right
     "ammo": "gpt-5.4-mini",   # picks the next dig: wit and judgement, fast enough for a lull in conversation
     "memory": "gpt-5.4-nano", # notes bets and predictions: structured extraction, run often
-    "referee": "gpt-5.4-nano",  # banter or abuse, after Content Safety's gate: on every line the viewer says
+    "referee": "gpt-5.4-mini",  # banter or abuse, after Content Safety's gate: on every line, so speed counts
 }
 REASONING_MODEL = re.compile(r"^(gpt-5|o\d)", re.IGNORECASE)
 

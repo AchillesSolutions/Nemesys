@@ -32,7 +32,7 @@ export const BEFORE: AgentInfo[] = [
 export const DURING: AgentInfo[] = [
   { id: "match", name: "Match Agent", role: "Reads the stats, spots the storylines", model: "gpt-5.5", idle: "Watching the match", resting: "Watching" },
   { id: "ammo", name: "Ammo Agent", role: "Picks the next dig, remembers bets", model: "gpt-5.4-mini + gpt-5.4-nano", idle: "Digs in reserve", resting: "Standing by" },
-  { id: "referee", name: "Referee", role: "Checks digs, keeps it good-natured", model: "Azure AI Content Safety + gpt-5.4-nano", idle: "All good-natured so far", resting: "All good" },
+  { id: "referee", name: "Referee", role: "Checks digs, keeps it good-natured", model: "Azure AI Content Safety + gpt-5.4-mini", idle: "All good-natured so far", resting: "All good" },
   { id: "rival", name: "The Rival", role: "Watches with you, talks back", model: "GPT-Live (full duplex)", idle: "Listening", resting: "Listening" },
 ];
 
