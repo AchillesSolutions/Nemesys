@@ -567,6 +567,28 @@ def test_the_referee_books_the_viewer_for_abuse_but_not_for_banter(world, match,
     assert watch.agents["referee"]["text"].startswith("Yellow card for the viewer")
 
 
+def test_the_referee_hears_mandarin_too(world, match, monkeypatch):
+    """Chinese has no spaces between words: a short line in Mandarin must still reach the Referee."""
+    monkeypatch.setattr(rival_module, "USER_SETTLE_S", 0.01)
+    heard = []
+
+    async def run():
+        rival = Rival(world, match, offline_clients(), endpoint="https://example.invalid", key="test")
+        watch = Watch("w", {"kil": 0, "hbr": 0}, voice=Voice("v", FakeSideband()), rehearsal=True)
+        rival.watches[watch.id] = watch
+
+        async def booking(said):
+            heard.append(said)
+            return type("Booking", (), {"card": False, "reason": ""})()
+        monkeypatch.setattr(rival.agents, "booking", booking)
+        for said in ("操你的", "哈"):
+            rival.pretend(watch, said)
+            await asyncio.sleep(0.3)
+
+    asyncio.run(run())
+    assert heard == ["操你的"], "a real line is checked; a single sound isn't"
+
+
 
 def test_nothing_new_reaches_the_rival_mid_sentence_except_a_big_moment(world, match):
     """Anything handed to GPT-Live while it's talking makes it drop its sentence: it waits for a gap."""

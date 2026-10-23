@@ -1612,7 +1612,8 @@ class Rival:
         except asyncio.CancelledError:
             return  # they're still talking
         said, watch.user_pending = watch.user_pending.strip(), ""
-        if len(said.split()) < 2:
+        # A stray noise isn't worth checking. Chinese has no spaces, so there it's characters that count.
+        if len(said.split()) < 2 and len(re.findall(r"[一-鿿]", said)) < 2:
             return
         try:
             booking = await self.agents.booking(said)
