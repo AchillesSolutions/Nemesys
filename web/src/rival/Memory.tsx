@@ -4,9 +4,9 @@
  * from it (the memory lights up and a dot flies out, through the Ammo agent, to the rival). Saved for next time.
  */
 
-export interface MemoryItem { id: number; kind: "last_time" | "bet" | "you_said"; text: string }
+export interface MemoryItem { id: number; kind: "last_time" | "bet" | "prediction" | "you_said"; text: string }
 
-const KIND: Record<MemoryItem["kind"], string> = { last_time: "Last time", bet: "Bet", you_said: "You said" };
+const KIND: Record<MemoryItem["kind"], string> = { last_time: "Last time", bet: "Bet", prediction: "Prediction", you_said: "You said" };
 const SHOWN = 4;
 
 const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round" } as const;
@@ -36,7 +36,7 @@ export function MemoryBox({ items, recalling }: { items: MemoryItem[]; recalling
           {shown.map((m) => (
             <li key={m.id} className={`memory-item memory-${m.kind} ${m.id === recalling ? "is-recalled" : ""}`}>
               <span className="memory-kind">{KIND[m.kind]}</span>
-              <span className="memory-text">{m.kind === "bet" ? m.text : `“${m.text.replace(/^["“]|["”]$/g, "")}”`}</span>
+              <span className="memory-text">{m.kind === "bet" || m.kind === "prediction" ? m.text : `“${m.text.replace(/^["“]|["”]$/g, "")}”`}</span>
             </li>
           ))}
         </ul>

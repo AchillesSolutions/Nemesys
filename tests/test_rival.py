@@ -714,3 +714,12 @@ def test_memory_is_noted_once_and_recalled_with_a_receipt():
     published = [stream.get_nowait() for _ in range(stream.qsize())]
     assert {"type": "handoff", "from": "ammo", "to": "memory"} in published
     assert sum(m["type"] == "memory" and m["op"] == "add" for m in published) == 1
+
+
+def test_a_bet_is_shown_two_way_in_the_viewers_words():
+    from kickoff.rival import bet_receipt
+    watch = Watch("w", {"kil": 0, "hbr": 0}, persona=next(p for p in ROSTER if p.id == "dez"))
+    watch.pacts = ["Bet: if Harbour City win, the user wears a Harbour City shirt next week; if Kilburn Athletic win, "
+                   "the rival wears a Kilburn Athletic shirt.", "Prediction: the user said Kilburn will finish first."]
+    assert bet_receipt(watch)["quote"] == ("If Harbour City win, you wear a Harbour City shirt next week; if Kilburn "
+                                           "Athletic win, Dez wears a Kilburn Athletic shirt."), "the bet, not the prediction"

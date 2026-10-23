@@ -161,16 +161,17 @@ class Pacing:
     greeting: float         # the rival's greeting and first dig, before kick-off
     after: float            # post-match banter before the watch winds down
     max_s: float            # the longest a watch at this pace may run, a safety net for spend
+    settle_s: float = 0     # after a big moment, wait up to this long for the rival to finish reacting
 
 
 # The match in about eight minutes: quiet play at 15x leaves 25-50 seconds of real conversation between big
 # moments, which is what banter needs. The default, and what judges get.
 MATCH = Pacing(quiet=15, build=2.5, build_s=10, small_hold=1.2, tells_small=True, half_time=16, greeting=20, after=40,
-               max_s=18 * 60, holds={EventType.GOAL: 6.5, EventType.GOAL_DISALLOWED: 6.5, EventType.RED_CARD: 5,
+               settle_s=20, max_s=18 * 60, holds={EventType.GOAL: 6.5, EventType.GOAL_DISALLOWED: 6.5, EventType.RED_CARD: 5,
                                      EventType.VAR_CHECK: 4, EventType.PENALTY: 2.5})
 # Real time, as the product would run alongside a live broadcast.
 LIVE = Pacing(quiet=1, build=1, build_s=0, small_hold=0, tells_small=True, half_time=15 * 60, greeting=45, after=120,
-              max_s=120 * 60, holds={})
+              settle_s=20, max_s=120 * 60, holds={})
 # About two and a half minutes, for quick testing only: far too fast for real banter.
 SHORT = Pacing(quiet=240, build=3, build_s=6, small_hold=0, tells_small=False, half_time=3, greeting=10, after=20,
                max_s=8 * 60, holds={EventType.GOAL: 4, EventType.GOAL_DISALLOWED: 4, EventType.RED_CARD: 4,
@@ -302,7 +303,7 @@ The match: {home.name} (home) against {away.name} at {home.stadium}.
 
 {setup}
 
-Personality: cheeky, quick, and properly cocky when your side is on top: rub it in, predict a hammering, and offer playful bets ("double or nothing: if we score again, you admit we're the better team", "if your lot don't score in the next ten minutes, you're wearing our shirt next week"). Bets are for fun, a forfeit or a dare, never money. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep it to one or two sentences at a time, like real banter.
+Personality: cheeky, quick, and properly cocky when your side is on top: rub it in, predict a hammering, and offer playful bets. A bet is always two-way and fair: one forfeit, paid by whoever loses, and you say both sides ("whoever loses wears the other's shirt next week", "if we win, you sing our song; if you win, I'll sing yours"). If they offer a one-sided bet, make it two-way and shake on it. Bets are for fun, a forfeit or a dare, never money. When your side goes behind you get nervous, make excuses (the referee, the pitch, bad luck), and only concede grudgingly. Keep it to one or two sentences at a time, like real banter.
 
 Delivery: speak in natural, flowing sentences, the way people actually talk, each one said in a single breath. Run your words together and keep the rhythm going: "Nah mate, that's never going in!", not "Nah. Mate. That's never. Going in." Never pause between words or put a stop in the middle of a sentence.
 
@@ -461,6 +462,8 @@ def receipt_of(quote: str, source: str, watch: "Watch") -> dict | None:
         said = list((watch.rematch or {}).get("user_said", []))
     if (line := _said_by_user(quote, said)) is None:
         return None
+    if QUESTION.search(line) or len(_words(line)) < 6:
+        return None  # "are we getting a pen?" is no receipt: only a claim worth throwing back
     exact = quote.strip().strip('"\u201c\u201d')
     return {"type": "receipt", "quote": exact if len(exact) <= len(line) + 5 else line.strip(),
             "when": "Earlier this match" if source == "this_match" else (watch.rematch or {}).get("when", "Last time")}
@@ -473,12 +476,17 @@ def in_your_words(text: str, watch: "Watch") -> str:
     bet = re.sub(r"\bthe user\b", "you", bet, flags=re.I)
     bet = re.sub(r"\bthe rival's\b", f"{name}'s", bet, flags=re.I)
     bet = re.sub(r"\bthe rival\b", name, bet, flags=re.I)
+    # "the user wears" becomes "you wear", not "you wears"
+    bet = re.sub(r"\byou (wears|is|has|does|says|sings|admits|buys|owes|pays)\b",
+                 lambda m: "you " + {"is": "are", "has": "have", "does": "do"}.get(m[1], m[1][:-1]), bet)
     return bet[:1].upper() + bet[1:]
 
 
 def bet_receipt(watch: "Watch") -> dict:
     """The latest bet, in the viewer's terms."""
-    return {"type": "receipt", "quote": in_your_words(watch.pacts[-1], watch), "when": "The bet", "kind": "bet"}
+    bets = [p for p in watch.pacts if p.lower().startswith("bet")] or watch.pacts
+    return {"type": "receipt", "quote": in_your_words(re.sub(r"^(bet|prediction):\s*", "", bets[-1], flags=re.I), watch),
+            "when": "The bet", "kind": "bet"}
 
 
 def with_memory(messages: list[dict], watch: "Watch") -> list[dict]:
@@ -1340,7 +1348,9 @@ class Rival:
             if self.agents and watch.snapshot:
                 self._read(watch, None, ev)
             if not self._goal_follows(ev):  # a penalty's reaction can wait for the goal
+                told = time.monotonic()
                 await self._fill(watch, pacing.holds.get(ev.type, 0), lull=999)
+                await self._settle(watch, told, pacing.settle_s)
         elif watch.talking():
             watch.agent("match", f"{ev.minute}\u2019 {ev.type.value.replace('_', ' ')}", status=spotted)
             await watch.thinking(f"(Just happened; mention it if there's a natural moment, or let it go.) {text}",
@@ -1366,6 +1376,20 @@ class Rival:
         watch.agent("rival", "Signing off: same time next week?", working=False, status="Signing off")
         await asyncio.sleep(15)  # let the goodbye be said
         await self.end(watch)
+
+    async def _settle(self, watch: Watch, told: float, most: float) -> None:
+        """After a big moment, the match waits for the rival to finish reacting before it moves on, up to a point.
+        Late on, the big moments come thick and fast; without this the rival falls behind and celebrates a goal
+        VAR has already ruled out. The clock on screen waits at the next moment meanwhile."""
+        end = time.monotonic() + most
+        while (now := time.monotonic()) < end and watch.voice is not None:
+            await asyncio.sleep(0.25)
+            if watch.paused:
+                end += 0.25
+                continue
+            started = watch.last_rival > told
+            if (started and watch.quiet()) or (not started and now - told > 8):
+                return
 
     def _goal_follows(self, ev: MatchEvent) -> bool:
         return ev.type is EventType.PENALTY and any(
@@ -1443,7 +1467,18 @@ class Rival:
                  f"{self.world.club(away).short_name}")
         where = {"lobby": "before kick-off", "prematch": "the pre-match build-up, kick-off any second",
                  "half_time": "half-time", "full_time": "full-time"}.get(watch.phase, f"minute {watch.minute}")
-        return f"Right now it's {where}, and the score is {score}."
+        return f"Right now it's {where}, and the score is {score}.{self._stats(watch)}"
+
+    def _stats(self, watch: Watch) -> str:
+        """The numbers a fan glances at: what the rival says when it's asked about possession, shots or cards."""
+        snap = watch.snapshot
+        if snap is None:
+            return ""
+        def side(t) -> str:
+            men = f", down to {len(t.players_on_pitch)} men" if len(t.players_on_pitch) < 11 else ""
+            return (f"{self.world.club(t.id).short_name} {round(t.possession_pct)}% possession, {t.shots} shots "
+                    f"({t.shots_on_target} on target), {len(t.booked)} booked{men}")
+        return f" Stats: {side(snap.home)}; {side(snap.away)}."
 
     # -- replay and dry run: the whole experience without paying for a voice --------------------------
 
@@ -1650,7 +1685,8 @@ class Rival:
         watch.pacts = pacts
         for pact in new:
             watch.agent("ammo", f"Noted a bet: {pact}", working=False, status="Bet noted")
-            watch.remember("bet", in_your_words(pact, watch))
+            kind = "prediction" if pact.lower().startswith("prediction") else "bet"
+            watch.remember(kind, in_your_words(re.sub(r"^(bet|prediction):\s*", "", pact, flags=re.I), watch))
             await watch.thinking(f"Remember this, and call it in when the match settles it: {pact}", kind="pact",
                                  shown=pact, then=[watch.handoff("ammo")])
 

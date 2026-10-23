@@ -45,14 +45,19 @@ REFEREE_INSTRUCTIONS = """You are the Referee for a rival football fan who bante
 
 task "check": a dig is about to be given to the rival. Cheeky football banter is fine: clubs, results, the table, players' football, fees, managers, what the user said. Not fine: anything about the user personally (looks, background, life), protected characteristics, swearing, threats or violent words, cruelty, real clubs or players or the Premier League. If it's fine, set ok true and return the line unchanged. If it can be fixed, set ok false and return a fixed line that keeps the joke. If it can't, set ok false with an empty line. Give a short reason.
 
-task "user": the brief has one thing the user just said, in any language. Show a yellow card only for swearing, personal abuse or insults aimed at a person, threats, slurs, or violent language. Cheeky football banter is fine, even rude about a club, a player's football or the rival's team ("your keeper's useless", "you lot are rubbish"): no card for that. Give a short reason the user would understand, e.g. "Swearing" or "Personal abuse".
+task "user": the brief has one thing the user just said, in any language. Show a yellow card only for swearing, insults aimed at the rival themselves (the person the user is talking to), threats, slurs, or violent language. Players, managers, referees and clubs are fair game: "your keeper's useless", "he's a liability", "the ref's blind", "you lot are rubbish" are football banter, never a card. Give a short reason the user would understand, e.g. "Swearing" or "Personal abuse".
 
 task "review": the brief has the latest lines of the live conversation, in any language. Decide whether the rival needs steering: "fine" (good-natured, even if cheeky), "ease_off" (too harsh or personal, needling the same thing over and over, or edging towards anything off-limits), or "user_upset" (the user sounds genuinely upset, not playfully). If it isn't fine, write a one-sentence instruction for the rival, e.g. "Ease off the keeper jokes and give them some credit for the equaliser." """
 
 
 PACT_INSTRUCTIONS = """You are the Ammo agent's memory for a rival football fan who watches matches with the user. You keep track of the bets, dares, promises and bold predictions the two of them make to each other, so the rival can call them in later.
 
-The brief has the bets already noted and the latest lines of the conversation (in any language). Return the full, updated list: keep the ones already noted, add any new ones, and update one if they changed it. The brief says which club each of them supports: get the conditions exactly right ("if we win" from the user means the user's club). Write each as one plain English sentence saying who agreed to what and on what condition, naming the club, e.g. "If Harbour City win, the user will admit Harbour City are the better team." or "The user predicted Whitcombe will score twice." Only real agreements, dares and predictions with something at stake, not ordinary banter. If there are none, return an empty list."""
+The brief has the bets already noted and the latest lines of the conversation (in any language). Return the full, updated list: keep the ones already noted, add any new ones, and update one if they changed it (a bet they've since made two-way, or raised, replaces the old version). The brief says which club each of them supports: get the conditions exactly right ("if we win" from the user means the user's club). Use the clubs' full names, never nicknames.
+
+Write each as one plain English sentence, starting with what it is:
+- "Bet: ..." for a bet both of them agreed. A bet is two-way: one forfeit, paid by whoever loses. Say both sides plainly, e.g. "Bet: if Harbour City win, the user wears a Harbour City shirt next week; if Kilburn Athletic win, the rival wears a Kilburn Athletic shirt." If only one side was spelt out, the other side is the same forfeit the other way round.
+- "Prediction: ..." for a bold prediction either of them made, e.g. "Prediction: the user said Whitcombe will score twice."
+Only real bets and bold predictions, not ordinary banter. If there are none, return an empty list."""
 
 
 class Pacts(BaseModel):

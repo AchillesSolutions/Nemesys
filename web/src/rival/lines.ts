@@ -19,6 +19,7 @@ export interface Line {
 }
 
 export const PAUSE_MS = 1800; // a piece this long after the speaker's last one starts a new line
+const USER_PAUSE_MS = 3000; // the viewer's speech arrives in bursts as it's transcribed: a longer pause for theirs
 
 let nextId = 1;
 
@@ -29,8 +30,9 @@ export function addPiece(lines: Line[], who: Speaker, delta: string, start: numb
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].who === who) {
       const line = lines[i];
-      const cutIn = lines.some((l) => l.who !== who && l.start > line.start && l.start < start);
-      open = start - line.end < PAUSE_MS && !cutIn ? i : -1;
+      // The rival's line breaks where the viewer cut in; the viewer's own sentence is never broken up.
+      const cutIn = who === "rival" && lines.some((l) => l.who === "user" && l.start > line.start && l.start < start);
+      open = start - line.end < (who === "user" ? USER_PAUSE_MS : PAUSE_MS) && !cutIn ? i : -1;
       break;
     }
   }
@@ -42,7 +44,9 @@ export function addPiece(lines: Line[], who: Speaker, delta: string, start: numb
                    marks: [...(line.marks ?? []), { start, offset: line.text.length }] };
   } else {
     // A new line: if the other one was mid-line when this began, split theirs where it came in.
-    next = lines.flatMap((l) => (l.who !== who && l.start < start && l.end > start ? split(l, start, now) : [l]));
+    next = who === "user"
+      ? lines.flatMap((l) => (l.who === "rival" && l.start < start && l.end > start ? split(l, start, now) : [l]))
+      : lines.slice();
     next.push({ id: nextId++, who, text: delta.trimStart(), start, end, at: now, marks: [{ start, offset: 0 }] });
   }
   return next.sort((a, b) => a.start - b.start || a.id - b.id);

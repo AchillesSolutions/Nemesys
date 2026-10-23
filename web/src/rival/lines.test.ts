@@ -42,6 +42,14 @@ describe("the conversation's order", () => {
     expect(lines.at(-1)!.text).toBe("a cold, and he knows it. Two nil soon.");
   });
 
+  it("never breaks up the viewer's own sentence, even when the rival talks over its end", () => {
+    let lines: Line[] = [];
+    lines = say(lines, "user", "you're gonna be leaving this one in", 1000);
+    lines = say(lines, "rival", "Oh, come off it", 2200); // the rival starts before the viewer's last word...
+    lines = say(lines, "user", " tears", 2400); // ...which is transcribed a moment later
+    expect(lines.filter((l) => l.who === "user").map((l) => l.text)).toEqual(["you're gonna be leaving this one in tears"]);
+  });
+
   it("starts a new line after a pause", () => {
     let lines: Line[] = [];
     lines = say(lines, "rival", "One nil.", 1000);
