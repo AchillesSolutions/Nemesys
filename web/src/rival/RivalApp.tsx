@@ -9,6 +9,8 @@ import { type MemoryItem, MemoryBox } from "./Memory";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
 import { hostSay, listen, prepare } from "./lobby";
+import { AudioCard, AudioRibbon } from "./AudioOnly";
+import { type MatchReport, ReportCard } from "./Report";
 import { LanguagePick } from "./LanguagePick";
 import { Logo } from "./Logo";
 
@@ -137,6 +139,8 @@ export default function RivalApp() {
   const [recalling, setRecalling] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<{ quote: string; when: string; bet: boolean; key: number } | null>(null);
   const [goal, setGoal] = useState<{ colour: string; key: number } | null>(null);
+  const [introCard, setIntroCard] = useState(false); // "audio only", large, as the curtain lifts
+  const [report, setReport] = useState<MatchReport | null>(null); // the Match agent's report, at full time
   const pausedAt = useRef(0);
   const [english, setEnglish] = useState<Record<number, { src: string; text: string }>>({}); // by line id
   const translating = useRef(new Set<number>());
@@ -179,6 +183,16 @@ export default function RivalApp() {
     if (data && (REPLAY || DRY) && QUERY.get("auto") === "1" && status === "idle") void start();
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The first time the rival goes live, the screen says once, large, that Nemesys is audio only.
+  const shownIntro = useRef(false);
+  useEffect(() => {
+    if (status !== "live" || shownIntro.current || REPLAY) return;
+    shownIntro.current = true;
+    setIntroCard(true);
+    const t = setTimeout(() => setIntroCard(false), 4200);
+    return () => clearTimeout(t);
+  }, [status]);
+
   // A clock for the agent pulses, and billing while the rival's voice is open.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -208,8 +222,12 @@ export default function RivalApp() {
         setPhase(msg.phase);
         if (msg.agents) setReports(msg.agents);
         if (msg.memory) setMemory(msg.memory);
+        if (msg.report) setReport(msg.report);
       } else if (msg.type === "agent") {
         setReports((r) => ({ ...r, [msg.id]: { text: msg.text, working: msg.working, at: msg.at, status: msg.status } }));
+      } else if (msg.type === "report") {
+        const { type: _, ...r } = msg;
+        setReport(r as MatchReport);
       } else if (msg.type === "handoff") {
         handOff(msg.from, msg.to, msg.via);
       } else if (msg.type === "memory") {
@@ -284,6 +302,7 @@ export default function RivalApp() {
     setEnglish({});
     setHandoffs([]);
     setMemory([]);
+    setReport(null);
     joining.current = false;
     stopping.current = false;
     reconnects.current = 0;
@@ -487,6 +506,7 @@ export default function RivalApp() {
       </svg>
 
       <header className="rival-top">
+        <AudioRibbon rival={rival?.name ?? "the rival"} speaking={live && rivalSpeaking} />
         <Fixture dir={dir} match={match} home={play.snapshot?.home} away={play.snapshot?.away} lang="en">
           {play.event ? (
             <Score snapshot={play.snapshot} lang="en"
@@ -505,6 +525,7 @@ export default function RivalApp() {
 
       <main className="rival-main">
         <section className="rival-chat" aria-live="polite" aria-label="The conversation">
+          <p className="region-label">What you'd hear, as captions</p>
           <div className="rival-chat-lines">
             {shown.map((line, i) => (
               <p key={line.id}
@@ -525,10 +546,6 @@ export default function RivalApp() {
         </section>
 
         <aside className="rival-side">
-          <section className="demo-note" aria-label="About this screen">
-            <p className="demo-note-title"><span className="demo-dot" aria-hidden />Demo view<span className="short"> · Nemesys is audio only</span></p>
-            <p>Nemesys is audio only: you just talk. This screen shows, for the demo, what's happening behind the voice.</p>
-          </section>
           {rival && dir.club(rival.club) ? (
             <section className="rival-profile">
               <p className="lobby-kicker">Watching with</p>
@@ -577,6 +594,7 @@ export default function RivalApp() {
             </p>
             {rival && <p className="curtain-fixture">Your rival: <b style={{ color: dir.colour(rival.club) }}>{rival.name}</b>, from {rival.home}</p>}
             <h1>Game over</h1>
+            {report && <ReportCard report={report} />}
             {error && <p className="rival-error" role="alert">{error}</p>}
           </div>
         )}
@@ -673,6 +691,8 @@ export default function RivalApp() {
       )}
 
       <HandoffLayer handoffs={handoffs} />
+
+      {introCard && <AudioCard rival={rival?.name ?? "your rival"} />}
 
       {goal && <div className="goal-flash" key={goal.key} aria-hidden style={{ "--flash": goal.colour } as CSSProperties} />}
 

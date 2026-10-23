@@ -32,6 +32,16 @@ from agent_framework import BaseChatClient
 ClientFactory = Callable[[str], BaseChatClient]
 
 ROLE_MODEL_VARS = {"producer": "KICKOFF_MODEL_PRODUCER", "host": "KICKOFF_MODEL_HOST"}
+
+# The rival's agents, each on the model that fits its job, chosen by evaluation (evals/RESULTS.md). Any of them can
+# be overridden with KICKOFF_MODEL_<ROLE>, e.g. KICKOFF_MODEL_MATCH.
+ROLE_MODELS = {
+    "news": "gpt-5.5",        # writes the fortnight's club news once, before kick-off: quality over speed
+    "match": "gpt-5.5",       # reads the stats into a storyline: the only candidates with every fact right
+    "ammo": "gpt-5.4-mini",   # picks the next dig: wit and judgement, fast enough for a lull in conversation
+    "memory": "gpt-5.4-nano", # notes bets and predictions: structured extraction, run often
+    "referee": "gpt-5.4-nano",  # banter or abuse, after Content Safety's gate: on every line the viewer says
+}
 REASONING_MODEL = re.compile(r"^(gpt-5|o\d)", re.IGNORECASE)
 
 
@@ -47,7 +57,8 @@ def load_env(path: Path = Path(".env")) -> None:
 
 
 def model_for(role: str) -> str:
-    return os.getenv(ROLE_MODEL_VARS.get(role, ""), "") or os.environ.get("KICKOFF_MODEL", "")
+    return (os.getenv(ROLE_MODEL_VARS.get(role, f"KICKOFF_MODEL_{role.upper()}"), "") or ROLE_MODELS.get(role)
+            or os.environ.get("KICKOFF_MODEL", ""))
 
 
 def is_reasoning(model: str) -> bool:

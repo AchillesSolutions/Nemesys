@@ -68,6 +68,34 @@ class MatchRead(BaseModel):
     storyline: str = ""
 
 
+REPORT_INSTRUCTIONS = """You are the Match agent, writing the viewer's report as the final whistle goes: explainable match intelligence for one fan. The brief has the final score, every big moment in order, the storylines you read during the match, the stats, which club the viewer supports, their language, and the bets they made with their rival.
+
+Write:
+- headline: one punchy line, from the viewer's point of view (their club's win, draw or defeat).
+- moments: the three moments that decided the match, in order. For each: the minute, what happened in a few words, and why it mattered (what it changed: the momentum, the numbers, the result). Use only facts from the brief.
+- verdict: one sentence on what the match says about the viewer's club.
+- bets: one short line per bet, saying who won it and who pays what. Empty if there were no bets.
+Write every field twice: in the viewer's language (the plain fields) and in English (the _en fields). If the viewer's language is English, the two are the same. Never invent players, events or numbers."""
+
+
+class KeyMoment(BaseModel):
+    minute: str
+    what: str
+    why: str
+    what_en: str
+    why_en: str
+
+
+class MatchReport(BaseModel):
+    headline: str
+    headline_en: str
+    moments: list[KeyMoment]
+    verdict: str
+    verdict_en: str
+    bets: list[str] = []
+    bets_en: list[str] = []
+
+
 class DigChoice(BaseModel):
     dig: str
     source: Literal["this_match", "last_time", "news", "table", "match"]
@@ -94,17 +122,25 @@ class RivalAgents:
     """The Match agent, the Ammo agent and the Referee, each an Agent Framework agent."""
 
     def __init__(self, clients: ClientFactory):
+        from .agents.offline import OfflineChatClient
+        self.offline = isinstance(clients("referee"), OfflineChatClient)  # no network at all: tests, offline runs
         def agent(role: str, name: str, instructions: str, reply: type[BaseModel], temperature: float) -> Agent:
             client = clients(role)
             return Agent(client, instructions, name=name,
                          default_options=options_for(client, {"response_format": reply, "temperature": temperature}))
 
         self.match = agent("match", "match", MATCH_INSTRUCTIONS, MatchRead, 0.4)
+        self.reporter = agent("match", "match", REPORT_INSTRUCTIONS, MatchReport, 0.4)
         self.ammo = agent("ammo", "ammo", AMMO_INSTRUCTIONS, DigChoice, 0.8)
         self.referee_check = agent("referee", "referee", REFEREE_INSTRUCTIONS, Check, 0.0)
         self.referee_review = agent("referee", "referee", REFEREE_INSTRUCTIONS, Verdict, 0.0)
         self.referee_user = agent("referee", "referee", REFEREE_INSTRUCTIONS, Booking, 0.0)
-        self.memory = agent("ammo", "ammo", PACT_INSTRUCTIONS, Pacts, 0.0)
+        self.memory = agent("memory", "ammo", PACT_INSTRUCTIONS, Pacts, 0.0)
+
+    async def report(self, brief: dict) -> MatchReport | None:
+        """The viewer's match report at full time: the moments that decided it, and why."""
+        reply = await self.reporter.run(json.dumps(brief, ensure_ascii=False))
+        return reply.value if isinstance(reply.value, MatchReport) else None
 
     async def read_match(self, brief: dict) -> str:
         reply = await self.match.run(json.dumps(brief, ensure_ascii=False))

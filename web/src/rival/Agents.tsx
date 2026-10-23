@@ -26,14 +26,14 @@ const ICONS: Record<string, ReactNode> = {
 interface AgentInfo { id: string; name: string; role: string; model: string; idle: string; resting: string }
 
 export const BEFORE: AgentInfo[] = [
-  { id: "host", name: "Lobby Host", role: "Asks who you support, finds you a rival", model: "Azure AI Speech", idle: "Waiting in the lobby", resting: "In the lobby" },
-  { id: "news", name: "News Agent", role: "Writes the fortnight's club news", model: "gpt-5.4-mini", idle: "Waiting for match day", resting: "Waiting" },
+  { id: "host", name: "Lobby Host", role: "Asks your language, name and club; finds you a rival", model: "Azure AI Speech (no LLM needed)", idle: "Waiting in the lobby", resting: "In the lobby" },
+  { id: "news", name: "News Agent", role: "Writes the fortnight's club news", model: "gpt-5.5", idle: "Waiting for match day", resting: "Waiting" },
 ];
 export const DURING: AgentInfo[] = [
-  { id: "match", name: "Match Agent", role: "Reads the game, spots the storylines", model: "gpt-5.4-mini", idle: "Watching the match", resting: "Watching" },
-  { id: "ammo", name: "Ammo Agent", role: "Picks the next dig, remembers bets", model: "gpt-5.4-mini", idle: "Digs in reserve", resting: "Standing by" },
-  { id: "referee", name: "Referee", role: "Checks digs, keeps it good-natured", model: "gpt-5.4-mini + Azure AI Content Safety", idle: "All good-natured so far", resting: "All good" },
-  { id: "rival", name: "The Rival", role: "Watches with you, talks back", model: "GPT-Live", idle: "Listening", resting: "Listening" },
+  { id: "match", name: "Match Agent", role: "Reads the stats, spots the storylines", model: "gpt-5.5", idle: "Watching the match", resting: "Watching" },
+  { id: "ammo", name: "Ammo Agent", role: "Picks the next dig, remembers bets", model: "gpt-5.4-mini + gpt-5.4-nano", idle: "Digs in reserve", resting: "Standing by" },
+  { id: "referee", name: "Referee", role: "Checks digs, keeps it good-natured", model: "Azure AI Content Safety + gpt-5.4-nano", idle: "All good-natured so far", resting: "All good" },
+  { id: "rival", name: "The Rival", role: "Watches with you, talks back", model: "GPT-Live (full duplex)", idle: "Listening", resting: "Listening" },
 ];
 
 const LIT_S = 2.5; // a report keeps its card lit this long
@@ -67,8 +67,8 @@ export function AgentsFlow({ reports, active, now, beforeDone = false }: {
   // once the match starts); the four match agents follow, with an arrow in each gap. Only agents at work are lit.
   return (
     <section className="agents-flow" aria-label="The agents">
-      <p className="agents-label before">Before kick-off</p>
-      <p className="agents-label during">During the match</p>
+      <p className="agents-label before">Behind the scenes · before kick-off</p>
+      <p className="agents-label during">Behind the scenes · during the match: the agents that steer the voice</p>
       <div className={`agents-cell stack ${beforeDone ? "done" : ""}`}>{BEFORE.map(card)}</div>
       {DURING.map((a, i) => (
         <div key={a.id} className={`agents-cell ${i > 0 ? "flows" : ""}`}>{card(a)}</div>

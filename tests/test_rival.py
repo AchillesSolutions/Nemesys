@@ -637,6 +637,8 @@ def test_bets_are_remembered_and_called_in_at_full_time(world, match, monkeypatc
     saved = json.loads(next(tmp_path.glob("watch-*.json")).read_text(encoding="utf-8"))
     assert saved["pacts"] == watch.pacts, "kept for next time"
     assert previous_meeting("kil", "dez")["pacts"] == watch.pacts
+    assert watch.report and watch.report["headline_en"].startswith("Offline report"), "a match report at full time"
+    assert len(watch.report["moments"]) == 3 and watch.report["bets"] == watch.pacts
 
 
 def test_each_rival_keeps_to_their_own_language(world, match):

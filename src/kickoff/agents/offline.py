@@ -149,9 +149,16 @@ class OfflineChatClient(FunctionInvocationLayer, BaseChatClient):
                 body = _league_guide(brief)
             case "producer":
                 body = _producer(brief, messages[-1].text)
+            case "match" if "final_score" in brief:  # the full-time report
+                moments = [{"minute": m.split("'")[0], "what": m[:60], "why": "Offline: it changed the match.",
+                            "what_en": m[:60], "why_en": "Offline: it changed the match."}
+                           for m in brief.get("big_moments", [])[:3]]
+                body = {"headline": f"Offline report: {brief['final_score']}", "headline_en": f"Offline report: {brief['final_score']}",
+                        "moments": moments, "verdict": "Offline verdict.", "verdict_en": "Offline verdict.",
+                        "bets": brief.get("bets", []), "bets_en": brief.get("bets", [])}
             case "match":
                 body = {"storyline": f"Offline read: {brief.get('score', '')} after {brief.get('minute', '?')} minutes."}
-            case "ammo" if brief.get("task") == "pacts":
+            case "ammo" | "memory" if brief.get("task") == "pacts":
                 lines = [l["said"] for l in brief.get("conversation", []) if " if " in f" {l['said'].lower()} "]
                 body = {"pacts": list(dict.fromkeys(brief.get("noted", []) + lines))}
             case "ammo":

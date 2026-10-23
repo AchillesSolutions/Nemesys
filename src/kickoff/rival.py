@@ -49,7 +49,7 @@ import httpx
 import websockets
 
 from . import lobby_lines as lines
-from . import news
+from . import news, safety
 from .agents.llm import ClientFactory
 from .data_store import DATA_DIR
 from .match_reader import MatchReader
@@ -757,6 +757,9 @@ class Watch:
     pacts: list = field(default_factory=list)  # bets, dares and promises made during the match, to call in later
     pact_chars: int = 0  # how much of the conversation the Ammo agent has read for bets
     dig_receipt: dict | None = None  # the viewer's own words in the prepared dig, to show when it's thrown back
+    storylines: list = field(default_factory=list)  # every read the Match agent made, for the report
+    reporting: asyncio.Task | None = None
+    report: dict | None = None  # the match report, at full time
     question_at: float = 0.0  # when the viewer last asked the rival something...
     answered: int = 0  # ...and how many words the rival has said since: a question isn't answered by "ooh, good one"
     memory: list = field(default_factory=list)  # what the rival remembers about this viewer, for the demo view
@@ -913,7 +916,7 @@ class Watch:
 
     def state(self) -> dict:
         return {"paused": self.paused, "phase": self.phase, "minute": self.minute, "score": self.score, "user_team": self.user_team,
-                "voice": self.voice is not None, "mode": self.mode, "agents": self.agents, "memory": self.memory}
+                "voice": self.voice is not None, "mode": self.mode, "agents": self.agents, "memory": self.memory, "report": self.report}
 
 
 class Rival:
@@ -1298,6 +1301,8 @@ class Rival:
                 await self._play(watch, reader.apply(ev), frame, rival_team, pacing)
             watch.phase = "full_time"
             watch.publish_state()
+            if self.agents:
+                watch.reporting = asyncio.create_task(self._report(watch))  # ready by the time the curtain falls
             await self._fill(watch, pacing.after)  # post-match banter
             await self._sign_off(watch, rival_team)
         except asyncio.CancelledError:
@@ -1377,6 +1382,23 @@ class Rival:
         await asyncio.sleep(15)  # let the goodbye be said
         await self.end(watch)
 
+    async def _report(self, watch: Watch) -> None:
+        """The Match agent's report for the viewer at full time: the three moments that decided it, and why."""
+        brief = {**self._sides(watch), "language": watch.language, "final_score": self._situation(watch),
+                 "big_moments": watch.moments, "storylines": watch.storylines[-8:],
+                 "stats": self._stats(watch).strip(), "bets": watch.pacts}
+        watch.agent("match", "Writing your match report…", status="Writing report")
+        try:
+            report = await self.agents.report(brief)
+        except Exception:
+            log.exception("Match report failed")
+            return
+        if report is None:
+            return
+        watch.report = report.model_dump()
+        watch.publish({"type": "report", **watch.report})
+        watch.agent("match", report.headline_en, working=False, status="Report ready")
+
     async def _settle(self, watch: Watch, told: float, most: float) -> None:
         """After a big moment, the match waits for the rival to finish reacting before it moves on, up to a point.
         Late on, the big moments come thick and fast; without this the rival falls behind and celebrates a goal
@@ -1418,7 +1440,9 @@ class Rival:
             for quote in quotable(last.get("user_said", []), keep=2):
                 watch.remember("last_time", quote, source=None)
             for pact in last.get("pacts", [])[:2]:
-                watch.remember("bet", in_your_words(pact, watch), source=None)
+                predicted = re.match(r"(prediction:|the (user|rival) predicted)", pact, re.I)
+                watch.remember("prediction" if predicted else "bet",
+                               in_your_words(re.sub(r"^(bet|prediction):\s*", "", pact, flags=re.I), watch), source=None)
         for team in (watch.user_team, rival.id):
             await watch.thinking(club_news(watch.dossier, self.match, team, self.world), kind="news",
                                  shown=f"{self.world.club(team).short_name} news", then=[watch.handoff("news")])
@@ -1578,6 +1602,7 @@ class Rival:
             return
         if story and story != watch.storyline:
             watch.storyline = story
+            watch.storylines.append(story)
             watch.agent("match", story, working=False, status="Storyline found")
             await watch.thinking(f"The Match agent's read: {story}", kind="storyline", shown=story,
                                  then=[watch.handoff("match")])
@@ -1650,16 +1675,23 @@ class Rival:
         # A stray noise isn't worth checking. Chinese has no spaces, so there it's characters that count.
         if len(said.split()) < 2 and len(re.findall(r"[一-鿿]", said)) < 2:
             return
-        try:
-            booking = await self.agents.booking(said)
-        except Exception:
-            log.exception("Referee booking check failed")
-            return
-        if not booking.card:
-            return
+        # Two stages: Azure AI Content Safety stops anything severe at once; the model judges banter from abuse.
+        watch.agent("referee", f"Checking what you said: {said[:80]}", status="Checking line")
+        rating = None if self.agents.offline else await safety.rate(said)
+        if rating and rating.severe:
+            reason = rating.reason
+        else:
+            try:
+                booking = await self.agents.booking(said)
+            except Exception:
+                log.exception("Referee booking check failed")
+                return
+            if not booking.card:
+                watch.agent("referee", "Banter, not abuse: no card", working=False, status="All good")
+                return
+            reason = booking.reason or "Language"
         watch.cards += 1
         second = watch.cards >= 2
-        reason = booking.reason or "Language"
         watch.publish({"type": "card", "colour": "yellow", "reason": reason, "count": watch.cards})
         watch.agent("referee", f"Yellow card for the viewer: {reason}" + (" (another warning)" if second else ""),
                     working=False, status="Yellow card!")
