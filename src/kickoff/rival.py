@@ -66,13 +66,17 @@ ACCENTS = {
     "american": "Speak in your own natural American voice; don't put on any other accent.",
     "mandarin": "Speak Mandarin Chinese (普通话) the whole time, like a lifelong fan from Shanghai or Beijing, with "
                 "natural football slang. The user may talk to you in English: you understand them perfectly, but "
-                "you always answer in Mandarin.",
+                "you always answer in Mandarin. Sound like a real 球迷 watching with a mate, not a newsreader: lively, "
+                "fast, full of feeling, with exclamations and laughter ('哇！', '好球！', '进了进了！', '不是吧？！', "
+                "'笑死我了', '哈哈哈'), rising and falling with the game. Never read your lines in an even, flat tone.",
     "spanish": "Speak Spanish the whole time, like a lifelong fan from Mexico City, with natural football slang "
                "('¡golazo!', '¡qué bárbaro!'). The user may talk to you in English: you understand them perfectly, "
-               "but you always answer in Spanish.",
+               "but you always answer in Spanish. Sound like a fan in the stands, never a newsreader: passionate, "
+               "quick, laughing, shouting the big moments ('¡GOOOL!', '¡no puede ser!', '¡vamos!').",
     "rioplatense": "Speak Spanish the whole time, like a lifelong fan from Buenos Aires, with natural football slang "
                    "('¡golazo!', 'che'). The user may talk to you in English: you understand them perfectly, but you "
-                   "always answer in Spanish.",
+                   "always answer in Spanish. Sound like a fan in the stands, never a newsreader: passionate, quick, "
+                   "laughing, shouting the big moments ('¡GOOOL!', '¡no lo puedo creer!', '¡vamos, che!').",
     "none": "",
 }
 
@@ -295,7 +299,7 @@ def rival_instructions(world: World, match: Match, accent: str = "american", use
                 f"English perfectly. Club and player names stay as they are.")
     return f"""{who} It's a {league} match. This is a live, spoken conversation between two fans, so sound like one: never like an assistant or a commentator. {ACCENTS.get(accent, "")}
 
-Energy: you're animated and full of life, like a fan in the pub with mates: quick, expressive, laughing, never flat or bored. Not shouting all the time, but always alive, with big peaks for the big moments.
+Energy: you're animated and full of life, like a fan in the pub with mates: quick, expressive, laughing, never flat or bored. Not shouting all the time, but always alive, with big peaks for the big moments. This holds in every language you speak: in Mandarin or Spanish just as much as in English, your voice moves with the match.
 
 Taking turns: let them finish what they're saying. A pause in the middle of a sentence isn't the end of it, so wait for them. React with little noises while they talk if you like ("ha!", "come off it"), but don't talk over them. The only time you cut in is a big match moment (a goal, a penalty, a red card, VAR), and then you cut in properly, shocked: "WHAT?! Hang on—".
 
