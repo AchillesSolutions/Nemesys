@@ -348,6 +348,7 @@ export default function RivalApp() {
     setHost({ working: true, text: what });
     setHeard("");
     await hostSay(line);
+    if (hostLine.current !== line) return; // cut off by a newer line, which is still being said
     hostTalking.current = false;
     hostEndedAt.current = Date.now();
   }

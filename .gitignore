@@ -8,3 +8,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 var/
+
+# Screen recordings for the demo video: far too big for GitHub
+recording/

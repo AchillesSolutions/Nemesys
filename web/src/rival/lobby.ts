@@ -27,12 +27,19 @@ export function prepare(text: string): Promise<AudioBuffer | null> {
   return line;
 }
 
-/** Say one line in the host's voice; resolves when it has finished (or straight away if speech is unavailable). */
+let playing: AudioBufferSourceNode | null = null;
+
+/** Say one line in the host's voice; resolves when it has finished (or straight away if speech is unavailable).
+ * A new line cuts off the one before (a tap mid-sentence moves the lobby on), so the host never talks over itself. */
 export async function hostSay(text: string): Promise<void> {
   const buffer = await prepare(text);
   if (!buffer || !ctx) return;
   await ctx.resume();
+  if (playing) {
+    try { playing.stop(); } catch { /* already finished */ }
+  }
   const source = ctx.createBufferSource();
+  playing = source;
   source.buffer = buffer;
 
   // Band-limited like a public-address system, with a faint metallic edge from a short feedback comb.
