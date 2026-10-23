@@ -1,4 +1,4 @@
-import type { Club, MatchInfo, Player, TableRow, World } from "./types";
+import type { Club, MatchInfo, Player, World } from "./types";
 
 export async function loadStatic(): Promise<{ world: World; match: MatchInfo }> {
   const [world, match] = await Promise.all([
@@ -40,21 +40,4 @@ function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
     .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** The league table if the current score were the final score. */
-export function projectTable(table: TableRow[], scores: { name: string; gf: number; ga: number }[]): TableRow[] {
-  const rows = table.map((row) => {
-    const s = scores.find((x) => x.name === row.club);
-    if (!s) return row;
-    const won = s.gf > s.ga ? 1 : 0, drawn = s.gf === s.ga ? 1 : 0, lost = s.gf < s.ga ? 1 : 0;
-    const r = {
-      ...row, played: row.played + 1, won: row.won + won, drawn: row.drawn + drawn, lost: row.lost + lost,
-      goals_for: row.goals_for + s.gf, goals_against: row.goals_against + s.ga,
-    };
-    return { ...r, points: r.won * 3 + r.drawn, goal_difference: r.goals_for - r.goals_against };
-  });
-  return rows.sort((a, b) =>
-    b.points - a.points || b.goal_difference - a.goal_difference || b.goals_for - a.goals_for ||
-    a.club.localeCompare(b.club));
 }

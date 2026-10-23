@@ -34,7 +34,7 @@ def position(table: list[TableRow], club_name: str) -> int:
 
 
 def stakes(world: World, home: str, away: str, home_goals: int, away_goals: int) -> dict:
-    """Positions now and if the score stands, for both clubs: facts for the League guide."""
+    """Positions now and if the score stands, for both clubs: facts for the agents."""
     after = projected_table(world, home, away, home_goals, away_goals)
     out = {}
     for cid in (home, away):

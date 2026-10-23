@@ -3,7 +3,7 @@
 Only the two clubs in our match get squads and playing styles. The other 18
 clubs exist as names with results, produced by simulating eight matchweeks of
 a round-robin season, so the table is internally consistent (wins equal
-losses, goals for equal goals against) and gives the League guide real
+losses, goals for equal goals against) and gives the agents real
 stakes to talk about.
 """
 

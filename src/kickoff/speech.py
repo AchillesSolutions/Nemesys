@@ -1,15 +1,14 @@
-"""Spoken commentary with Azure AI Speech.
+"""The lobby host's voice, and speech recognition tokens, with Azure AI Speech.
 
-Each language has a neural voice; the Producer's tone (excited, tense,
-disappointed ...) becomes one of that voice's speaking styles where the
-voice supports it. Supported styles differ per voice, so they are read
-from the service's voice list rather than assumed.
+The host speaks with one multilingual neural voice; a line can mark runs of Mandarin or Spanish ([zh]...[/zh],
+[es]...[/es]) so each is said with the right accent. A tone (excited, tense ...) becomes one of the voice's
+speaking styles where it has one; styles differ per voice, so they are read from the service's voice list.
 
 Configured with AZURE_SPEECH_REGION and AZURE_SPEECH_KEY. A Microsoft
 Foundry (multi-service) resource includes Speech, so its key is used when
 no separate Speech key is set. Without a region the endpoint reports itself
 unavailable and the browser falls back to its own voices. Voices can be
-changed with KICKOFF_VOICE_EN / _ZH / _ES.
+changed with KICKOFF_VOICE_HOST.
 """
 
 from __future__ import annotations
@@ -22,13 +21,8 @@ from xml.sax.saxutils import escape
 
 import httpx
 
-# (locale, default voice) per language. The MAI-Voice "Flash" voices share one wide set of emotions
-# (excited, hopeful, regretful, determined ...) and are tuned for low latency; Yunjian has dedicated
-# football-commentary styles in Mandarin.
+# (locale, default voice) per speaker.
 VOICES = {
-    "en": ("en-US", "en-US-Olivia:MAI-Voice-2.1-Flash"),
-    "zh": ("zh-CN", "zh-CN-YunjianNeural"),
-    "es": ("es-MX", "es-MX-Valeria:MAI-Voice-2.1-Flash"),
     # The Rival's lobby host: a crisp British system voice, deliberately not the rival's. Multilingual, so the
     # same voice greets in English, Mandarin and Spanish and carries on in whichever the viewer chooses.
     "host": ("en-GB", "en-GB-AdaMultilingualNeural"),
@@ -102,7 +96,7 @@ class Speech:
             return self._cache[key]
         async with httpx.AsyncClient(timeout=15) as client:
             styles = await self.styles(client)
-            locale, voice = self.voices.get(language, self.voices["en"])
+            locale, voice = self.voices.get(language, self.voices["host"])
             ssml = build_ssml(aloud(text, language), locale, voice, tone, styles.get(voice, set()))
             r = await client.post(f"{self._base}/v1", content=ssml.encode("utf-8"), headers={
                 "Ocp-Apim-Subscription-Key": self.key,

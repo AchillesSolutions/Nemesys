@@ -19,6 +19,7 @@ model in tests. Azure's content filter on the voice model stays underneath the R
 from __future__ import annotations
 
 import json
+import re
 import logging
 from typing import Literal
 
@@ -78,6 +79,26 @@ Write:
 Write every field twice: in the viewer's language (the plain fields) and in English (the _en fields). If the viewer's language is English, the two are the same. Never invent players, events or numbers."""
 
 
+KEEPER_INSTRUCTIONS = """You are the Memory Keeper for a rival football fan. After a match, you read the whole conversation between the viewer (the user) and their rival, and write down what the rival should remember about THE VIEWER next time they watch together. It is about the viewer, never about the rival.
+
+Reply with JSON only, nothing else:
+{"nickname": "...", "running_jokes": ["...", "..."], "touchy_about": ["..."], "best_moment": "..."}
+
+- nickname: what the rival could call the viewer, from their name or something said (empty if nothing fits).
+- running_jokes: up to two jokes or topics the two of them kept coming back to, as a short phrase the rival could bring up ("still blames VAR for 90+3'").
+- touchy_about: up to two things the viewer got defensive or wound up about (their keeper, the league table).
+- best_moment: the viewer's best moment of the match, from their point of view ("called the stoppage-time winner").
+Each item under 12 words, in English, from what was actually said. Leave anything you can't support from the conversation empty."""
+
+
+class Keepsake(BaseModel):
+    """What the rival remembers about the viewer, for next time: kept by the Memory Keeper."""
+    nickname: str = ""
+    running_jokes: list[str] = []
+    touchy_about: list[str] = []
+    best_moment: str = ""
+
+
 class KeyMoment(BaseModel):
     minute: str
     what: str
@@ -131,6 +152,10 @@ class RivalAgents:
 
         self.match = agent("match", "match", MATCH_INSTRUCTIONS, MatchRead, 0.4)
         self.reporter = agent("match", "match", REPORT_INSTRUCTIONS, MatchReport, 0.4)
+        # Microsoft's Phi, off the clock: plain JSON in its reply rather than a structured-output contract.
+        keeper_client = clients("keeper")
+        self.keeper = Agent(keeper_client, KEEPER_INSTRUCTIONS, name="keeper",
+                            default_options=options_for(keeper_client, {"temperature": 0.2}))
         self.ammo = agent("ammo", "ammo", AMMO_INSTRUCTIONS, DigChoice, 0.8)
         self.referee_check = agent("referee", "referee", REFEREE_INSTRUCTIONS, Check, 0.0)
         self.referee_review = agent("referee", "referee", REFEREE_INSTRUCTIONS, Verdict, 0.0)
@@ -141,6 +166,18 @@ class RivalAgents:
         """The viewer's match report at full time: the moments that decided it, and why."""
         reply = await self.reporter.run(json.dumps(brief, ensure_ascii=False))
         return reply.value if isinstance(reply.value, MatchReport) else None
+
+    async def keep(self, brief: dict) -> Keepsake | None:
+        """After the match: what the rival should remember about the viewer next time."""
+        reply = await self.keeper.run(json.dumps(brief, ensure_ascii=False))
+        text = reply.text or ""
+        found = re.search(r"\{.*\}", text, re.S)  # Phi may wrap its JSON in a code fence
+        if not found:
+            return None
+        try:
+            return Keepsake.model_validate_json(found.group(0))
+        except ValueError:
+            return None
 
     async def read_match(self, brief: dict) -> str:
         reply = await self.match.run(json.dumps(brief, ensure_ascii=False))

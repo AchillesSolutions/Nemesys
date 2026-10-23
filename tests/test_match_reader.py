@@ -1,13 +1,11 @@
 """The Match reader keeps an accurate live picture from the event stream."""
 
-import asyncio
 
 import pytest
 
 from kickoff.generator import generate_match
 from kickoff.match_reader import MatchReader
 from kickoff.models import EventType, MatchEvent
-from kickoff.replayer import replay
 from kickoff.world import AWAY_ID, HOME_ID, build_world
 
 
@@ -98,11 +96,3 @@ def test_quiet_spell_signal_fires_once(world):
     quiet = [s for u in updates for s in u.signals if s["kind"] == "quiet_spell"]
     assert len(quiet) == 1
 
-
-def test_replayer_skips_ahead_and_keeps_order(match):
-    async def collect():
-        return [e async for e in replay(match, speed=1e9, start_minute=80)]
-
-    events = asyncio.run(collect())
-    assert events and events[0].elapsed >= 80 * 60
-    assert events[-1].type == EventType.FULL_TIME

@@ -36,12 +36,10 @@ from kickoff.agents.llm import azure_v1_base_url, load_env, options_for  # noqa:
 from kickoff.rival_agents import RivalAgents  # noqa: E402
 
 HERE = Path(__file__).parent
-# Phi-4 (instruct) was tried too: on a probe call it gave no structured reply within the 30-second limit, so it is
-# left out of the full runs.
 CANDIDATES = {
-    "referee": ["gpt-5.4-nano", "gpt-5.4-mini", "Phi-4-reasoning"],
-    "memory": ["gpt-5.4-nano", "gpt-5.4-mini", "Phi-4-reasoning"],
-    "match": ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5", "Phi-4-reasoning"],
+    "referee": ["gpt-5.4-nano", "gpt-5.4-mini", "Phi-4", "Phi-4-mini-instruct", "Phi-4-reasoning"],
+    "memory": ["gpt-5.4-nano", "gpt-5.4-mini", "Phi-4", "Phi-4-mini-instruct", "Phi-4-reasoning"],
+    "match": ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5", "Phi-4", "Phi-4-mini-instruct", "Phi-4-reasoning"],
 }
 JUDGE = "gpt-5.5"
 CALL_TIMEOUT_S = 30

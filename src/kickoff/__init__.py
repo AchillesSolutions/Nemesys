@@ -1,1 +1,1 @@
-"""Kick-Off: football explained live for first-time viewers."""
+"""Nemesys: an AI rival fan to watch football with, by voice."""

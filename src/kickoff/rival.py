@@ -52,9 +52,8 @@ from . import lobby_lines as lines
 from . import news, safety
 from .agents.llm import ClientFactory
 from .data_store import DATA_DIR
-from .match_reader import MatchReader
+from .match_reader import MatchReader, event_message
 from .models import Club, EventType, Match, MatchEvent, Position, World
-from .player import event_message
 from .rival_agents import RivalAgents
 
 log = logging.getLogger(__name__)
@@ -266,6 +265,13 @@ def rival_instructions(world: World, match: Match, accent: str = "american", use
         name = f"{persona.name} from {persona.home}" if persona else "a fan"
         met = (f" You've watched with this person before: {rematch['when']} ({rematch['result']}), so greet them "
                "like an old rival: 'oh, it's YOU again'." if rematch else " You've never met.")
+        kept = (rematch or {}).get("keepsake") or {}
+        if any(kept.values()):
+            notes = [f"you call them {kept['nickname']}" if kept.get("nickname") else "",
+                     "running jokes between you: " + "; ".join(kept.get("running_jokes", [])) if kept.get("running_jokes") else "",
+                     "they're touchy about " + " and ".join(kept.get("touchy_about", [])) if kept.get("touchy_about") else "",
+                     f"their best moment last time: {kept['best_moment']}" if kept.get("best_moment") else ""]
+            met += " What you remember about them: " + "; ".join(n for n in notes if n) + ". Bring these up naturally."
         if viewer:
             met += f" Their name is {viewer}: use it now and then, the way a mate would."
         manner = f" You're {persona.manner}." if persona and persona.manner else ""
@@ -359,7 +365,8 @@ def previous_meeting(user_team: str, rival: str | None = None, viewer: str | Non
             if (saved.get("user_team") == user_team and len(said) >= 2 and rival in (None, saved.get("rival"))
                     and theirs(saved)):
                 return {"when": "the last time you watched together", "result": saved.get("result", ""),
-                        "user_said": quotable(said), "rival": saved.get("rival"), "pacts": saved.get("pacts", [])}
+                        "user_said": quotable(said), "rival": saved.get("rival"), "pacts": saved.get("pacts", []),
+                        "keepsake": saved.get("keepsake") or {}}
     seed = DATA_DIR / "previous_meeting.json"
     if seed.exists():
         data = json.loads(seed.read_text(encoding="utf-8"))
@@ -759,6 +766,8 @@ class Watch:
     dig_receipt: dict | None = None  # the viewer's own words in the prepared dig, to show when it's thrown back
     storylines: list = field(default_factory=list)  # every read the Match agent made, for the report
     reporting: asyncio.Task | None = None
+    keeping: asyncio.Task | None = None
+    keepsake: dict | None = None  # the Memory Keeper's notes on the viewer, saved for next time
     report: dict | None = None  # the match report, at full time
     question_at: float = 0.0  # when the viewer last asked the rival something...
     answered: int = 0  # ...and how many words the rival has said since: a question isn't answered by "ooh, good one"
@@ -1244,6 +1253,9 @@ class Rival:
         if watch.voice:
             with suppress(Exception):
                 await watch.voice.sideband.send(json.dumps({"type": "session.close"}))
+        if watch.keeping and not watch.keeping.done():
+            with suppress(Exception):
+                await asyncio.wait_for(asyncio.shield(watch.keeping), 20)  # it's what makes next time personal
         watch.publish({"type": "ended"})  # the screen goes to Game Over, voice or no voice (a dry run has none)
         self.watches.pop(watch.id, None)
         self._save(watch)
@@ -1304,6 +1316,7 @@ class Rival:
             watch.publish_state()
             if self.agents:
                 watch.reporting = asyncio.create_task(self._report(watch))  # ready by the time the curtain falls
+                watch.keeping = asyncio.create_task(self._keep(watch))  # the Memory Keeper, while they say goodbye
             await self._fill(watch, pacing.after)  # post-match banter
             await self._sign_off(watch, rival_team)
         except asyncio.CancelledError:
@@ -1400,6 +1413,29 @@ class Rival:
         watch.publish({"type": "report", **watch.report})
         watch.agent("match", report.headline_en, working=False, status="Report ready")
 
+    async def _keep(self, watch: Watch) -> None:
+        """The Memory Keeper (Microsoft Phi): what the rival should remember about this viewer next time. No one is
+        waiting for it, so a small model that could run on the viewer's own device does the job."""
+        if not watch.transcript:
+            return
+        await asyncio.sleep(30)  # let the post-match chat happen first: it's often where the best lines are
+        brief = {"viewer": watch.viewer or "the viewer", "viewer_supports": self.world.club(watch.user_team).name,
+                 "rival": watch.persona.name if watch.persona else "the rival", "result": self._situation(watch),
+                 "conversation": [{"who": "viewer" if who == "user" else "rival", "said": text.strip()[-300:]}
+                                  for who, text in watch.transcript][-40:]}
+        watch.agent("ammo", "The Memory Keeper (Phi-4) is noting what to remember about you", status="Remembering")
+        try:
+            keepsake = await asyncio.wait_for(self.agents.keep(brief), 40)
+        except Exception:
+            log.exception("Memory Keeper failed")
+            return
+        if keepsake is None:
+            return
+        watch.keepsake = keepsake.model_dump()
+        for joke in keepsake.running_jokes[:2]:
+            watch.remember("joke", joke, source="rival")
+        watch.agent("ammo", "Saved for next time", working=False, status="Memory saved")
+
     async def _settle(self, watch: Watch, told: float, most: float) -> None:
         """After a big moment, the match waits for the rival to finish reacting before it moves on, up to a point.
         Late on, the big moments come thick and fast; without this the rival falls behind and celebrates a goal
@@ -1440,6 +1476,8 @@ class Rival:
                 watch.remember("last_time", f"{last['when'].capitalize()}: {last['result']}", source=None)
             for quote in quotable(last.get("user_said", []), keep=2):
                 watch.remember("last_time", quote, source=None)
+            for joke in (last.get("keepsake") or {}).get("running_jokes", [])[:2]:
+                watch.remember("joke", joke, source=None)
             for pact in last.get("pacts", [])[:2]:
                 predicted = re.match(r"(prediction:|the (user|rival) predicted)", pact, re.I)
                 watch.remember("prediction" if predicted else "bet",
@@ -1821,7 +1859,7 @@ class Rival:
             (SAVED / f"watch-{time.strftime('%Y%m%d-%H%M%S')}-{watch.id}.json").write_text(json.dumps({
                 "viewer": watch.viewer, "user_team": watch.user_team,
                 "rival": watch.persona.id if watch.persona else None,
-                "pacts": watch.pacts,
+                "pacts": watch.pacts, "keepsake": watch.keepsake,
                 "mode": watch.mode, "recording": watch.recording,
                 "result": result, "reached": watch.minute or watch.phase,
                 "transcript": [(who, text.strip()) for who, text in watch.transcript],

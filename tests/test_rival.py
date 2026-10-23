@@ -9,7 +9,7 @@ from kickoff import news
 from kickoff import rival as rival_module
 from kickoff.generator import generate_match
 from kickoff.models import EventType
-from kickoff.rival import (BIG, LIVE, MATCH, MIN_FRAME_S, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe,
+from kickoff.rival import (BIG, LIVE, MATCH, ROSTER, SHORT, Pacing, Rival, Voice, Watch, ammo, describe,
                            feeling, frame_plan, match_seconds, pace_plan, previous_meeting, rival_instructions)
 from kickoff.world import build_world
 
@@ -639,6 +639,10 @@ def test_bets_are_remembered_and_called_in_at_full_time(world, match, monkeypatc
     assert previous_meeting("kil", "dez")["pacts"] == watch.pacts
     assert watch.report and watch.report["headline_en"].startswith("Offline report"), "a match report at full time"
     assert len(watch.report["moments"]) == 3 and watch.report["bets"] == watch.pacts
+    assert saved["keepsake"]["running_jokes"] == ["offline: the keeper"], "the Memory Keeper's notes are kept"
+    last = previous_meeting("kil", "dez")
+    assert "running jokes between you: offline: the keeper" in rival_instructions(
+        world, match, "american", user_team="kil", rematch=last, persona=next(p for p in ROSTER if p.id == "dez"))
 
 
 def test_each_rival_keeps_to_their_own_language(world, match):

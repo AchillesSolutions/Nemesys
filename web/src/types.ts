@@ -1,16 +1,6 @@
 // Shapes of the data the Python server sends. Kept in step with src/kickoff/*.py.
 
 export type Language = "en" | "zh" | "es";
-export type HelpLevel = "beginner" | "getting_there" | "big_picture" | "analyst";
-export type Mode = "full" | "key_moments";
-export type Tone = "neutral" | "calm" | "excited" | "hopeful" | "tense" | "disappointed";
-
-export interface Profile {
-  team: string | null;
-  language: Language;
-  level: HelpLevel;
-  hands_free: boolean;
-}
 
 export interface Player {
   id: string;
@@ -53,16 +43,6 @@ export interface World {
   table: TableRow[];
 }
 
-export interface Chapter {
-  id: number;
-  start: number;
-  end: number;
-  moment: number;
-  event_id: number;
-  minute: string;
-  titles: Record<Language, string>;
-}
-
 export interface MatchInfo {
   id: string;
   home: string;
@@ -70,7 +50,6 @@ export interface MatchInfo {
   venue: string;
   matchweek: number;
   duration: number;
-  chapters: Chapter[];
 }
 
 export interface MatchEvent {
@@ -126,63 +105,3 @@ export interface Snapshot {
   momentum: number;
   seconds_since_highlight: number;
 }
-
-export interface Line {
-  text: string;
-  tone: Tone;
-  card_title: string;
-  sources: string[];
-  proposal_ids: number[];
-  concepts: string[];
-  headline: boolean;
-  call?: boolean; // a quick play-by-play call
-  language?: Language; // speak this line in this language, whatever the rest of the batch is in
-}
-
-export interface ProposalView {
-  id: number;
-  agent: string;
-  priority: number;
-  text: string;
-  used: boolean;
-}
-
-export interface Commentary {
-  /** Unique per feed entry (assigned in the browser): one event can have a call and an explanation. */
-  seq?: number;
-  event_id: number;
-  minute: string;
-  elapsed?: number; // match second of the moment it is about
-  language?: Language; // what it was written in
-  lines: Line[];
-  reasoning: string;
-  proposals: ProposalView[];
-  learned: string[];
-}
-
-export type AgentState = "thinking" | "idle" | "done";
-
-export type ServerMessage =
-  | { type: "ready"; chapters: Chapter[]; profile: Profile; mode: Mode; speed: number }
-  | { type: "chapter"; chapter: Chapter }
-  | { type: "event"; event: MatchEvent; next_gap: number | null; pace: number; salience: number;
-      signals: Record<string, unknown>[]; snapshot: Snapshot }
-  | { type: "bridge"; from_minute: string; to_minute: string }
-  | ({ type: "commentary" } & Commentary)
-  | { type: "profile"; profile: Profile; learned: string[] }
-  | { type: "host"; question: string; answer: string; changes: Partial<Profile>; tools: string[]; language: Language }
-  | { type: "ignored"; question: string }
-  | { type: "pre_match"; frame: Record<string, number[]> }
-  | { type: "agents"; event_id: number; agent: string; state: AgentState; texts: string[] }
-  | { type: "finished" }
-  | { type: "error"; message: string };
-
-export type Control =
-  | { action: "pause" | "resume" | "next_chapter" }
-  | { action: "speed"; value: number }
-  | { action: "mode"; mode: Mode }
-  | { action: "seek_chapter"; chapter: number }
-  | { action: "seek"; minute: number }
-  | { action: "ask"; text: string; language?: Language }
-  | { action: "voice"; speaking: boolean }
-  | ({ action: "profile" } & Partial<Profile>);

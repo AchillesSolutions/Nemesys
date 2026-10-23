@@ -8,7 +8,7 @@ Two layers produce the event stream:
   counter-attacking side really does break fast after winning it. Open play
   creates shots, saves, corners, fouls and offsides, but never goals.
 * Story beats are planted at fixed minutes. They carry the scoreline and
-  the teaching moments a first-time viewer should see: an offside, a free
+  the moments a match like this needs: an offside, a free
   kick with a wall, a VAR penalty, a tactical substitution, a second yellow,
   a goal ruled out by VAR and a late comeback.
 

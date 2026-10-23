@@ -1,7 +1,7 @@
 [project]
 name = "kickoff"
 version = "0.1.0"
-description = "Kick-Off: a multi-agent AI companion that teaches football to first-time viewers, live."
+description = "Nemesys: an AI rival fan to watch football with, by voice. One GPT-Live voice, steered by a team of agents."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -7,14 +7,9 @@ KICKOFF_LLM selects the provider:
 * ``azure``: model deployments in Microsoft Foundry
   (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY).
 
-Different roles can use different models, matched to the job:
-
-* KICKOFF_MODEL: the default, used by the Teacher, Storyteller and League
-  guide. They run often and in parallel, so a fast, inexpensive model fits.
-* KICKOFF_MODEL_PRODUCER: the Producer weighs every proposal and writes the
-  final words, so a flagship model is worth it; it runs a few times a match.
-* KICKOFF_MODEL_HOST: the Host answers the viewer and calls tools, so it also
-  benefits from a stronger model.
+Each agent has its own model, matched to its job by evaluation (ROLE_MODELS below, and evals/README.md).
+Any of them can be overridden with KICKOFF_MODEL_<ROLE> (e.g. KICKOFF_MODEL_MATCH); KICKOFF_MODEL is the
+fallback for anything else.
 
 Reasoning models (the GPT-5 and o-series) take a reasoning effort instead of
 a temperature: KICKOFF_REASONING_EFFORT (default "low", to keep live latency down).
@@ -31,8 +26,6 @@ from agent_framework import BaseChatClient
 
 ClientFactory = Callable[[str], BaseChatClient]
 
-ROLE_MODEL_VARS = {"producer": "KICKOFF_MODEL_PRODUCER", "host": "KICKOFF_MODEL_HOST"}
-
 # The rival's agents, each on the model that fits its job, chosen by evaluation (evals/RESULTS.md). Any of them can
 # be overridden with KICKOFF_MODEL_<ROLE>, e.g. KICKOFF_MODEL_MATCH.
 ROLE_MODELS = {
@@ -40,6 +33,7 @@ ROLE_MODELS = {
     "match": "gpt-5.5",       # reads the stats into a storyline: the only candidates with every fact right
     "ammo": "gpt-5.4-mini",   # picks the next dig: wit and judgement, fast enough for a lull in conversation
     "memory": "gpt-5.4-nano", # notes bets and predictions: structured extraction, run often
+    "keeper": "Phi-4",        # after the match, what to remember about the viewer: no one is waiting, small and private
     "referee": "gpt-5.4-mini",  # banter or abuse, after Content Safety's gate: on every line, so speed counts
 }
 REASONING_MODEL = re.compile(r"^(gpt-5|o\d)", re.IGNORECASE)
@@ -57,8 +51,7 @@ def load_env(path: Path = Path(".env")) -> None:
 
 
 def model_for(role: str) -> str:
-    return (os.getenv(ROLE_MODEL_VARS.get(role, f"KICKOFF_MODEL_{role.upper()}"), "") or ROLE_MODELS.get(role)
-            or os.environ.get("KICKOFF_MODEL", ""))
+    return os.getenv(f"KICKOFF_MODEL_{role.upper()}", "") or ROLE_MODELS.get(role) or os.environ.get("KICKOFF_MODEL", "")
 
 
 def is_reasoning(model: str) -> bool:

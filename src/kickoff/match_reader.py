@@ -6,11 +6,11 @@ produces instead of re-deriving the score or possession from raw events.
 
 For each event it returns a ``ReaderUpdate`` carrying:
 
-* ``salience``: how much the moment matters, so the Producer knows when to
+* ``salience``: how much the moment matters, so the director knows when to
   speak and when to stay quiet (0 routine, 1 chance, 2 teachable stoppage,
   3 big moment);
 * ``signals``: derived happenings no single event shows, such as a
-  possession swing or a quiet spell that the League guide can fill;
+  possession swing or a quiet spell that the conversation can fill;
 * ``snapshot``: the full state after the event.
 """
 
@@ -291,3 +291,17 @@ class MatchReader:
 
     def _other(self, team: str) -> str:
         return self.away if team == self.home else self.home
+
+
+def event_message(update: ReaderUpdate, next_gap: int | None = None, pace: float = 1.0) -> dict:
+    """What the browser needs to draw one event: the event, the live state after it, how many match
+    seconds until the next one, and how fast that stretch plays (so ball and clock move smoothly)."""
+    return {
+        "type": "event",
+        "event": update.event.model_dump(mode="json", exclude_none=True),
+        "next_gap": next_gap,
+        "pace": pace,
+        "salience": update.salience,
+        "signals": update.signals,
+        "snapshot": update.snapshot.model_dump(mode="json"),
+    }

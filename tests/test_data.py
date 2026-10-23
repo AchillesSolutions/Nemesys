@@ -68,7 +68,7 @@ def test_story_beats_are_planted(match):
                      EventType.VAR_DECISION, EventType.YELLOW_CARD, EventType.RED_CARD,
                      EventType.SUBSTITUTION, EventType.GOAL_DISALLOWED, EventType.HALF_TIME):
         assert required in types, required
-    assert types.count(EventType.OFFSIDE) >= 3, "repeat offsides let the Teacher shorten its explanation"
+    assert types.count(EventType.OFFSIDE) >= 3, "repeat offsides, as a real match has"
     assert match.events[-1].detail["score"] == {HOME_ID: 3, AWAY_ID: 2}
 
 
