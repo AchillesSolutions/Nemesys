@@ -3,6 +3,8 @@
 Draft text for the submission form, section by section. Edit freely; every claim here is true of the code in this
 repo.
 
+Demo video (under 2 minutes): https://youtu.be/e9e_MaoPdts
+
 ## Tagline
 
 Enjoy football with a rival. An AI fan of the other club who watches the match with you, by voice.

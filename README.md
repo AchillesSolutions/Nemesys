@@ -7,7 +7,7 @@ said last time, and throws it back at you. It is **audio only**: you just talk.
 Built for the Microsoft x Premier League *Inside the Game* hackathon. Every club, player and match is fictional.
 
 **Try it:** https://nemesys.victoriouswater-295fb226.swedencentral.azurecontainerapps.io
-**Watch the demo:** *(video link added at submission)*
+**Watch the demo (2 min):** https://youtu.be/e9e_MaoPdts
 
 ### Trying it
 
