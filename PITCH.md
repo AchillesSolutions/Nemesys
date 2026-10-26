@@ -51,8 +51,8 @@ themselves: they steer GPT-Live live through its sideband channel, timed so noth
 When something fails, the job falls back: the voice reconnects mid-match, the News agent falls back to the last good
 stories, the Ammo agent to rule-based digs.
 
-We tested every agent on its own job against the candidate models in Microsoft Foundry: Content Safety alone got 13 of
-22 Referee calls right (it can't tell banter from abuse, and missed Mandarin swearing); gpt-5.4-mini got all 22. The
+We tested every agent on its own job against the candidate models in Microsoft Foundry: Content Safety alone got 14 of
+26 Referee calls right (it can't tell banter from abuse, and missed Mandarin swearing); gpt-5.4-mini got all 26. The
 Phi models can't give the schema-checked replies the live agents need, so Phi-4 does the job that suits it: the Memory
 Keeper, off the clock after the final whistle.
 

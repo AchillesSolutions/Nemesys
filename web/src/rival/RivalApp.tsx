@@ -467,8 +467,11 @@ export default function RivalApp() {
   }
 
   // Anything said in another language, by either of you, is shown in English too once the line has settled,
-  // so whoever is watching (a judge, a friend) can follow a match enjoyed in Mandarin or Spanish.
+  // so whoever is watching (a judge, a friend) can follow a match enjoyed in Mandarin or Spanish. Not in an
+  // English match: Translator takes short English lines ("Oh, come off it.") for Italian or German.
+  const englishMatch = lobby?.language === "English" && (lobby.rival?.language ?? "English") === "English";
   useEffect(() => {
+    if (englishMatch) return;
     lines.forEach((line) => {
       const i = line.id;
       const settled = Date.now() - line.at > TRANSLATE_AFTER_MS;
@@ -484,7 +487,7 @@ export default function RivalApp() {
         .catch(() => {})
         .finally(() => translating.current.delete(i));
     });
-  }, [lines, now, english]);
+  }, [lines, now, english, englishMatch]);
 
   const names = useMemo(() => (data ? nameMatcher(data.dir, [data.match.home, data.match.away]) : null), [data]);
   const shown = useMemo(() => lines.slice(-SHOWN_LINES), [lines]);

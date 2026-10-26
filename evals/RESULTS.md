@@ -6,12 +6,12 @@ Each agent was tested on its own job with the instructions it uses in the produc
 
 | Model | Score | Median time | Notes |
 |---|---|---|---|
-| Azure AI Content Safety (alone) | 59% | 0.1s | 13/22 right |
-| gpt-5.4-nano | 95% | 1.5s | 21/22 right |
-| gpt-5.4-mini | 100% | 0.9s | 22/22 right |
-| Phi-4 | 0% | 0.3s | 0/22 right; 22 failed to answer |
-| Phi-4-mini-instruct | 0% | 0.3s | 0/22 right; 22 failed to answer |
-| Phi-4-reasoning | 5% | 30.0s | 1/22 right; 21 failed to answer |
+| Azure AI Content Safety (alone) | 54% | 0.1s | 14/26 right |
+| gpt-5.4-nano | 100% | 1.7s | 26/26 right |
+| gpt-5.4-mini | 100% | 0.9s | 26/26 right |
+| Phi-4 | 0% | 0.3s | 0/26 right; 26 failed to answer |
+| Phi-4-mini-instruct | 0% | 0.3s | 0/26 right; 26 failed to answer |
+| Phi-4-reasoning | 4% | 30.0s | 1/26 right; 25 failed to answer |
 
 ## Memory: bets noted two-way, predictions apart
 
