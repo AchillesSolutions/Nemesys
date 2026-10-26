@@ -2,18 +2,19 @@
    middle with who you're watching with beside it, and the agents along the bottom in the order work flows
    through them. A faint pitch sits behind everything, for colour; the match itself is on the viewer's TV. */
 .rival-live {
-  --player: #8fd0ff;   /* player names in the conversation, and the agents' models */
-  --club: #ffb15c;     /* club names and nicknames */
+  --player: #1f6fb2;   /* player names in the conversation, and the agents' models */
+  --club: #d06a12;     /* club names and nicknames */
   position: relative; height: 100vh; min-height: 640px; overflow: hidden;
   /* Below the fixture: the conversation with the side column beside it, then the agents, taller, beneath. */
   display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(0, .48fr); gap: 16px; padding: 0 20px 18px;
   background:
-    radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(0, 0, 0, .55) 100%),
-    repeating-linear-gradient(90deg, #17382a 0 6.25%, #1a3e2f 6.25% 12.5%);
+    radial-gradient(90% 60% at 50% -6%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+    repeating-linear-gradient(90deg, rgba(31, 122, 85, .035) 0 6.25%, transparent 6.25% 12.5%),
+    linear-gradient(165deg, #f5faf6 0%, #e6f2ea 55%, #d3e8da 100%);
 }
 .rival-pitch-bg {
   position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
-  fill: none; stroke: rgba(244, 246, 240, .07); stroke-width: .35;
+  fill: none; stroke: rgba(13, 35, 24, .06); stroke-width: .35;
 }
 .rival-live > :not(.rival-pitch-bg):not(.curtain):not(.booking):not(.receipt):not(.goal-flash):not(.handoff-layer):not(.audio-card) { position: relative; z-index: 1; }
 .rival-live .btn {
@@ -29,51 +30,51 @@
 /* ---------- The audio-only ribbon: what the listener hears, and that the rest is a demo view ---------- */
 .audio-ribbon {
   display: flex; align-items: center; gap: 14px; margin: 0 -20px 4px; padding: 8px 20px;
-  background: linear-gradient(90deg, rgba(122, 108, 255, .28), rgba(122, 108, 255, .12) 60%, rgba(122, 108, 255, .2));
-  border-bottom: 1px solid rgba(139, 127, 255, .45); font-size: .86rem; color: #e6e2ff;
+  background: linear-gradient(90deg, rgba(122, 108, 255, .16), rgba(122, 108, 255, .06) 60%, rgba(122, 108, 255, .12));
+  border-bottom: 1px solid rgba(122, 108, 255, .3); font-size: .86rem; color: #3b2fb8;
 }
 .audio-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px;
   background: #7a6cff; color: #fff; font-weight: 800; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
   white-space: nowrap; }
 .audio-hear { font-weight: 600; white-space: nowrap; }
-.audio-demo { margin-left: auto; color: #c6c0ff; text-align: right; }
+.audio-demo { margin-left: auto; color: #5a4fd6; text-align: right; }
 .voice-wave { display: inline-flex; align-items: center; gap: 3px; height: 22px; }
-.voice-wave i { width: 3px; height: 3px; border-radius: 2px; background: #b3abff; transition: height .3s; }
-.voice-wave.is-speaking i { animation: wave .7s ease-in-out infinite alternate; background: #fff; }
+.voice-wave i { width: 3px; height: 3px; border-radius: 2px; background: #a39bff; transition: height .3s; }
+.voice-wave.is-speaking i { animation: wave .7s ease-in-out infinite alternate; background: #5a4fd6; }
 @keyframes wave { from { height: 3px; } to { height: 20px; } }
 @media (max-width: 1100px) { .audio-demo { display: none; } }
 
 /* Once, as the curtain lifts: audio only, large. */
 .audio-card {
   position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(8, 10, 24, .92), rgba(8, 10, 24, .7));
+  background: radial-gradient(closest-side, rgba(250, 252, 250, .97), rgba(238, 246, 240, .9));
   animation: audio-card 4.2s ease-in-out both;
 }
-.audio-card-inner { display: grid; justify-items: center; gap: 12px; text-align: center; color: #e6e2ff; max-width: 640px; padding: 0 24px; }
-.audio-card-inner svg { color: #8b7fff; }
+.audio-card-inner { display: grid; justify-items: center; gap: 12px; text-align: center; color: var(--text); max-width: 640px; padding: 0 24px; }
+.audio-card-inner svg { color: #6a5fe0; }
 .audio-card-title { font-family: var(--display); font-stretch: 78%; font-weight: 800; text-transform: uppercase;
-  font-size: clamp(34px, 5vw, 64px); line-height: 1; color: #fff; }
-.audio-card-sub { font-size: 1.15rem; color: #c6c0ff; }
+  font-size: clamp(34px, 5vw, 64px); line-height: 1; color: var(--text); }
+.audio-card-sub { font-size: 1.15rem; color: var(--muted); }
 @keyframes audio-card { 0% { opacity: 0; } 10% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
 
 /* Labels on the screen's regions. */
 .region-label { position: absolute; top: 12px; left: 30px; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase;
-  color: #b3abff; z-index: 2; }
+  color: #6a5fe0; z-index: 2; }
 
 /* ---------- Top: fixture and timeline ---------- */
 .rival-top .fixture { padding-bottom: 8px; }
 .timeline { display: flex; align-items: center; gap: 10px; max-width: 1100px; margin: 0 auto; width: 100%;
   font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.timeline-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .1); }
+.timeline-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgba(13, 35, 24, .1); }
 .timeline-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); transition: width .3s linear; }
-.timeline-half { position: absolute; top: -4px; bottom: -4px; width: 1px; background: rgba(255, 255, 255, .35); }
+.timeline-half { position: absolute; top: -4px; bottom: -4px; width: 1px; background: rgba(13, 35, 24, .3); }
 .timeline-mark { position: absolute; top: 50%; transform: translate(-50%, -50%); animation: drop .4s ease-out both; }
-.mark-goal { width: 14px; height: 14px; border-radius: 50%; background: var(--team); border: 2px solid var(--night);
+.mark-goal { width: 14px; height: 14px; border-radius: 50%; background: var(--team); border: 2px solid #fff;
   box-shadow: 0 0 0 1.5px var(--team); }
-.mark-ruled-out { width: 12px; height: 12px; border-radius: 50%; border: 2px dashed var(--team); background: var(--night); }
+.mark-ruled-out { width: 12px; height: 12px; border-radius: 50%; border: 2px dashed var(--team); background: #fff; }
 .mark-red, .mark-yellow { width: 8px; height: 12px; border-radius: 2px; background: var(--danger); }
 .mark-yellow { background: var(--warn); }
-.mark-var { width: 9px; height: 9px; transform: translate(-50%, -50%) rotate(45deg); background: #c7b8ff; }
+.mark-var { width: 9px; height: 9px; transform: translate(-50%, -50%) rotate(45deg); background: #7a6cff; }
 @keyframes drop { from { opacity: 0; margin-top: -10px; } to { opacity: 1; margin-top: 0; } }
 
 /* ---------- Middle: the conversation, and who you're watching with ---------- */
@@ -81,7 +82,7 @@
   max-width: 1500px; width: 100%; margin: 0 auto; }
 .rival-chat {
   position: relative; min-height: 0; overflow: hidden; border-radius: 18px; padding: 22px 30px;
-  background: rgba(8, 16, 13, .55); border: 1px solid var(--faint); backdrop-filter: blur(4px);
+  background: var(--panel); border: 1px solid var(--faint); backdrop-filter: blur(4px); box-shadow: var(--panel-shadow);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
 .rival-chat-lines { display: flex; flex-direction: column; justify-content: flex-end; gap: .9rem; min-height: 0; overflow: hidden; }
@@ -96,7 +97,9 @@
 
 /* ---------- The curtain: black until the rival connects, then it lifts ---------- */
 .curtain {
-  position: fixed; inset: 0; z-index: 50; background: #040605; padding: 24px;
+  position: fixed; inset: 0; z-index: 50; padding: 24px;
+  background: radial-gradient(90% 60% at 50% -6%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+    linear-gradient(165deg, #f5faf6 0%, #e6f2ea 55%, #d3e8da 100%);
   display: grid; place-content: center; justify-items: center; gap: 30px; text-align: center;
   transition: opacity 1.1s ease, visibility 1.1s;
 }
@@ -118,12 +121,12 @@
 /* ---------- Nemesys ---------- */
 .logo { display: flex; align-items: center; gap: .45em; }
 .logo-mark { width: 2.6em; height: auto; overflow: visible; }
-.logo-mark .ball { fill: #f4f6f0; }
+.logo-mark .ball { fill: #ffffff; }
 .logo-mark .patches polygon { fill: #0b1110; }
 .logo-mark .patches line { stroke: #0b1110; stroke-width: .7; }
 .logo-mark .ring { fill: none; stroke-width: 2.2; }
-.logo-mark .ring-a { stroke: var(--accent); }
-.logo-mark .ring-b { stroke: var(--club); }
+.logo-mark .ring-a { stroke: #2fa874; }
+.logo-mark .ring-b { stroke: #ef8f33; }
 .logo-word { font-family: var(--display); font-stretch: 85%; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; }
 .logo-large { font-size: clamp(34px, 4.4vw, 60px); }
 .logo-small { font-size: 15px; position: absolute; top: 16px; left: 20px; opacity: .9; }
@@ -185,8 +188,8 @@
 
 .rival-side { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
 .rival-profile, .rival-controls {
-  border-radius: 16px; padding: 16px 18px; background: rgba(8, 16, 13, .55); border: 1px solid var(--faint);
-  display: grid; gap: 8px;
+  border-radius: 16px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--faint);
+  box-shadow: var(--panel-shadow); display: grid; gap: 8px;
 }
 .rival-profile-head { display: flex; gap: 12px; align-items: center; }
 .rival-profile-head .crest-big { width: 44px; }
@@ -204,27 +207,27 @@
 /* The rival's memory: fills the rest of the side column, so it lines up with the conversation. */
 .memory-box {
   flex: 1 1 auto; min-height: 120px; overflow: hidden; display: flex; flex-direction: column; gap: 10px;
-  border-radius: 16px; padding: 14px 16px; background: rgba(8, 16, 13, .55); border: 1px solid var(--faint);
-  transition: border-color .35s, box-shadow .35s;
+  border-radius: 16px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--faint);
+  box-shadow: var(--panel-shadow); transition: border-color .35s, box-shadow .35s;
 }
 .memory-title { display: flex; align-items: center; gap: 10px; font-size: .7rem; letter-spacing: .16em;
-  text-transform: uppercase; color: #f0a8d0; font-weight: 700; }
-.memory-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #f0a8d0;
-  background: color-mix(in srgb, #f0a8d0 14%, transparent); transition: background .35s, color .35s; }
+  text-transform: uppercase; color: #c2407f; font-weight: 700; }
+.memory-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #c2407f;
+  background: color-mix(in srgb, #c2407f 12%, transparent); transition: background .35s, color .35s; }
 .memory-icon svg { width: 18px; height: 18px; }
 .memory-box.is-recalling .memory-icon, .memory-box.is-receiving .memory-icon {
-  color: var(--night); background: #f0a8d0; animation: glow 1.1s ease-in-out infinite; }
+  color: #fff; background: #c2407f; animation: glow 1.1s ease-in-out infinite; }
 .memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-height: 0; overflow: hidden; }
-.memory-item { display: grid; gap: 2px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .04);
+.memory-item { display: grid; gap: 2px; padding: 7px 10px; border-radius: 10px; background: rgba(13, 35, 24, .035);
   border: 1px solid transparent; animation: arrive .4s ease-out both; transition: background .35s, border-color .35s; }
 .memory-kind { font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
 .memory-bet .memory-kind { color: var(--warn); }
-.memory-joke .memory-kind { color: #f0a8d0; }
+.memory-joke .memory-kind { color: #c2407f; }
 .memory-keeper { margin-left: auto; font-size: .6rem; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
 .memory-you_said .memory-kind { color: var(--accent); }
 .memory-text { font-size: .84rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; }
-.memory-item.is-recalled { background: color-mix(in srgb, #f0a8d0 16%, transparent); border-color: #f0a8d0; }
+.memory-item.is-recalled { background: color-mix(in srgb, #c2407f 10%, transparent); border-color: #c2407f; }
 .memory-box .empty { font-size: .82rem; color: var(--muted); line-height: 1.4; }
 .rival-meter { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
 
@@ -253,7 +256,7 @@
 }
 .agent-card {
   flex: 1; min-width: 0; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 14px 16px;
-  background: rgba(8, 16, 13, .62); border: 1px solid var(--faint); border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--faint); border-radius: 12px; box-shadow: var(--panel-shadow);
   transition: border-color .35s, box-shadow .35s, background .35s, opacity .35s, filter .35s;
 }
 /* Not at work: greyed out, so a lit, pulsing card stands out the moment an agent does something. */
@@ -262,7 +265,7 @@
 .agent-tech { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .agent-icon {
   flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-  color: var(--muted); background: rgba(255, 255, 255, .05); transition: color .35s, background .35s;
+  color: var(--muted); background: rgba(13, 35, 24, .05); transition: color .35s, background .35s;
 }
 .agent-icon svg { width: 16px; height: 16px; }
 .agent-model { font-size: .8rem; font-weight: 600; line-height: 1.25; color: var(--player); }
@@ -325,13 +328,13 @@
   .handoff-dot, .agent-card.is-receiving, .goal-flash { animation-duration: 1ms; }
 }
 .agents-cell.done .agent-card { opacity: .3; filter: grayscale(1); }
-.agents-cell.done .agent-status { text-decoration: line-through; text-decoration-color: rgba(244, 246, 240, .4); }
+.agents-cell.done .agent-status { text-decoration: line-through; text-decoration-color: rgba(13, 35, 24, .4); }
 .agent-card.is-working {
   border-color: color-mix(in srgb, var(--accent) 65%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, rgba(8, 16, 13, .62));
+  background: color-mix(in srgb, var(--accent) 8%, #ffffff);
   box-shadow: 0 0 22px -8px var(--accent);
 }
-.agent-card.is-working .agent-icon { color: var(--night); background: var(--accent); animation: glow 1.1s ease-in-out infinite; }
+.agent-card.is-working .agent-icon { color: #fff; background: var(--accent); animation: glow 1.1s ease-in-out infinite; }
 @keyframes glow { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); } }
 
 @media (max-width: 1000px) {
@@ -349,7 +352,7 @@
 .booking {
   position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; grid-auto-flow: column;
   align-items: center; gap: 28px; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, .55), transparent);
+  background: radial-gradient(closest-side, rgba(13, 35, 24, .82), rgba(13, 35, 24, .35) 70%, transparent);
   animation: booking-out .6s ease-in 3.9s both;
 }
 .booking-card {
@@ -360,8 +363,8 @@
 .booking-text { animation: arrive .4s ease-out .2s both; }
 .booking-title { font-family: var(--display); font-stretch: 78%; font-weight: 800; text-transform: uppercase;
   font-size: clamp(34px, 4vw, 56px); line-height: 1; color: #f5c518; }
-.booking-reason { margin-top: 6px; font-size: 1.2rem; font-weight: 600; }
-.booking-ask { margin-top: 4px; color: var(--muted); }
+.booking-reason { margin-top: 6px; font-size: 1.2rem; font-weight: 600; color: #fff; }
+.booking-ask { margin-top: 4px; color: rgba(255, 255, 255, .75); }
 @keyframes booking-in { from { transform: rotate(-35deg) translateY(60px) scale(.6); opacity: 0; }
   to { transform: rotate(-8deg); opacity: 1; } }
 @keyframes booking-out { to { opacity: 0; } }
@@ -379,12 +382,12 @@
   font-size: .82rem; color: var(--muted); text-transform: none; letter-spacing: 0; }
 .report-moments { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .report-moment { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border-radius: 14px;
-  background: rgba(255, 255, 255, .05); border: 1px solid var(--faint); animation: arrive .5s ease-out both; }
-.report-minute { justify-self: start; font-family: var(--display); font-weight: 800; font-size: 1.1rem; color: var(--night);
+  background: var(--panel); border: 1px solid var(--faint); box-shadow: var(--panel-shadow); animation: arrive .5s ease-out both; }
+.report-minute { justify-self: start; font-family: var(--display); font-weight: 800; font-size: 1.1rem; color: #fff;
   background: var(--accent); border-radius: 8px; padding: 1px 8px; }
 .report-what { font-weight: 700; line-height: 1.3; }
-.report-why { color: #d8ddd4; font-size: .92rem; line-height: 1.4; }
-.report-verdict { text-align: center; font-style: italic; color: #e9ece6; }
+.report-why { color: #3e5246; font-size: .92rem; line-height: 1.4; }
+.report-verdict { text-align: center; font-style: italic; color: var(--text); }
 .report-bets { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .report-bets li { display: flex; gap: 10px; align-items: baseline; }
 .report-bet-tag { font-size: .62rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--warn); }
