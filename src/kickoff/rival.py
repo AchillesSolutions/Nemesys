@@ -170,7 +170,7 @@ class Pacing:
 # The match in about eight minutes: quiet play at 15x leaves 25-50 seconds of real conversation between big
 # moments, which is what banter needs. The default, and what judges get.
 MATCH = Pacing(quiet=15, build=2.5, build_s=10, small_hold=1.2, tells_small=True, half_time=16, greeting=20, after=40,
-               settle_s=20, max_s=18 * 60, holds={EventType.GOAL: 6.5, EventType.GOAL_DISALLOWED: 6.5, EventType.RED_CARD: 5,
+               settle_s=20, max_s=25 * 60, holds={EventType.GOAL: 6.5, EventType.GOAL_DISALLOWED: 6.5, EventType.RED_CARD: 5,
                                      EventType.VAR_CHECK: 4, EventType.PENALTY: 2.5})
 # Real time, as the product would run alongside a live broadcast.
 LIVE = Pacing(quiet=1, build=1, build_s=0, small_hold=0, tells_small=True, half_time=15 * 60, greeting=45, after=120,

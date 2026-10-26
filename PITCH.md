@@ -75,6 +75,19 @@ Container Apps, with spending guards on the voice minutes.
 More languages and rivals; any real fixture through a live data feed; a club's or broadcaster's own app as the home
 for Nemesys, where a fan abroad watches with someone from home.
 
+## Testing instructions
+
+Nemesys is free to try, with no login: https://nemesys.victoriouswater-295fb226.swedencentral.azurecontainerapps.io
+
+It is a voice conversation, so please use Chrome or Edge on a laptop or desktop, with headphones and a microphone
+(on speakers, the microphone hears the rival too). Press Connect, allow the microphone, and answer the host: your
+language ("English", "中文" or "Español"), your name, your club ("Kilburn" or "Harbour City"), then a rival by name.
+The match kicks off shortly after the rival greets you and takes about 15 minutes; stay to the end for your match
+report. Talk throughout: wind your rival up, make a bet, ask what's just happened or who will win the league.
+
+The screen is a demo view of what's happening behind the voice; the product itself is audio only. Voice minutes are
+capped each day to control cost; if the rival is busy or the day's minutes are used up, please try again later.
+
 ## Built with
 
 Microsoft Foundry · Microsoft Agent Framework · GPT-Live · GPT-5.5, GPT-5.4 mini and nano · Phi-4 · Azure AI Speech ·

@@ -6,6 +6,23 @@ said last time, and throws it back at you. It is **audio only**: you just talk.
 
 Built for the Microsoft x Premier League *Inside the Game* hackathon. Every club, player and match is fictional.
 
+**Try it:** https://nemesys.victoriouswater-295fb226.swedencentral.azurecontainerapps.io
+**Watch the demo:** *(video link added at submission)*
+
+### Trying it
+
+1. Use **Chrome or Edge** on a laptop or desktop, with **headphones** and a **microphone**. Headphones matter: on
+   speakers, the microphone hears the rival too.
+2. Press **Connect** and allow the microphone.
+3. The host asks for your **language**: say "English" (or "中文", or "Español").
+4. Tell the host your **name**, then the **club** you support: "Kilburn" or "Harbour City".
+5. Pick a **rival** by name. They'll greet you, and the match kicks off a minute later.
+6. Talk the whole way through: wind them up, make a bet, ask what's just happened, ask who'll win the league.
+   A match takes about 15 minutes; stay to the end for your match report.
+
+If the host doesn't catch you, the choices on screen can also be tapped. Voice minutes are capped each day; if the
+rival says it's busy or the day's minutes are used up, please try again later.
+
 > **The demo view.** Nemesys has no screen. What you see in the demo is a window onto what's happening behind the
 > voice: the conversation as captions, the match, and the agents at work. A listener only ever hears the rival.
 
