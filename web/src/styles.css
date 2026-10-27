@@ -102,7 +102,7 @@ h1, h2, p { margin: 0; }
 @keyframes pop { 0% { opacity: 0; } 10%, 75% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translate(var(--tx, 0), 6px); } }
 /* ---------- Subtitles ---------- */
-/* ---------- Talk to Achilles ---------- */
+/* ---------- Listening ---------- */
 @keyframes listen { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 79, .5); } 70%, 100% { box-shadow: 0 0 0 10px rgba(255, 90, 79, 0); } }
 
 /* ---------- League table ---------- */
