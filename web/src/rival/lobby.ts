@@ -59,11 +59,20 @@ export async function hostSay(text: string): Promise<void> {
   });
 }
 
+const STALL_MS = 3000; // they've been talking this long and the recogniser has given no sign of hearing them
+const VOICE_RMS = 0.02; // louder than a quiet room: someone's talking
+
 /**
  * Listen for the viewer's answer. Each phrase heard goes to ``onHeard``; ``onPartial`` shows words as they
- * come. Returns a function that stops listening, or null if Azure speech isn't available (the crests still work).
+ * come. ``open`` says whether an answer could be coming now (not while the host is speaking). Returns a function
+ * that stops listening, or null if Azure speech isn't available (the crests still work).
+ *
+ * Now and then a connection to Azure AI Speech takes the audio but never answers, and only gives up after about
+ * twelve seconds: the viewer, unheard, says it again and again. So the microphone's level is watched here too,
+ * and if they've been talking for a few seconds with no sign the recogniser heard, it starts afresh.
  */
-export async function listen(onHeard: (text: string, lang?: string) => void, onPartial: (text: string) => void): Promise<(() => void) | null> {
+export async function listen(onHeard: (text: string, lang?: string) => void, onPartial: (text: string) => void,
+                             open: () => boolean = () => true): Promise<(() => void) | null> {
   const res = await fetch("/api/speech/token").catch(() => null);
   if (!res?.ok) return null;
   const { token, region } = (await res.json()) as { token: string; region: string };
@@ -74,43 +83,73 @@ export async function listen(onHeard: (text: string, lang?: string) => void, onP
   // the host which one to carry on in.
   config.setProperty(sdk.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
   const languages = sdk.AutoDetectSourceLanguageConfig.fromLanguages(["en-GB", "zh-CN", "es-MX"]);
-  let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-  } catch {
-    return null;
-  }
-  mic = stream.getAudioTracks()[0];
-  const recognizer = sdk.SpeechRecognizer.FromConfig(config, languages, sdk.AudioConfig.fromStreamInput(stream));
-  const phrases = sdk.PhraseListGrammar.fromRecognizer(recognizer);
-  ["Kilburn", "Kilburn Athletic", "Harbour City", "Harbour", "the Otters", "the Gulls", "English", "Español", "中文",
-   "基尔本", "港城"].forEach((p) => phrases.addPhrase(p));
-  recognizer.recognizing = (_, e) => onPartial(e.result.text);
-  recognizer.recognized = (_, e) => {
-    if (e.result.reason === sdk.ResultReason.RecognizedSpeech && e.result.text) {
-      onHeard(e.result.text, sdk.AutoDetectSourceLanguageResult.fromResult(e.result).language);
-    }
-  };
-  const stop = () => {
-    stream.getTracks().forEach((t) => t.stop());
-    if (mic === stream.getAudioTracks()[0]) mic = null;
-  };
-  try {
+
+  let heardAt = performance.now(); // the recogniser's last sign of life
+  const alive = () => { heardAt = performance.now(); };
+  const recognise = async () => {
+    const recognizer = sdk.SpeechRecognizer.FromConfig(config, languages, sdk.AudioConfig.fromDefaultMicrophoneInput());
+    const phrases = sdk.PhraseListGrammar.fromRecognizer(recognizer);
+    ["Kilburn", "Kilburn Athletic", "Harbour City", "Harbour", "the Otters", "the Gulls", "English", "Español", "中文",
+     "基尔本", "港城"].forEach((p) => phrases.addPhrase(p));
+    recognizer.speechStartDetected = alive;
+    recognizer.recognizing = (_, e) => { alive(); onPartial(e.result.text); };
+    recognizer.recognized = (_, e) => {
+      alive();
+      if (e.result.reason === sdk.ResultReason.RecognizedSpeech && e.result.text) {
+        onHeard(e.result.text, sdk.AutoDetectSourceLanguageResult.fromResult(e.result).language);
+      }
+    };
     await new Promise<void>((resolve, reject) => recognizer.startContinuousRecognitionAsync(resolve, reject));
+    alive();
+    return recognizer;
+  };
+  const close = (r: import("microsoft-cognitiveservices-speech-sdk").SpeechRecognizer) =>
+    r.stopContinuousRecognitionAsync(() => r.close(), () => r.close());
+
+  let recognizer: Awaited<ReturnType<typeof recognise>>;
+  try {
+    recognizer = await recognise();
   } catch {
-    recognizer.close();
-    stop();
     return null;
   }
-  return () => recognizer.stopContinuousRecognitionAsync(() => { recognizer.close(); stop(); }, () => { recognizer.close(); stop(); });
-}
 
-let mic: MediaStreamTrack | null = null;
+  // The watchdog: the microphone's level, a few times a second.
+  let level: (() => number) | null = null;
+  let mic: MediaStream | null = null;
+  let meter: AudioContext | null = null;
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    meter = new AudioContext();
+    const analyser = new AnalyserNode(meter, { fftSize: 1024 });
+    meter.createMediaStreamSource(mic).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    level = () => {
+      analyser.getFloatTimeDomainData(samples);
+      return Math.sqrt(samples.reduce((sum, x) => sum + x * x, 0) / samples.length);
+    };
+  } catch { /* no watchdog: the recogniser still works, it just isn't watched */ }
+  let talkingSince = 0, restarting = false, stopped = false;
+  const watch = window.setInterval(async () => {
+    if (!level || restarting || stopped) return;
+    const now = performance.now();
+    if (talkingSince && heardAt >= talkingSince) talkingSince = 0; // it heard them
+    if (!talkingSince && open() && level() > VOICE_RMS) talkingSince = now;
+    if (!talkingSince || now - talkingSince < STALL_MS) return;
+    talkingSince = 0;
+    restarting = true;
+    const stale = recognizer;
+    try {
+      recognizer = await recognise();
+      close(stale);
+    } catch { /* keep the one we had */ }
+    restarting = false;
+  }, 200);
 
-/** While the host speaks, the recogniser hears silence: on speakers it would otherwise hear the host, and run
- * the end of the host's line into the viewer's answer, so the answer was thrown away as echo. */
-export function hearing(on: boolean) {
-  if (mic) mic.enabled = on;
+  return () => {
+    stopped = true;
+    window.clearInterval(watch);
+    mic?.getTracks().forEach((t) => t.stop());
+    void meter?.close();
+    close(recognizer);
+  };
 }
