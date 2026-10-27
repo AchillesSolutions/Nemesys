@@ -74,7 +74,16 @@ export async function listen(onHeard: (text: string, lang?: string) => void, onP
   // the host which one to carry on in.
   config.setProperty(sdk.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
   const languages = sdk.AutoDetectSourceLanguageConfig.fromLanguages(["en-GB", "zh-CN", "es-MX"]);
-  const recognizer = sdk.SpeechRecognizer.FromConfig(config, languages, sdk.AudioConfig.fromDefaultMicrophoneInput());
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch {
+    return null;
+  }
+  mic = stream.getAudioTracks()[0];
+  const recognizer = sdk.SpeechRecognizer.FromConfig(config, languages, sdk.AudioConfig.fromStreamInput(stream));
   const phrases = sdk.PhraseListGrammar.fromRecognizer(recognizer);
   ["Kilburn", "Kilburn Athletic", "Harbour City", "Harbour", "the Otters", "the Gulls", "English", "Español", "中文",
    "基尔本", "港城"].forEach((p) => phrases.addPhrase(p));
@@ -84,11 +93,24 @@ export async function listen(onHeard: (text: string, lang?: string) => void, onP
       onHeard(e.result.text, sdk.AutoDetectSourceLanguageResult.fromResult(e.result).language);
     }
   };
+  const stop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    if (mic === stream.getAudioTracks()[0]) mic = null;
+  };
   try {
     await new Promise<void>((resolve, reject) => recognizer.startContinuousRecognitionAsync(resolve, reject));
   } catch {
     recognizer.close();
+    stop();
     return null;
   }
-  return () => recognizer.stopContinuousRecognitionAsync(() => recognizer.close(), () => recognizer.close());
+  return () => recognizer.stopContinuousRecognitionAsync(() => { recognizer.close(); stop(); }, () => { recognizer.close(); stop(); });
+}
+
+let mic: MediaStreamTrack | null = null;
+
+/** While the host speaks, the recogniser hears silence: on speakers it would otherwise hear the host, and run
+ * the end of the host's line into the viewer's answer, so the answer was thrown away as echo. */
+export function hearing(on: boolean) {
+  if (mic) mic.enabled = on;
 }

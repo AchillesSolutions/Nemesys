@@ -1138,6 +1138,20 @@ class Rival:
         sorry = lines.LINES["English" if english else watch.language]["sorry"]
         return self.lobby_state(watch, f"{lines.spoken(sorry, 'English' if english else watch.language)} {question}")
 
+    def lobby_lines(self) -> list[str]:
+        """What the host says to a new viewer, every way through the lobby in every language, so its voice can be
+        made before anyone arrives: a line made on the spot keeps the viewer waiting most of a second."""
+        said = [self.welcome(), f"{lines.spoken(lines.LINES['English']['sorry'], 'English')} {lines.LANGUAGE_AGAIN}"]
+        for language in lines.LINES:
+            for team in (self.match.home, self.match.away):
+                watch = Watch("warm-up", {self.match.home: 0, self.match.away: 0})
+                said.append(self.choose_language(watch, language)["say"])
+                said.append(self.say(watch, "name_again"))
+                said.append(self.choose_name(watch, " ")["say"])  # a new viewer: their name isn't said
+                said.append(self.choose_side(watch, team)["say"])
+                said += [self.say(watch, "connecting", rival=self.rival_name(watch, p)) for p in self.online(watch)]
+        return list(dict.fromkeys(s for s in said if s))
+
     @staticmethod
     def _names(people: list[Persona]) -> str:
         names = [f"{p.name} from {p.home}" for p in people]

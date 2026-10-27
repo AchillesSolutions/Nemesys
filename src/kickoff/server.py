@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Literal
 
@@ -69,7 +69,24 @@ def create_app(world: World | None = None, match: Match | None = None, clients: 
     speech = speech or Speech()
     rival = rival or Rival(world, match, clients)
     translator = Translator()
-    app = FastAPI(title="Nemesys", description="An AI rival fan to watch football with: voice only.")
+
+    async def warm_host() -> None:
+        """Make the host's lobby lines at start-up, so each answer is met straight away, not after a pause."""
+        if not speech.available:
+            return
+        for line in rival.lobby_lines():
+            try:
+                await speech.synthesise(line, "host")
+            except Exception:
+                log.warning("Couldn't make the host line %r ahead of time", line[:60], exc_info=True)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        warming = asyncio.create_task(warm_host())
+        yield
+        warming.cancel()
+
+    app = FastAPI(title="Nemesys", description="An AI rival fan to watch football with: voice only.", lifespan=lifespan)
 
     @app.get("/api/health")
     def health() -> dict:

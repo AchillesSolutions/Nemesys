@@ -8,7 +8,7 @@ import { type Handoff, HandoffLayer } from "./Handoffs";
 import { type MemoryItem, MemoryBox } from "./Memory";
 import { addPiece, type Line } from "./lines";
 import { LiveCall } from "./live";
-import { hostSay, listen, prepare } from "./lobby";
+import { hearing, hostSay, listen, prepare } from "./lobby";
 import { AudioCard, AudioRibbon } from "./AudioOnly";
 import { type MatchReport, ReportCard } from "./Report";
 import { LanguagePick } from "./LanguagePick";
@@ -340,6 +340,7 @@ export default function RivalApp() {
       setHeard(text);
       void post("heard", { text, lang });
     }, (text) => { if (!hostTalking.current) setHeard(text); });
+    hearing(!hostTalking.current); // the welcome may still be playing
     if (!stopListening.current) setNotice("Speech recognition isn't available here; tap to choose (testing only).");
   }
 
@@ -372,10 +373,12 @@ export default function RivalApp() {
     hostLine.current = line;
     setHost({ working: true, text: what });
     setHeard("");
+    hearing(false);
     await hostSay(line);
     if (hostLine.current !== line) return; // cut off by a newer line, which is still being said
     hostTalking.current = false;
     hostEndedAt.current = Date.now();
+    hearing(true);
   }
 
   /** The rival is chosen: show the connection, and bring them in. */
